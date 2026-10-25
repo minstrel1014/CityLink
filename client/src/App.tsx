@@ -1,42 +1,57 @@
-import { Toaster } from "@/components/ui/sonner";
+import { useEffect } from "react";
+import { Route, Switch, useLocation } from "wouter";
+import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
-
-function Router() {
-  // make sure to consider if you need authentication for certain routes
-  return (
-    <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
-      <Route component={NotFound} />
-    </Switch>
-  );
+import { AppProvider } from "@/data/AppContext";
+import Welcome from "@/pages/citylink/Welcome";
+import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
+import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
+import {
+  Invitations,
+  MyProfile,
+  Messages,
+  About,
+} from "@/pages/citylink/Workspace";
+function ScrollToTop() {
+  const [location] = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
 }
-
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
-function App() {
+export default function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
-      </ThemeProvider>
+      <TooltipProvider>
+        <AppProvider>
+          <Toaster position="top-center" richColors closeButton />
+          <ScrollToTop />
+          <Switch>
+            <Route path="/" component={Welcome} />
+            <Route path="/demo" component={Dashboard} />
+            <Route path="/courses" component={Courses} />
+            <Route path="/courses/:courseId">
+              {params => <Classmates courseId={params.courseId} />}
+            </Route>
+            <Route path="/students/:studentId/:courseId">
+              {params => (
+                <StudentProfile
+                  studentId={params.studentId}
+                  courseId={params.courseId}
+                />
+              )}
+            </Route>
+            <Route path="/invitations" component={Invitations} />
+            <Route path="/me" component={MyProfile} />
+            <Route path="/messages" component={Messages} />
+            <Route path="/about" component={About} />
+            <Route path="/404" component={NotFound} />
+            <Route component={NotFound} />
+          </Switch>
+        </AppProvider>
+      </TooltipProvider>
     </ErrorBoundary>
   );
 }
-
-export default App;
