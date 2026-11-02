@@ -21,6 +21,8 @@ import { toast } from "sonner";
 import { DEMO_USER_ID } from "@/data/sampleData";
 import { useCityLink } from "@/data/AppContext";
 import { hasDemoStorage } from "@/data/repository";
+import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import AuthenticatedProfile from "@/pages/citylink/AuthenticatedProfile";
 import {
   Avatar,
   CourseIcon,
@@ -195,6 +197,20 @@ export function Invitations() {
   );
 }
 export function MyProfile() {
+  const session = useSupabaseSession();
+  if (session.status === "loading") {
+    return <AuthenticatedProfile view="loading" />;
+  }
+  if (session.status === "error") {
+    return <AuthenticatedProfile view="session-error" />;
+  }
+  if (session.user) {
+    return <AuthenticatedProfile userId={session.user.id} />;
+  }
+  return <DemoMyProfile />;
+}
+
+function DemoMyProfile() {
   const { me, courses, enrolments, saveProfile } = useCityLink();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(me);
@@ -439,8 +455,8 @@ export function About() {
           <p>
             Invitations are actual demo records, saved to browser localStorage
             and retrieved after refresh. Incoming invitations can be accepted or
-            declined, and pending sent invitations can be cancelled. Profile
-            edits are also browser-local.
+            declined, and pending sent invitations can be cancelled. The
+            demo-only profile editor saves to this browser.
           </p>
           <span className="about-badge">SAMPLE DATA · BROWSER STORAGE</span>
         </section>
@@ -448,45 +464,56 @@ export function About() {
           <span className="about-icon lavender">
             <ShieldCheck size={25} />
           </span>
-          <h2>Not database-connected</h2>
+          <h2>Supabase Auth and your own profile</h2>
           <p>
-            No Supabase or other database is connected. The current data source
-            is a replaceable repository, separate from presentation components.
+            Email/password sign-up, sign-in, password reset, and sign-out use
+            Supabase Auth in a configured environment. On /me, a signed-in user
+            loads their own public.profiles row and may edit only major, year,
+            bio, skills, and status. Supabase RLS and column grants enforce
+            ownership and field access.
           </p>
           <p>
-            CityLink does not access actual CityU student records, university
-            authentication or Canvas data. Demo sign-in does not verify an
-            identity, and its example credentials are not saved or sent.
+            The /demo profile, courses, enrolments, classmate directory, and
+            invitations still use separate fictional browser data. No CityU,
+            Canvas, or institutional login connection exists.
           </p>
-          <span className="about-badge neutral">NO LIVE BACKEND</span>
+          <span className="about-badge neutral">
+            AUTH + OWN PROFILE · OTHER DATA LOCAL
+          </span>
         </section>
         <section className="about-card">
           <span className="about-icon peach">
             <Sparkles size={25} />
           </span>
-          <h2>The next steps</h2>
+          <h2>Authenticated course catalogue</h2>
           <p>
-            Real sign-in, registration, password reset, verified enrolments and
-            chat are not implemented. Real invitation delivery and multi-device
-            persistence require a backend and authenticated users.
+            The separate /my-courses page reads the Supabase course catalogue
+            and the signed-in user's own enrolments. Add/remove controls remain
+            paused until the separate database permission review is approved.
+            The existing /courses directory still belongs to the fictional demo.
           </p>
           <p>
-            Supabase setup guidance and a proposed database schema are included
-            below. The schema covers profiles, courses, enrolments and
-            invitations with row-level access controls.
+            Self-enrolment does not verify university registration. Under the
+            current schema, people who share a course may discover one another's
+            profiles. That visibility is intentional for this prototype, not
+            strict profile privacy. Real classmates, invitations, and chat
+            remain disconnected.
           </p>
-          <span className="about-badge neutral">PLANNED, NOT SIMULATED</span>
+          <span className="about-badge neutral">
+            STAGE 4 · COURSE READS · WRITES GATED
+          </span>
         </section>
       </div>
       <section className="backend-guide">
         <div>
           <p className="eyebrow">READY FOR THE NEXT CHAPTER</p>
-          <h2>Connect a real Supabase backend.</h2>
+          <h2>Connect CityLink student data.</h2>
           <p>
-            Create the four tables, enable authentication and row-level
-            security, then replace the sample repository with database queries.
-            Save invitations with an insert and read them back before confirming
-            success.
+            Supabase Auth and the signed-in user's own editable profile are
+            connected separately from the fictional student-data repository. The
+            authenticated course catalogue is read-only pending separate
+            enrolment-policy approval. Course rosters, invitations, and chat
+            remain disconnected. This demo does not send real group invitations.
           </p>
           <div className="guide-links">
             <a href="/docs/SUPABASE_SETUP.md" download className="primary">

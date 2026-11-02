@@ -356,16 +356,22 @@ create trigger invitations_enforce_integrity
   before insert or update on public.invitations
   for each row execute procedure public.enforce_invitation_integrity();
 
--- Explicit grants are intentionally narrow. RLS is enabled on every exposed
--- table and policies below provide the row-level decision. `service_role` is
--- left for trusted server-side administration only; never put its key in a web
--- bundle.
-revoke all on table public.profiles from anon, authenticated;
+-- Explicit grants are intentionally narrow. RLS decides which rows a user may
+-- access; profile column grants also limit which fields the owner may edit.
+-- `service_role` is left for trusted server-side administration only; never
+-- put its key in a web bundle.
+revoke all on table public.profiles from PUBLIC, anon, authenticated;
+revoke update (
+  id, student_id, display_name, major, year, bio, skills, status,
+  avatar_url, color, created_at, updated_at
+) on table public.profiles from PUBLIC, anon, authenticated;
 revoke all on table public.courses from anon, authenticated;
 revoke all on table public.enrolments from anon, authenticated;
 revoke all on table public.invitations from anon, authenticated;
 
-grant select, update on table public.profiles to authenticated;
+grant select on table public.profiles to authenticated;
+grant update (major, year, bio, skills, status)
+  on table public.profiles to authenticated;
 grant select on table public.courses to authenticated;
 grant select on table public.enrolments to authenticated;
 grant select, insert, update on table public.invitations to authenticated;

@@ -15,18 +15,18 @@ The baseline models the shapes currently defined in `client/src/data/sampleData.
 - `Enrolment` maps to `enrolments`: `studentId` is the Auth UUID in `student_id`, and `courseId` is `course_id`.
 - `Invitation` maps to `invitations`: `senderId`, `recipientId`, `courseId`, and `createdAt` use snake_case columns. Valid invitation statuses are `pending`, `accepted`, `declined`, and `cancelled`.
 
-The current app remains a browser `localStorage` demo until an implementation deliberately replaces a slice. Its demo auth, registration, and password-reset messages do not create Supabase Auth accounts or send reset email. Chat is incomplete and has no table in this proposal.
+CityLink uses Supabase Auth for email/password sign-up, sign-in, password reset, and sign-out when the browser client is configured. Sign-out uses Supabase's `local` scope so it clears this browser session without signing the user out on other devices. A signed-in user can view and edit their own profile on `/me`; edits are limited to `major`, `year`, `bio`, `skills`, and `status`. That isolated account profile is separate from `DEMO_USER_ID = "stu01"`. The `/demo` experience, demo profile, courses, enrolments, classmates, and invitations continue to use fictional browser data; signing in does not turn the demo student into the authenticated person. The sign-up request creates a Supabase Auth user. The schema's `on_auth_user_created` trigger is intended to add a minimal `public.profiles` row for that Auth UUID; CityLink does not insert a missing profile automatically. The user previously reported that the schema and trigger were applied and verified, but this stage did not create an account or verify the trigger against a new Auth signup. Use fictional test details and a test mailbox you control.
 
-## Do not connect the sample app by only setting keys
+## Keep Auth separate from the sample-data repository
 
-Adding `VITE_SUPABASE_URL` and a publishable key does **not** make the current app compatible with Supabase. Before a connected repository or UI ships, obtain the current authenticated user with `supabase.auth.getUser()` and use `auth.user.id` as the one identity source.
+Supabase Auth is used for account operations and the isolated own-profile screen. The `/me` query filters `public.profiles.id` by the current Supabase session's user UUID, and the database's own-row RLS policy remains the authority. Configuring the Auth client does **not** connect the fictional course, enrolment, classmate, or invitation repository. Before connecting those remaining data slices, obtain the current authenticated user with `supabase.auth.getUser()` and use `auth.user.id` as the real owner identity.
 
-Replace **every** runtime and test selector that currently uses `DEMO_USER_ID`; do not leave a connected code path importing that constant. At the time of writing, this includes:
+When connecting the remaining demo repository to Supabase, replace **every** demo runtime and test selector that currently uses `DEMO_USER_ID`; do not leave a connected data path importing that constant. The existing demo-only selectors include:
 
 - `client/src/data/repository.ts`, including `getStudents`, `getEnrolments`, invitation list/send/respond checks, profile ownership, and `getClassmates`.
 - `client/src/data/AppContext.tsx`, especially the `me: students.find(...)` selector.
 - `client/src/components/citylink/Shared.tsx`, including incoming invitation counts, course membership/roster calculations, and `InviteButton` pair lookups.
-- `client/src/pages/citylink/Dashboard.tsx`, `Classmates.tsx`, and `Workspace.tsx`, which all select enrolments, invitations, or profiles for the sample identity.
+- `client/src/pages/citylink/Dashboard.tsx`, `Classmates.tsx`, and the demo-only branches of `Workspace.tsx`, which select enrolments, invitations, or profiles for the sample identity. The separately rendered authenticated `/me` branch uses the session UUID and does not use the demo fixture.
 - `client/src/data/repository.test.ts` and any replacement repository tests.
 - `client/src/data/sampleData.ts` if the demo fixture is removed rather than maintained as a wholly separate, disconnected demo mode.
 
@@ -170,33 +170,29 @@ on conflict (student_id, course_id) do nothing;
 
 Do not seed invitations with privileged SQL unless a migration specifically tests invitation behavior. Sign in as one of these fictional users and create an invitation through the client mutation below. That exercises the same RLS, shared-course, full-recipient, active-pair, and transition checks used by the app.
 
-## 3. Configure the browser client safely
+## 3. Configure browser Auth safely
 
-In the future implementation, add `@supabase/supabase-js` and define local-only environment variables. Do not commit a populated `.env.local`.
+The CityLink browser client reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Store them in the Webdev **Development** environment for Preview; do not paste the values into chat or commit a populated `.env.local`. A `VITE_` variable is intentionally included in the browser bundle. A Supabase **publishable** key is designed for a browser, but it is not an Auth user credential. Never put a `sb_secret_...` key or legacy `service_role` key in a `VITE_*` variable, source code, `localStorage`, or a browser build. Those elevated keys bypass RLS. [4]
 
-```bash
-VITE_SUPABASE_URL=https://your-project-ref.supabase.co
-VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_public_key
-```
+The Welcome page uses the existing session provider for sign-up, sign-in, sign-out, and password reset. Verification and recovery links redirect to the current app root using `window.location.origin`; the root route already exists, so no separate callback route is needed. The session provider detects the recovery event, after which the Welcome page lets the user choose and confirm a new password with `auth.updateUser`. When Confirm email is enabled, sign-up returns a user with no session until the address is confirmed, and the app shows a verification-pending message. See Supabase's [sign-up](https://supabase.com/docs/reference/javascript/auth-signup), [reset-password](https://supabase.com/docs/reference/javascript/auth-resetpasswordforemail), and [update-user](https://supabase.com/docs/reference/javascript/auth-updateuser) references.
 
-A Vite variable prefixed `VITE_` is intentionally bundled into the browser. A **publishable** key is designed for a browser or mobile app and is not a user credential; a signed-in user is identified separately by their Auth JWT. The key is safe to expose only because RLS and grants restrict what it can reach. [4]
+Before registration or password reset is tested, an authorized project owner should review Supabase Dashboard **Authentication → URL Configuration**. Add the exact current CityLink Development Preview root URL to **Redirect URLs**; that same root is used for email verification and password-recovery links. For local Vite development, add `http://localhost:3000/**`. Later, after a production URL is approved, add its exact root URL and set **Site URL** to the canonical app origin. Supabase documents `**` for preview/local patterns and recommends exact production URLs in its [redirect URL guide](https://supabase.com/docs/guides/auth/redirect-urls). If a custom email template hard-codes `.SiteURL`, review whether it should use `.RedirectTo` instead.
 
-Never place a `sb_secret_...` secret key or legacy `service_role` key in `VITE_*`, source code, `localStorage`, a client request, or a browser build. Those elevated keys bypass RLS and belong only in a developer-controlled server or admin job. [4]
+The Email provider's **Confirm email** setting controls whether verification is required. It must be enabled to exercise the pending-verification path; it is not changed by this application change. No Supabase dashboard settings were modified, no test account was created, and email/redirect behavior was not live-tested. A real registration creates an Auth user; the profile row depends on the separate schema trigger being installed and firing. Use only fictional test details and a test mailbox you control.
 
-A future client module can be as small as:
+The authenticated `/me` screen queries only the current user's profile and updates only the five allowed columns. The Stage 4 `/my-courses` screen separately reads the existing `public.courses` catalogue and only the signed-in user's rows from `public.enrolments`. It does not connect classmates, invitations, or chat, and it does not read the fictional demo repository.
 
-```ts
-import { createClient } from '@supabase/supabase-js'
+### Stage 4: authenticated course catalogue and enrolment management
 
-export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-)
-```
+`/my-courses` uses the existing tables; it creates no duplicate catalogue or enrolment table. It filters courses by code, title, department, and semester, and reads enrolment rows with `student_id = auth.uid()` from the signed-in session. The course catalogue has an empty state because this UI does not seed or create courses; only an authorized project owner should populate approved fictional course rows.
 
-The existing app code is intentionally not modified by this guide. Add the dependency, environment types, authenticated-session handling, and client module in a separate implementation change.
+`COURSE_ENROLMENT_WRITES_ENABLED` is now `true` after the user reported that the reviewed `INSERT (student_id, course_id)` grant, table-level `DELETE` grant, and owner-only INSERT/DELETE RLS policies were applied and verified. Manus did not independently inspect or modify the live database and did not run SQL. These are supplemental live permission changes and are not included in the checked-in `supabase/schema.sql`, which retains the original SELECT-only enrolment baseline; future project setup must separately review and apply the approved permission change. Each write first verifies `auth.getUser()` matches the account ID; INSERT sends only `student_id` and `course_id` (the database supplies `created_at`), and DELETE filters by the verified user ID and course ID. Duplicate-key and RLS/permission errors receive specific safe messages. These requests still use the browser Supabase client and remain subject to database RLS; no service-role key is used.
 
-## 4. Replace the sample repository with real reads and writes
+The user reports that read-only permission checks and policy definitions matched the intended design. An actual live Account A/Account B insert/delete isolation test has not yet been performed. See [the enrolment policy review](ENROLMENT_POLICY_REVIEW.md) for the local schema baseline, SQL reportedly applied, and repeatable read-only audit queries.
+
+The proposed self-enrolment design does not verify actual university registration: any authenticated user could select any course row exposed by the catalogue. The existing profile policy makes profiles discoverable between people who share a course, so adding an enrolment can increase profile visibility. This behaviour is intentional for the prototype's group-finding objective, but it is not strict profile privacy. Do not present the course selection as verified CityU or Canvas enrolment.
+
+## 4. Broader student-directory and invitation integration guidance
 
 Keep the UI types, but map database snake_case to the current camelCase shapes at the repository boundary. Do not confuse `profiles.id` (the Auth UUID used for ownership and relationships) with `profiles.student_id` (the fictional display student number).
 
@@ -210,9 +206,9 @@ function initialsFromDisplayName(displayName: string): string {
     .filter(Boolean)
     .slice(0, 2)
     .map(part => part.slice(0, 1).toUpperCase())
-    .join('')
+    .join("");
 
-  return initials || '?'
+  return initials || "?";
 }
 
 const toCourse = (row: any): Course => ({
@@ -224,25 +220,25 @@ const toCourse = (row: any): Course => ({
   semester: row.semester,
   description: row.description,
   color: row.color,
-})
+});
 
 const toStudent = (row: any): Student => ({
   id: row.id,
-  studentId: row.student_id ?? '',
+  studentId: row.student_id ?? "",
   name: row.display_name,
-  major: row.major ?? '',
+  major: row.major ?? "",
   year: Number(row.year),
   bio: row.bio,
   skills: row.skills ?? [],
   status: row.status,
   avatar: initialsFromDisplayName(row.display_name),
   color: row.color,
-})
+});
 
 const toEnrolment = (row: any): Enrolment => ({
   studentId: row.student_id,
   courseId: row.course_id,
-})
+});
 
 const toInvitation = (row: any): Invitation => ({
   id: row.id,
@@ -251,42 +247,51 @@ const toInvitation = (row: any): Invitation => ({
   courseId: row.course_id,
   status: row.status,
   createdAt: row.created_at,
-})
+});
 ```
 
 At app start, obtain the authenticated user, then rehydrate from the database. The profile query returns the caller’s self profile plus shared-course peers; it must populate `students`, including `me`. `visible_course_enrolments` supplies the minimal roster identifier list needed by `getClassmates` without weakening the direct-table own-row policy.
 
 ```ts
 export async function loadCityLinkState() {
-  const { data: auth, error: authError } = await supabase.auth.getUser()
-  if (authError) throw authError
-  if (!auth.user) throw new Error('A signed-in Supabase user is required')
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!auth.user) throw new Error("A signed-in Supabase user is required");
 
   const [profilesResult, coursesResult, enrolmentsResult, invitationsResult] =
     await Promise.all([
       supabase
-        .from('profiles')
-        .select('id, student_id, display_name, major, year, bio, skills, status, color')
-        .order('display_name'),
+        .from("profiles")
+        .select(
+          "id, student_id, display_name, major, year, bio, skills, status, color"
+        )
+        .order("display_name"),
       supabase
-        .from('courses')
-        .select('id, code, title, department, credits, semester, description, color')
-        .order('semester', { ascending: false })
-        .order('code'),
-      supabase.rpc('visible_course_enrolments'),
+        .from("courses")
+        .select(
+          "id, code, title, department, credits, semester, description, color"
+        )
+        .order("semester", { ascending: false })
+        .order("code"),
+      supabase.rpc("visible_course_enrolments"),
       supabase
-        .from('invitations')
-        .select('id, sender_id, recipient_id, course_id, status, created_at')
-        .order('created_at', { ascending: false }),
-    ])
+        .from("invitations")
+        .select("id, sender_id, recipient_id, course_id, status, created_at")
+        .order("created_at", { ascending: false }),
+    ]);
 
-  for (const result of [profilesResult, coursesResult, enrolmentsResult, invitationsResult]) {
-    if (result.error) throw result.error
+  for (const result of [
+    profilesResult,
+    coursesResult,
+    enrolmentsResult,
+    invitationsResult,
+  ]) {
+    if (result.error) throw result.error;
   }
 
-  const students = (profilesResult.data ?? []).map(toStudent)
-  const me = students.find(student => student.id === auth.user.id)
-  if (!me) throw new Error('The authenticated profile is unavailable')
+  const students = (profilesResult.data ?? []).map(toStudent);
+  const me = students.find(student => student.id === auth.user.id);
+  if (!me) throw new Error("The authenticated profile is unavailable");
 
   return {
     currentUserId: auth.user.id,
@@ -294,7 +299,7 @@ export async function loadCityLinkState() {
     courses: (coursesResult.data ?? []).map(toCourse),
     enrolments: (enrolmentsResult.data ?? []).map(toEnrolment),
     invitations: (invitationsResult.data ?? []).map(toInvitation),
-  }
+  };
 }
 ```
 
@@ -304,26 +309,26 @@ Supabase JavaScript mutations do not return inserted rows by default. Chain `.se
 
 ```ts
 export async function createInvitation(input: {
-  recipientId: string
-  courseId: string
+  recipientId: string;
+  courseId: string;
 }): Promise<Invitation> {
-  const { data: auth, error: authError } = await supabase.auth.getUser()
-  if (authError) throw authError
-  if (!auth.user) throw new Error('Sign in before sending an invitation')
+  const { data: auth, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+  if (!auth.user) throw new Error("Sign in before sending an invitation");
 
   const { data, error } = await supabase
-    .from('invitations')
+    .from("invitations")
     .insert({
       sender_id: auth.user.id,
       recipient_id: input.recipientId,
       course_id: input.courseId,
       // status, id, and timestamps are intentionally not supplied by the UI.
     })
-    .select('id, sender_id, recipient_id, course_id, status, created_at')
-    .single()
+    .select("id, sender_id, recipient_id, course_id, status, created_at")
+    .single();
 
-  if (error) throw error
-  return toInvitation(data)
+  if (error) throw error;
+  return toInvitation(data);
 }
 ```
 
@@ -334,56 +339,54 @@ For an actual accept, decline, or cancel button, update the status and use the r
 ```ts
 export async function transitionInvitation(
   invitationId: string,
-  status: 'accepted' | 'declined' | 'cancelled',
+  status: "accepted" | "declined" | "cancelled"
 ): Promise<Invitation> {
   const { data, error } = await supabase
-    .from('invitations')
+    .from("invitations")
     .update({ status })
-    .eq('id', invitationId)
-    .select('id, sender_id, recipient_id, course_id, status, created_at')
-    .single()
+    .eq("id", invitationId)
+    .select("id, sender_id, recipient_id, course_id, status, created_at")
+    .single();
 
-  if (error) throw error
-  return toInvitation(data)
+  if (error) throw error;
+  return toInvitation(data);
 }
 ```
 
-Profile editing is a real remote write only after Auth is enabled. The policy permits the signed-in user to update only their own row. Keep photo fields out of the current mutation because the current UI does not support photos.
+Profile editing is a real remote write only after Auth is enabled. The row-level policy permits the signed-in user to update only their own row, while the table grants permit client updates only to `major`, `year`, `bio`, `skills`, and `status`. The current UI does not edit `display_name`, `student_id`, `avatar_url`, `color`, or timestamps; do not send those fields in the mutation. Keep photo fields out because the current UI does not support photos.
 
 ```ts
 const { data, error } = await supabase
-  .from('profiles')
-  .update({ display_name, major, year, bio, skills, status, color })
-  .eq('id', currentUserId)
-  .select('id, student_id, display_name, major, year, bio, skills, status, color')
-  .single()
+  .from("profiles")
+  .update({ major, year, bio, skills, status })
+  .eq("id", currentUserId)
+  .select(
+    "id, student_id, display_name, major, year, bio, skills, status, color"
+  )
+  .single();
 
-if (error) throw error
-const updatedStudent = toStudent(data)
+if (error) throw error;
+const updatedStudent = toStudent(data);
 ```
 
-There is intentionally no client `insert` into `enrolments`, no client course administration, and no client use of a secret key. Use a controlled administrator workflow, SQL import, or server-side admin tool for those operations.
+The My Courses feature has guarded insert/delete methods for the signed-in user's own `enrolments` row. `COURSE_ENROLMENT_WRITES_ENABLED` is true following the user's report that the owner-scoped live grants and RLS policies were applied and verified; Manus did not independently observe the live database. Each write verifies the current user and remains subject to RLS. There is no client course administration or use of a secret key. Course catalogue rows still require an authorized project-owner workflow.
 
 ## 5. Rollout and verification
 
-1. Apply the schema to a development Supabase project and create the fictional Auth users and seed catalog above.
-2. Implement actual Supabase sign-in and replace all `DEMO_USER_ID` selectors in the same reviewed change. Until then, leave demo auth/register/reset copy clearly informational. A real user must be signed in before RLS-backed reads or invitation writes can work.
-3. Replace one repository slice at a time: authenticated initial rehydration, then profile update, then invitation creation and transitions. Reload after each successful mutation or merge the exact returned row into state.
-4. Make the repository’s profile list include the current user; make the enrolment list use `rpc('visible_course_enrolments')`; and pass the authenticated UUID through every classmate, course, invitation, and profile selector.
-5. Treat existing browser `localStorage` as untrusted demo data. Do not bulk-upload it from a visitor’s browser or infer other users’ Auth IDs. If a fictional dataset must survive, an administrator should map fictional people to deliberately created Auth users and import it using the SQL pattern above.
-6. Once a slice is verified against Supabase, remove its `localStorage` fallback. Keep localStorage only for non-authoritative UI preferences if needed; it must not become a second profile or invitation database.
-7. Test the policy boundary with at least two signed-in demo users. Confirm that a user can read their own profile and shared-course peers, gets roster IDs only for their enrolled courses, cannot directly read another user’s enrolment row, cannot invite a non-peer or self, cannot invite a `full` recipient, cannot create a second active (`pending` or `accepted`) pair in either direction, cannot make a recipient cancel, and cannot alter a terminal invitation.
+1. The user reports that the schema and the separate enrolment grants/policies were applied and verified in the CityLink project. Manus has not independently re-read the live catalog. Do not re-run the schema, permission SQL, or Drizzle/MySQL migrations as part of Stage 4.
+2. Supabase email/password Auth and the separate own-profile screen are implemented. Keep `DEMO_USER_ID` and the browser-local repository confined to the fictional `/demo` experience; do not replace demo identities or migrate sample browser data into Auth accounts.
+3. The Stage 4 `/my-courses` page reads the course catalogue and the signed-in user's own enrolments. Its insert/delete operations are enabled in the frontend after the user's permission-verification report. Unit tests cover the request payload and ownership filters, but actual live writes have not been tested by Manus.
+4. When the classmate directory is later integrated, use `rpc('visible_course_enrolments')` for peer roster identifiers; direct table reads remain restricted to the caller's own enrolments. Pass the authenticated UUID through every real profile, course, invitation, and roster selector.
+5. Treat existing browser `localStorage` as fictional demo data. Do not bulk-upload it from a visitor's browser or infer other users' Auth IDs. An administrator must map deliberately created test Auth users to seed data using a separately approved process.
+6. Once a future data slice is reviewed and verified against Supabase, remove only that slice's `localStorage` fallback. Keep demo storage isolated and non-authoritative for real accounts.
+7. Before treating Stage 4 live writes as verified, test with at least two fictional signed-in users. Confirm own-course add/remove, inability to alter another user's enrolment, intended shared-course profile visibility, and all existing invitation constraints; do not change policies during this test or treat self-selected courses as verified university registration.
 
 For production readiness, additionally add typed generated database definitions, automated RLS allow/deny tests, error reporting that does not disclose private data, and a deliberate retention/deletion policy. Supabase recommends testing each table’s permitted and denied operations rather than assuming an RLS policy is correct. [1]
 
 ## References
 
 [1]: https://supabase.com/docs/guides/database/postgres/row-level-security "Supabase Row Level Security"
-
 [2]: https://supabase.com/docs/guides/database/functions "Supabase Database Functions"
-
 [3]: https://supabase.com/docs/guides/auth/managing-user-data "Supabase User Management"
-
 [4]: https://supabase.com/docs/guides/getting-started/api-keys "Supabase API Keys"
-
 [5]: https://supabase.com/docs/reference/javascript/insert "Supabase JavaScript Insert"
