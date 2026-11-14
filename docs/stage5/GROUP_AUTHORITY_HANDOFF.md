@@ -2,7 +2,9 @@
 
 ## Status
 
-Implementation is prepared on `feature/roy-group-workflows`; the Test migration has **not yet been applied**. This document will be updated with exact validation, GitHub PR, and post-application results before handoff.
+The forward-only migration was applied to **CityLink-Stage5-Test** (`wkzclgmhrtecnpexfesr`) on 2026-11-15. Supabase records it as version `20261114163512`, name `20261114162301_stage5_group_authority_and_succession`. The committed SQL source has been renamed to match that recorded version/name. The source branch is `feature/roy-group-workflows`; [PR #2](https://github.com/minstrel1014/CityLink/pull/2) is open against `main` and is not merged.
+
+The Test catalog regression query returned **12/12 checks passed**. The three public workflow RPCs remain `SECURITY DEFINER`, callable by `authenticated`, and not callable by `anon`. The preflight and post-apply aggregate check found no pending invitation/request conflict pairs. No application rows were created, deleted, or otherwise changed by the migration or checks. Supabase Main was not accessed.
 
 ## Approved behavior
 
@@ -17,20 +19,20 @@ Approved by the CityLink project lead on 2026-11-15:
 
 The shared record is `docs/team/DECISIONS.md`.
 
-## Test-only preflight
+## Test-only preflight and result
 
-Project: `CityLink-Stage5-Test`, ref `wkzclgmhrtecnpexfesr`. Main was not accessed. The inspection was metadata-only, plus aggregate counts; no application identities or message content were read.
+Project: `CityLink-Stage5-Test`, ref `wkzclgmhrtecnpexfesr`. Main was not accessed. Inspection and validation were metadata/catalog queries plus aggregate counts; no application identities or message content were read.
 
 - Existing group workflow: `public.send_group_invitation`, `public.request_to_join_group`, `public.review_group_join_request`; internal membership helper: `private.is_active_group_member`.
-- Current faulty join-request SELECT policy: `requester and members read join requests`.
-- Existing profile deletion trigger: `profiles_archive_citylink_history_before_delete`, calling `private.archive_deleted_profile_citylink_history()`. It anonymizes deleted profiles, sets their active memberships to `account_deleted`, cancels their pending invitations/requests, and clears `creator_id`; for an active group it did not transfer leadership.
-- Authenticated users have SELECT grants on group tables; trusted definer RPC/trigger paths own coordinated writes. No membership leave/remove RPC or membership-table trigger existed.
-- Counts immediately before preparation: pending invite/request conflict pairs **0**; forming/active groups with no active profile membership **0**; active groups whose creator was not an active member **0**.
-- Test migration history already contains `20261102131343 / 20261102_stage5_groups` and `20261102140927 / 20261102_stage5_course_roster_rpc`; their source files are absent from GitHub `main`. This correction migration assumes that existing Stage 5 schema and is not a fresh-database baseline.
+- Before application, migration history contained the Stage 5 base entries `20261102131343 / 20261102_stage5_groups` and `20261102140927 / 20261102_stage5_course_roster_rpc`; no source files for those migrations exist on GitHub `main`. This correction assumes that existing Stage 5 schema and is not a fresh-database baseline.
+- Before application, the exact correction version/name was absent from migration history and the pending invitation/request aggregate check returned `has_pending_conflict=false`. The migration also contains its own fail-closed preflight.
+- After application, migration history recorded `20261114163512 / 20261114162301_stage5_group_authority_and_succession`.
+- The committed catalog regression SQL returned 12 rows, all `passed=true`. It checked leader-only review, new/old SELECT policy names and predicates, conflict messages and group-row locks, succession ordering and empty-group handling, membership update/delete triggers, profile-delete integration, and absence of opposite pending pairs.
+- Authenticated execute privilege remained true and anonymous execute privilege remained false for the three public RPCs. No grants were widened.
 
-## Prepared migration
+## Applied migration
 
-`supabase/migrations/20261114162301_stage5_group_authority_and_succession.sql` is forward-only and contains:
+`supabase/migrations/20261114163512_20261114162301_stage5_group_authority_and_succession.sql` is the applied forward-only correction. It contains:
 
 1. A safety preflight that stops if an old pending invitation/request conflict has appeared; it does not choose a winner or rewrite rows.
 2. A private, row-locking helper that preserves an active leader, transfers a departed/inactive leader using the approved deterministic order, or abandons an empty forming/active group and expires its pending actions.
@@ -45,9 +47,9 @@ No capacity field, maximum, membership cap, reset, rollback, or application of M
 
 ## Files and interfaces
 
-- `supabase/migrations/20261114162301_stage5_group_authority_and_succession.sql` — forward-only Test correction.
-- `supabase/tests/stage5_group_authority_catalog.sql` — read-only catalog regression checks to run after application; does not create test data.
-- `docs/team/DECISIONS.md` — lead-approved behavior and API/data implications.
+- `supabase/migrations/20261114163512_20261114162301_stage5_group_authority_and_succession.sql` — applied, forward-only Test correction.
+- `supabase/tests/stage5_group_authority_catalog.sql` — read-only catalog regression checks; all 12 passed after application.
+- `docs/team/DECISIONS.md` — lead-approved behavior and current Test implementation status.
 - `docs/stage5/GROUP_AUTHORITY_HANDOFF.md` — this handoff.
 
 Public function signatures and return types stay unchanged:
@@ -56,22 +58,21 @@ Public function signatures and return types stay unchanged:
 - `request_to_join_group(uuid) returns uuid`
 - `review_group_join_request(uuid, boolean) returns text`
 
-The two conflict paths raise clear PostgREST-visible exceptions; UI owners should map these messages to actionable feedback. Table grants and RPC execute grants are not widened.
+The two conflict paths raise clear PostgREST-visible exceptions; UI owners should map these messages to actionable feedback. Table grants and RPC execute grants were not widened.
 
-## Checks and test plan
+## Checks and results
 
-Pending before application:
+- `git diff --check` — PASS.
+- `corepack pnpm check` — PASS (`tsc --noEmit`).
+- `corepack pnpm test` — PASS: 7 files, 47 tests. Test output includes the existing OAuth configuration diagnostic; all tests passed.
+- `corepack pnpm build` — PASS. Vite printed a notice that `/api/platform/config.js` could not be bundled without `type="module"`; build completed successfully.
+- Independent read-only static review — no definite blocker found; it noted that catalog assertions do not replace functional behavior tests.
+- Test migration history, catalog assertions, and execute privileges — verified as above.
 
-- `git diff --check` — whitespace/conflict-marker check.
-- `corepack pnpm check` — TypeScript check; a pass means the existing application types still compile.
-- `corepack pnpm test` — repository unit tests; a pass means the existing tests remain green, not that database behavior was functionally exercised.
-- `corepack pnpm build` — production app build; a pass means the source still builds.
-- After applying only to Test, run `supabase/tests/stage5_group_authority_catalog.sql`; every `passed` value must be true, then re-list migration history and re-read the policy/function/trigger catalog.
-
-Manual multi-account behavior tests (creator versus ordinary active member, conflicting concurrent invitation/request attempts, leader departure, equal-time ordering, final-member departure, and profile deletion) still require dedicated disposable Test accounts/fixtures and must be run by the project before release. No such records were created as part of this change.
+Manual multi-account behavior tests (creator versus ordinary active member, conflicting concurrent invitation/request attempts, leader departure, equal-time ordering, final-member departure, and profile deletion) have **not** been run. They need disposable Test accounts/fixtures; no such records were created. Do not claim the full behavior suite has passed until those scenarios are exercised.
 
 ## Git/GitHub workflow and next steps
 
-Git is the local branch/commit history; GitHub is the remote branch and PR review service. Work is on `feature/roy-group-workflows`, based on the clean approved-decision branch, whose base is current `main` `da135199`. The repository `main` will not be pushed to or merged by this task.
+Git is the local branch/commit history; GitHub is the remote branch and PR review service. Work is on `feature/roy-group-workflows`, descended from the approved-decision branch based on `main` `da135199`. Commit `6cb9613` saved the migration/test/docs before the Test application; a follow-up documentation/filename commit will record the exact applied version. The remote feature branch is verified. PR #2 is open for review; PR #1 also remains open. Neither PR has been merged, and this work does not push directly to `main`.
 
-Next: run the listed checks; commit only these migration/test/decision/handoff files on the feature branch; push that branch; verify its remote SHA; open/update a PR for review; apply the reviewed migration only to Test; run the read-only catalog checks; update this file with exact results and the PR URL. Do not reset, roll back, or access Supabase Main.
+Next: push and verify the follow-up traceability update so PR #2 reflects the applied Test result. A human lead should review the open PR before any merge. Before running manual behavior tests, agree on disposable Test fixtures or provide test accounts; do not reset/delete Test. Never access Supabase Main.
