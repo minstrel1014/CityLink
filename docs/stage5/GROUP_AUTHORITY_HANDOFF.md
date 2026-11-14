@@ -2,9 +2,9 @@
 
 ## Status
 
-The forward-only migration was applied to **CityLink-Stage5-Test** (`wkzclgmhrtecnpexfesr`) on 2026-11-15. Supabase records it as version `20261114163512`, name `20261114162301_stage5_group_authority_and_succession`. The committed SQL source has been renamed to match that recorded version/name. The source branch is `feature/roy-group-workflows`; [PR #2](https://github.com/minstrel1014/CityLink/pull/2) is open against `main` and is not merged.
+The forward-only migration was applied to **CityLink-Stage5-Test** (`wkzclgmhrtecnpexfesr`) on 2026-11-15. Supabase records it as version `20261114163512`, name `20261114162301_stage5_group_authority_and_succession`. The source file is named to match that record. The source branch is `feature/roy-group-workflows`; [PR #2](https://github.com/minstrel1014/CityLink/pull/2) is open against `main`, its description reflects the applied status, and it is not merged.
 
-The Test catalog regression query returned **12/12 checks passed**. The three public workflow RPCs remain `SECURITY DEFINER`, callable by `authenticated`, and not callable by `anon`. The preflight and post-apply aggregate check found no pending invitation/request conflict pairs. No application rows were created, deleted, or otherwise changed by the migration or checks. Supabase Main was not accessed.
+The Test catalog regression query returned **12/12 checks passed**. The three public workflow RPCs remain `SECURITY DEFINER`, executable by `authenticated`, and not executable by `anon`. Preflight and post-apply aggregate checks found no pending invitation/request conflict pairs. No application rows were created, deleted, or otherwise changed by the migration or checks. Supabase Main was not accessed.
 
 ## Approved behavior
 
@@ -73,6 +73,6 @@ Manual multi-account behavior tests (creator versus ordinary active member, conf
 
 ## Git/GitHub workflow and next steps
 
-Git is the local branch/commit history; GitHub is the remote branch and PR review service. Work is on `feature/roy-group-workflows`, descended from the approved-decision branch based on `main` `da135199`. Commit `6cb9613` saved the migration/test/docs before the Test application; a follow-up documentation/filename commit will record the exact applied version. The remote feature branch is verified. PR #2 is open for review; PR #1 also remains open. Neither PR has been merged, and this work does not push directly to `main`.
+Git is the local branch/commit history; GitHub is the remote branch and PR review service. Work is on `feature/roy-group-workflows`, descended from the approved-decision branch based on `main` `da135199`. Commit `6cb9613` saved the migration/test/docs before Test application; commit `3ce384c` recorded the exact applied version and results. Both commits were pushed and the remote feature SHA was verified. The PR #2 description was updated afterward; PR #2 is open for review and PR #1 also remains open. Neither PR has been merged, and this work does not push directly to `main`.
 
-Next: push and verify the follow-up traceability update so PR #2 reflects the applied Test result. A human lead should review the open PR before any merge. Before running manual behavior tests, agree on disposable Test fixtures or provide test accounts; do not reset/delete Test. Never access Supabase Main.
+Next, the human lead should review PR #2 and decide whether to authorize disposable Test fixtures or provide test accounts for the manual behavior tests. Do not reset/delete Test or access Supabase Main. Do not merge either PR without the lead's approval.
