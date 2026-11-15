@@ -48,6 +48,10 @@ The classmate list is fictional and illustrative. For unknown real course codes,
 4. After checks pass, stage only the intended files with `git add <paths>`, inspect `git diff --cached --stat` and `git status --short`, and commit a meaningful local checkpoint on this feature branch. Git records local branches and commits; GitHub hosts the pushed remote branch and PR review.
 5. Push `feature/classmate-discovery` (never `main`), verify that the remote branch SHA equals the local commit SHA, then open or update the pull request for review. Do not force-push or merge without lead approval. Tell the lead the decision/data contract is recorded here and include the PR link.
 
+## GitHub review status
+
+The initial feature commit `605ac6715d1eb72188ef05cf91633bed4c917d4b` was pushed to `origin/feature/classmate-discovery`, and the remote SHA matched. [PR #3](https://github.com/minstrel1014/CityLink/pull/3) is open against `main` and remains unmerged. Any follow-up documentation commit will update the PR automatically when pushed to the same feature branch.
+
 ## Next steps
 
 Review this sample-only interface and verify its course-card placement. Do not add real student queries, expose profile records, or enable enrolment writes as part of this feature. Any change to data sources or who may see classmates must be discussed with the lead and documented before implementation.
