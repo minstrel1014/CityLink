@@ -56,6 +56,15 @@ On 2026-11-14, the lead task and Roy's task used the authorized Supabase MCP con
 
 On 2026-11-15, the forward-only correction migration `20261114163512 / 20261114162301_stage5_group_authority_and_succession` was applied to that Test project only. All 12 read-only catalog assertions passed; the three public RPCs remained executable by `authenticated` and not by `anon`. No application rows were created or changed by the migration or validation. Manual behavior tests with disposable accounts/fixtures remain outstanding. Main was not accessed.
 
+### 2026-11-16 — Public Test demo retains existing course and profile writes
+
+- **Status:** Approved for the separate public demo release only.
+- **Human approver:** CityLink project lead; real human name remains TBD.
+- **Decision:** Keep the existing authenticated `/my-courses` add/remove-own-enrolment controls and `/me` own-profile edit controls available in the public Test-connected demo, alongside the three Stage 5 group workflows. This preserves existing behavior only; it does not authorize additional features or database-policy changes.
+- **Roles affected:** Project/integration lead (human owner TBD); group workflow owner Roy; course-enrollment and profile feature owners (names/roles TBD); QA and documentation owner Eunice.
+- **Data/API implications:** Once the browser client is configured for disposable Test, signed-in users may use the existing own-row `enrolments` insert/delete and `profiles` update flows, plus the existing group RPCs. Existing identity checks and RLS remain the security boundary. This does not authorize anonymous writes, weaker RLS, a service-role key, schema changes, or data seeding. This decision is limited to Test ref `wkzclgmhrtecnpexfesr` and the public demo copy.
+- **Unresolved questions:** Test Auth redirect editing is blocked until an edit-capable account is used; protected Webdev Production values are still pending. Live multi-account behavior tests remain outstanding.
+
 ## Process for future decisions
 
 When behavior, permissions, RLS, API contracts, or database changes are unclear or disputed, stop the affected work and ask the human lead directly in plain language. State the exact question, provide clear options and consequences, and keep asking when the answer is absent or ambiguous. Mark the work blocked; do not implement unresolved behavior. Once answered, record the date, exact decision, human approver, roles affected, data/API implications, and remaining questions here or in the relevant feature handoff.
