@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { Link } from "wouter";
 import {
@@ -16,6 +17,7 @@ import {
 } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { getFictionalCourseClassmates } from "@/data/fictionalCourseClassmates";
 import {
   addOwnCourseEnrolment,
   COURSE_ENROLMENT_WRITES_ENABLED,
@@ -413,6 +415,9 @@ export default function MyCourses() {
           <div className="authenticated-course-grid">
             {filteredCourses.map(course => {
               const enrolled = enrolledIds.has(course.id);
+              const classmates = enrolled
+                ? getFictionalCourseClassmates(course.code)
+                : [];
               return (
                 <article className="authenticated-course-card" key={course.id}>
                   <div className="authenticated-course-card-top">
@@ -434,6 +439,43 @@ export default function MyCourses() {
                     {course.description ||
                       "No course description is available."}
                   </p>
+                  {enrolled && (
+                    <section
+                      className="course-sample-classmates"
+                      aria-label={`Fictional sample classmates for ${course.code}`}
+                    >
+                      <div className="course-sample-classmates-heading">
+                        <Users size={16} aria-hidden="true" />
+                        <strong>Sample classmates</strong>
+                        <span>FICTIONAL</span>
+                      </div>
+                      <p className="course-sample-classmates-note">
+                        Examples only—not the actual student list for this
+                        course.
+                      </p>
+                      <ul>
+                        {classmates.map(classmate => (
+                          <li key={classmate.id}>
+                            <span
+                              className={`course-sample-classmate-avatar ${classmate.color}`}
+                              aria-hidden="true"
+                            >
+                              {classmate.avatar}
+                            </span>
+                            <span className="course-sample-classmate-details">
+                              <strong>{classmate.name}</strong>
+                              <small>
+                                {classmate.major} · Year {classmate.year}
+                              </small>
+                            </span>
+                            <span className="course-sample-classmate-skills">
+                              {classmate.skills.slice(0, 2).join(" · ")}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
                   <div className="authenticated-course-card-footer">
                     <span>{course.semester}</span>
                     <button
