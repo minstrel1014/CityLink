@@ -1,0 +1,217 @@
+.group-workflows-page .page-heading {
+  margin-bottom: 23px;
+}
+.group-workflows-intro {
+  margin: -8px 0 22px;
+  padding: 13px 16px;
+  border: 1px solid #e5ead9;
+  border-radius: 10px;
+  background: #f0f4e9;
+  color: #657456;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.group-workflows-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 15px 17px;
+  border: 1px solid #e4e8dc;
+  border-radius: 11px;
+  background: #fff;
+}
+.group-workflows-toolbar label,
+.group-workflow-form label {
+  display: grid;
+  gap: 7px;
+  color: #68745f;
+  font-size: 10px;
+  font-weight: 650;
+}
+.group-workflows-toolbar select,
+.group-workflow-form select {
+  width: min(390px, 100%);
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #e2e7d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #43513b;
+  font: inherit;
+  font-size: 11px;
+}
+.group-workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+  align-items: start;
+}
+.group-workflow-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e3e8d9;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 3px 12px #44552f05;
+}
+.group-workflow-panel.wide {
+  grid-column: 1 / -1;
+}
+.group-workflow-panel h2 {
+  margin: 0 0 6px;
+  color: #303b2c;
+  font-size: 15px;
+  font-weight: 680;
+}
+.group-workflow-panel > p {
+  margin: 0 0 15px;
+  color: #829078;
+  font-size: 10px;
+  line-height: 1.65;
+}
+.group-workflow-form {
+  display: grid;
+  gap: 12px;
+}
+.group-workflow-form .primary,
+.group-workflow-actions .primary,
+.group-workflow-actions .secondary,
+.group-workflow-actions .text-button {
+  min-height: 35px;
+  font-size: 10px;
+}
+.group-workflow-form button {
+  justify-self: start;
+}
+.group-workflow-form button:disabled,
+.group-workflow-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+.group-workflow-peek {
+  margin: 0;
+  color: #8a9581;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.group-workflow-list {
+  display: grid;
+  gap: 10px;
+}
+.group-workflow-item {
+  display: grid;
+  gap: 10px;
+  padding: 12px 13px;
+  border: 1px solid #edf0e8;
+  border-radius: 9px;
+  background: #fcfdfb;
+}
+.group-workflow-item-top,
+.group-workflow-item-bottom,
+.group-workflow-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+}
+.group-workflow-item h3 {
+  margin: 0;
+  color: #3d4a35;
+  font-size: 11px;
+  font-weight: 680;
+}
+.group-workflow-item p {
+  margin: 3px 0 0;
+  color: #89947e;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.group-workflow-status {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 20px;
+  background: #edf2e7;
+  color: #667b54;
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+.group-workflow-status.pending {
+  background: #fcf5e8;
+  color: #806b39;
+}
+.group-workflow-status.rejected,
+.group-workflow-status.declined,
+.group-workflow-status.cancelled,
+.group-workflow-status.expired {
+  background: #f3f1ed;
+  color: #888174;
+}
+.group-workflow-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.group-workflow-actions .text-button {
+  padding: 7px 4px;
+}
+.group-workflow-feedback {
+  padding: 11px 13px;
+  margin: 0 0 14px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.group-workflow-feedback.success {
+  background: #edf5e8;
+  color: #4d6841;
+}
+.group-workflow-feedback.error {
+  background: #fff0ed;
+  color: #9c5549;
+}
+.group-workflow-empty {
+  padding: 15px;
+  border: 1px dashed #e0e6d8;
+  border-radius: 9px;
+  color: #89947e;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.group-workflow-empty strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #59694e;
+}
+.group-workflow-item .member-note {
+  color: #627652;
+  font-size: 9px;
+  font-weight: 650;
+}
+@media (max-width: 760px) {
+  .group-workflow-grid {
+    grid-template-columns: 1fr;
+  }
+  .group-workflow-panel.wide {
+    grid-column: auto;
+  }
+  .group-workflows-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .group-workflows-toolbar select,
+  .group-workflow-form select {
+    width: 100%;
+  }
+}
+@media (max-width: 420px) {
+  .group-workflow-panel {
+    padding: 14px;
+  }
+  .group-workflow-item-top,
+  .group-workflow-item-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

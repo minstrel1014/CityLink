@@ -31,7 +31,7 @@ import {
 type LoadState = "idle" | "loading" | "ready" | "error";
 type Banner = { tone: "success" | "error" | "info"; message: string };
 
-function AccountHeader({ email }: { email?: string }) {
+export function AccountHeader({ email }: { email?: string }) {
   return (
     <header className="authenticated-courses-header">
       <Link href="/" className="authenticated-courses-brand">
@@ -43,6 +43,7 @@ function AccountHeader({ email }: { email?: string }) {
       </div>
       <nav aria-label="Account navigation">
         <Link href="/me">My profile</Link>
+        <Link href="/my-groups">My groups</Link>
         <Link href="/demo">Fictional demo</Link>
       </nav>
     </header>

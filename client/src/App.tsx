@@ -9,6 +9,7 @@ import { SupabaseSessionProvider } from "@/contexts/SupabaseSessionContext";
 import Welcome from "@/pages/citylink/Welcome";
 import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
 import MyCourses from "@/pages/citylink/MyCourses";
+import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import {
   Invitations,
@@ -49,6 +50,7 @@ export default function App() {
               <Route path="/invitations" component={Invitations} />
               <Route path="/me" component={MyProfile} />
               <Route path="/my-courses" component={MyCourses} />
+              <Route path="/my-groups" component={GroupWorkflows} />
               <Route path="/messages" component={Messages} />
               <Route path="/about" component={About} />
               <Route path="/404" component={NotFound} />
