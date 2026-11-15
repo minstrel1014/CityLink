@@ -299,6 +299,95 @@
 .course-enrolment-action:not(:disabled):hover {
   border-color: #a9b99a;
 }
+.course-sample-classmates {
+  padding-top: 12px;
+  margin: 1px 0 14px;
+  border-top: 1px solid #edf0e7;
+}
+.course-sample-classmates-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #526346;
+}
+.course-sample-classmates-heading svg {
+  flex: 0 0 auto;
+}
+.course-sample-classmates-heading strong {
+  font-size: 11px;
+  font-weight: 700;
+}
+.course-sample-classmates-heading span {
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: 20px;
+  background: #f2f4ed;
+  color: #77836b;
+  font-size: 7px;
+  font-weight: 750;
+  letter-spacing: 0.5px;
+}
+.course-sample-classmates-note {
+  margin: 5px 0 3px;
+  color: #929b89;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.course-sample-classmates ul {
+  display: grid;
+  gap: 1px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.course-sample-classmates li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 3px 8px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f2ec;
+}
+.course-sample-classmates li:last-child {
+  border-bottom: 0;
+}
+.course-sample-classmate-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  grid-row: span 2;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf2e7;
+  color: #657a52;
+  font-size: 8px;
+  font-weight: 750;
+}
+.course-sample-classmate-details {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+.course-sample-classmate-details strong {
+  overflow: hidden;
+  color: #4c5843;
+  font-size: 10px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.course-sample-classmate-details small {
+  color: #8a9480;
+  font-size: 8px;
+  line-height: 1.4;
+}
+.course-sample-classmate-skills {
+  grid-column: 2;
+  color: #76836a;
+  font-size: 8px;
+  line-height: 1.4;
+}
 .authenticated-courses-state {
   width: min(570px, 100%);
   margin: clamp(40px, 10vh, 110px) auto;
