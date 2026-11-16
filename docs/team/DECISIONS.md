@@ -66,7 +66,7 @@ Decision documentation belongs on the responsible feature branch. Run relevant c
 
 This is the latest Stage 6 product decision record. It supersedes the profile-audience and chat-message-edit open questions in the earlier partial Stage 6 entry. It does not authorize code changes, schema changes, migrations, or writes to Supabase Test.
 
-**Status.** The product rules below are approved under the project lead's previously recorded Stage 6 delegation to Jeffery. Implementation remains blocked by the remaining post-edit question and the missing Role 6 Test-only schema/RLS/API handoff.
+**Status.** The product rules below are approved under the project lead's previously recorded Stage 6 delegation to Jeffery. The remaining post-edit question was resolved as option A on 2026-11-17. Implementation remains blocked by the missing Role 6 Test-only schema/RLS/API handoff.
 
 **Human decision-maker.** Jeffery, acting under the delegated Stage 6 decision authority. The project lead's real name remains TBD in the shared roster.
 
@@ -78,7 +78,7 @@ This is the latest Stage 6 product decision record. It supersedes the profile-au
 
 **Group-chat access and retention.** Active group members may read and send plain-text messages. Pending invitees and join-requesters have no chat access until membership becomes active. After leaving or removal, former members are read-only: they may read existing history but may not send. Message editing is out of v1 for everyone. History remains available while the group record exists, including archived or abandoned groups. Do not add group deletion or message purging in v1.
 
-**Recruitment-post visibility and author eligibility.** Eligible current-term coursemates may view posts, including eligible nonmembers. A post author must also be an active member of the specific group being advertised; a nonmember may not publish on another group's behalf. The author may edit or close a post. If the author leaves or is removed, the post auto-closes, remains visible, and has Apply disabled. Whether the former author may still edit that auto-closed post is not yet decided; do not infer an answer.
+**Recruitment-post visibility and author eligibility.** Eligible current-term coursemates may view posts, including eligible nonmembers. A post author must also be an active member of the specific group being advertised; a nonmember may not publish on another group's behalf. The author may edit or close a post while their group membership is active. If the author leaves or is removed, the post auto-closes, becomes read-only, remains visible, and has Apply disabled.
 
 **Moderation and excluded scope.** There is no separate moderator role or reporting/deletion workflow in v1. Attachments, AI features, and extra notifications are also outside this first version.
 
@@ -90,6 +90,6 @@ This is the latest Stage 6 product decision record. It supersedes the profile-au
 
 Enforce course eligibility, active group membership for post creation, and chat read/send permissions in backend/RLS, not only in the UI. The last documented Test metadata inspection found that the `group_memberships` SELECT policy does not expose the full roster to eligible nonmember coursemates, and found no chat or recruitment-post tables/APIs. Role 6 must inspect the disposable Test schema/RLS/functions and provide the required handoff before any implementation proposal or migration. Use the narrowest backend-enforced access that supports the approved audience; do not broaden profile permissions. No Test schema, RLS, or data changes are authorized by this entry.
 
-**Remaining product question.** After an author's group membership ends and the post auto-closes, may that former author still edit the closed post? **A)** No: editing ends when membership ends; the auto-closed post is read-only and Apply stays disabled. **B)** Yes: the former author may edit its content but may not reopen it; Apply stays disabled. Do not implement either behavior until explicitly answered.
+**Remaining product questions.** None. On 2026-11-17, Jeffery approved option A: editing ends when the author’s group membership ends; the auto-closed post is read-only, remains visible, and Apply stays disabled.
 
 **Remaining technical blocker.** The Role 6 Test-only schema/RLS/API handoff is not available in this task/repository. No group-chat or recruitment-post database-dependent implementation may begin until that inspection and its reviewed contract are available.
