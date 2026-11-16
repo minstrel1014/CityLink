@@ -61,3 +61,35 @@ On 2026-11-14, the lead task and Roy's task used the authorized Supabase MCP con
 When behavior, permissions, RLS, API contracts, or database changes are unclear or disputed, stop the affected work and ask the human lead directly in plain language. State the exact question, provide clear options and consequences, and keep asking when the answer is absent or ambiguous. Mark the work blocked; do not implement unresolved behavior. Once answered, record the date, exact decision, human approver, roles affected, data/API implications, and remaining questions here or in the relevant feature handoff.
 
 Decision documentation belongs on the responsible feature branch. Run relevant checks, commit a meaningful local checkpoint, push that feature branch to GitHub, verify the remote branch, and open or update a pull request. Never push directly to `main`, force-push, or merge without lead approval. Tell the lead where the decision is recorded and provide the PR link.
+
+## 2026-11-17 — Stage 6 contract clarification from Jeffery
+
+This is the latest Stage 6 product decision record. It supersedes the profile-audience and chat-message-edit open questions in the earlier partial Stage 6 entry. It does not authorize code changes, schema changes, migrations, or writes to Supabase Test.
+
+**Status.** The product rules below are approved under the project lead's previously recorded Stage 6 delegation to Jeffery. Implementation remains blocked by the remaining post-edit question and the missing Role 6 Test-only schema/RLS/API handoff.
+
+**Human decision-maker.** Jeffery, acting under the delegated Stage 6 decision authority. The project lead's real name remains TBD in the shared roster.
+
+**Task ledger addendum.** Human owner Jeffery; preserve this task's existing Project Lead/Integration base role; add Group Chat and Recruitment Posts without removing prior assignments. `feature/jeffery-group-chat-recruitment` remains a suggestion only and has not been created. This does not replace Roy's group-workflow ownership, Kayk's AI/file scope, or Eunice's QA/documentation scope. The Manus task-management update returned `permission_denied`; this role ledger is recorded here and in the current conversation, not in task metadata.
+
+### Approved decisions
+
+**Profile and member-list audience.** Only eligible students enrolled in the same associated course for the current term may view the permitted group-member list and click through to member profiles. Do not broaden existing profile permissions to every signed-in student. Permitted profile fields are `display_name`, `major`, `year`, `bio`, and `skills`; do not expose account `status`.
+
+**Group-chat access and retention.** Active group members may read and send plain-text messages. Pending invitees and join-requesters have no chat access until membership becomes active. After leaving or removal, former members are read-only: they may read existing history but may not send. Message editing is out of v1 for everyone. History remains available while the group record exists, including archived or abandoned groups. Do not add group deletion or message purging in v1.
+
+**Recruitment-post visibility and author eligibility.** Eligible current-term coursemates may view posts, including eligible nonmembers. A post author must also be an active member of the specific group being advertised; a nonmember may not publish on another group's behalf. The author may edit or close a post. If the author leaves or is removed, the post auto-closes, remains visible, and has Apply disabled. Whether the former author may still edit that auto-closed post is not yet decided; do not infer an answer.
+
+**Moderation and excluded scope.** There is no separate moderator role or reporting/deletion workflow in v1. Attachments, AI features, and extra notifications are also outside this first version.
+
+**Join-request integration.** “Apply to join” must reuse Roy's existing join-request service. It must not directly add a member or duplicate/change Roy's approval rules. Preserve first-pending-action-wins and leader-only join-request review.
+
+**Roles affected.** Project/integration lead; Jeffery (Group Chat and Recruitment Posts); Roy (group creation/management, invitations, and join-request dependency); Eunice (QA/live testing/documentation); Kayk (AI/files, with attachments excluded from this v1 scope).
+
+### Data/API implications and blockers
+
+Enforce course eligibility, active group membership for post creation, and chat read/send permissions in backend/RLS, not only in the UI. The last documented Test metadata inspection found that the `group_memberships` SELECT policy does not expose the full roster to eligible nonmember coursemates, and found no chat or recruitment-post tables/APIs. Role 6 must inspect the disposable Test schema/RLS/functions and provide the required handoff before any implementation proposal or migration. Use the narrowest backend-enforced access that supports the approved audience; do not broaden profile permissions. No Test schema, RLS, or data changes are authorized by this entry.
+
+**Remaining product question.** After an author's group membership ends and the post auto-closes, may that former author still edit the closed post? **A)** No: editing ends when membership ends; the auto-closed post is read-only and Apply stays disabled. **B)** Yes: the former author may edit its content but may not reopen it; Apply stays disabled. Do not implement either behavior until explicitly answered.
+
+**Remaining technical blocker.** The Role 6 Test-only schema/RLS/API handoff is not available in this task/repository. No group-chat or recruitment-post database-dependent implementation may begin until that inspection and its reviewed contract are available.
