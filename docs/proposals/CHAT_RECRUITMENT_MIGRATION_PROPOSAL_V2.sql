@@ -170,8 +170,8 @@ AS $function$
      );
 $function$;
 
--- RPC-only access: RLS stays enabled and there are no direct app-role policies
--- or table grants. Each SECURITY DEFINER RPC performs its own authorization.
+-- RPC-only client access: RLS stays enabled and anon/authenticated receive no
+-- direct table policies or grants. Each SECURITY DEFINER RPC authorizes callers.
 
 -- No direct browser table access: even SELECT would reveal internal columns.
 -- Read/write only through field-limited, authorization-checking RPCs.
