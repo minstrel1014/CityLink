@@ -101,3 +101,11 @@ Build warnings are not build failures. Do not count a test/build/formatter comma
 - Invitation eligibility is checked by the read-only `list_course_group_invite_candidates` RPC now applied to disposable Test; the seven catalog checks passed. Functional two-account checks are still outstanding.
 - The old sample demo remains fictional; its course detail is moved to `/demo/courses/:courseId`.
 - The 12-name Test seed and 120 course enrolments are complete and verified. The eligibility migration was applied only to Test. Public release is complete as version `2611844d02d6078c37b898df6c4deb6d7e72bf55`; only unauthenticated route rendering was checked. Functional invite outcomes remain untested, and no Main access or GitHub merge occurred.
+
+## Verified source-branch checkpoint — 2026-11-17
+
+The work is saved locally as commit `b3eb7ef9f1749bce8cd4565d15cf6409c2a75ddc` (`feat: add group-aware course detail views`) on `feature/roy-group-workflows`. It was pushed to GitHub; `git ls-remote` confirmed `origin/feature/roy-group-workflows` has the same SHA. The feature branch remains based on the latest fetched `origin/main` (`da1351997b7ad2c35fc32e8b599caee45a70a917`) and is ahead by feature commits; no direct push to `main` occurred.
+
+Existing PR #2 was updated (not replaced) with the expanded scope, tests, Test-only migration gate, and public-demo status: [https://github.com/minstrel1014/CityLink/pull/2](https://github.com/minstrel1014/CityLink/pull/2). It targets `main`, is **OPEN**, and remains unmerged. The PR head was verified as `b3eb7ef9f1749bce8cd4565d15cf6409c2a75ddc`. No merge was attempted.
+
+**Still blocked:** Role 6 must review the exact proposed SQL, followed by separate explicit lead approval before applying migration `20261117205600_stage5_course_detail_group_views` to disposable Test. The task-message integration was unavailable; route Role 6 review through PR #2 or the lead. Once authorized, apply only to Test, run the catalog test, and perform signed-in two-account and mobile checks. This follow-on has not been copied/published to the separate WebDev public demo; its previous published version remains `2611844d02d6078c37b898df6c4deb6d7e72bf55`. Do not merge the PR or publish the follow-on without the required review/authorization.
