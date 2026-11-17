@@ -460,8 +460,10 @@ export default function GroupWorkflows() {
             <section className="group-workflow-panel">
               <h2>Invite someone to your group</h2>
               <p>
-                Choose a group you lead while forming or where you are an active
-                member. You can cancel a pending invitation below.
+                Any active member can invite to a forming or active group. If a
+                group is forming before it has active members, its creator can
+                send the first invitation. You can cancel a pending invitation
+                below.
               </p>
               {inviteableGroups.length ? (
                 <form className="group-workflow-form" onSubmit={sendInvite}>

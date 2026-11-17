@@ -73,7 +73,7 @@ Manual multi-account behavior tests (creator versus ordinary active member, conf
 
 ## Frontend implementation — 2026-11-15
 
-**Owner ledger:** Human owner Roy; base role retained: Join-Request and Membership Feature Owner; assigned scope includes group invitation and group creation/management. This implementation covers only group creation, group invitations, and join requests. It does not implement chat, recruitment posts, AI, project-room files, or unrelated features.
+**Owner ledger:** Human owner Roy; base role retained: Join-Request and Membership Feature Owner; assigned scope includes group invitation and group creation/management. The lead later added authenticated course detail/classmate data and its Invite entry point (see [Course Detail handoff](COURSE_DETAIL_HANDOFF.md)). This implementation covers group creation, group invitations, and join requests. It does not implement chat, recruitment posts, AI, project-room files, or unrelated features.
 
 The authenticated page is `/my-groups`, linked from the real Supabase My Courses page. It uses the existing authenticated course catalogue and the Test RPC `list_course_classmates(p_course_id uuid)` to offer eligible coursemates. Group, membership, invitation, and request reads use the browser Supabase client and the existing Test table SELECT policies/RLS; no sample repository, local storage, service-role key, SQL write, schema change, or test fixture is used. When no Supabase session/configuration is available, the page shows a sign-in/configuration screen rather than falling back to fictional demo data.
 

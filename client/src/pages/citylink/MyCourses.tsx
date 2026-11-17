@@ -43,6 +43,7 @@ export function AccountHeader({ email }: { email?: string }) {
       </div>
       <nav aria-label="Account navigation">
         <Link href="/me">My profile</Link>
+        <Link href="/my-courses">My Courses</Link>
         <Link href="/my-groups">My groups</Link>
         <Link href="/demo">Fictional demo</Link>
       </nav>
@@ -437,26 +438,34 @@ export default function MyCourses() {
                   </p>
                   <div className="authenticated-course-card-footer">
                     <span>{course.semester}</span>
-                    <button
-                      type="button"
-                      className={`course-enrolment-action ${enrolled ? "remove" : "add"}`}
-                      disabled={
-                        !COURSE_ENROLMENT_WRITES_ENABLED ||
-                        busyCourseId !== null
-                      }
-                      aria-describedby={
-                        COURSE_ENROLMENT_WRITES_ENABLED
-                          ? undefined
-                          : "course-write-gate"
-                      }
-                      onClick={() => void changeEnrolment(course.id)}
-                    >
-                      {busyCourseId === course.id
-                        ? "Saving…"
-                        : enrolled
-                          ? "Remove"
-                          : "Add course"}
-                    </button>
+                    <div className="authenticated-course-card-actions">
+                      <Link
+                        className="course-detail-link"
+                        href={`/courses/${course.id}`}
+                      >
+                        Classmates
+                      </Link>
+                      <button
+                        type="button"
+                        className={`course-enrolment-action ${enrolled ? "remove" : "add"}`}
+                        disabled={
+                          !COURSE_ENROLMENT_WRITES_ENABLED ||
+                          busyCourseId !== null
+                        }
+                        aria-describedby={
+                          COURSE_ENROLMENT_WRITES_ENABLED
+                            ? undefined
+                            : "course-write-gate"
+                        }
+                        onClick={() => void changeEnrolment(course.id)}
+                      >
+                        {busyCourseId === course.id
+                          ? "Saving…"
+                          : enrolled
+                            ? "Remove"
+                            : "Add course"}
+                      </button>
+                    </div>
                   </div>
                 </article>
               );

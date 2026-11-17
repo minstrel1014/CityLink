@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getGroupWorkflowErrorMessage,
+  mapCourseInviteCandidateIds,
   mapGroupCoursePeers,
 } from "@/lib/supabaseGroups";
 
@@ -72,5 +73,37 @@ describe("group workflow error feedback", () => {
     expect(
       getGroupWorkflowErrorMessage(new Error("invitation is no longer pending"))
     ).toMatch(/no longer pending/i);
+  });
+});
+
+describe("course invite eligibility response mapping", () => {
+  it("accepts only profile IDs and removes duplicate IDs", () => {
+    expect(
+      mapCourseInviteCandidateIds([
+        { profile_id: "11111111-1111-4111-8111-111111111111" },
+        { profile_id: "22222222-2222-4222-8222-222222222222" },
+        { profile_id: "11111111-1111-4111-8111-111111111111" },
+      ])
+    ).toEqual([
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+    ]);
+  });
+
+  it("rejects an invalid eligibility response", () => {
+    expect(() => mapCourseInviteCandidateIds({})).toThrow(
+      /response is invalid/i
+    );
+    expect(() =>
+      mapCourseInviteCandidateIds([
+        {
+          profile_id: "11111111-1111-4111-8111-111111111111",
+          group_id: "secret-group",
+        },
+      ])
+    ).toThrow(/response is invalid/i);
+    expect(() =>
+      mapCourseInviteCandidateIds([{ profile_id: "not-a-uuid" }])
+    ).toThrow(/profile_id is invalid/i);
   });
 });

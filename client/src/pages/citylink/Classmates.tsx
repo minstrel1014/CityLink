@@ -189,7 +189,7 @@ export function StudentProfile({
   );
   return (
     <Shell title="Student profile">
-      <Link href={`/courses/${course.id}`} className="back-link">
+      <Link href={`/demo/courses/${course.id}`} className="back-link">
         <ArrowLeft size={17} /> Back to {course.code} classmates
       </Link>
       <div className="profile-layout">
@@ -248,7 +248,7 @@ export function StudentProfile({
             </div>
             <div className="studied-course-list">
               {studied.map(c => (
-                <Link key={c.id} href={`/courses/${c.id}`}>
+                <Link key={c.id} href={`/demo/courses/${c.id}`}>
                   <CourseIcon course={c} size={19} />
                   <div>
                     <strong>{c.title}</strong>

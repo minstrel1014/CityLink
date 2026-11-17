@@ -1,0 +1,190 @@
+.course-detail-page .course-detail-note,
+.course-detail-page .course-detail-enrolment-gate,
+.course-detail-page .course-detail-invite-rule {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 16px;
+  margin: 0 0 15px;
+  border: 1px solid #e5ead9;
+  border-radius: 10px;
+  background: #f0f4e9;
+  color: #657456;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.course-detail-page .course-detail-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.course-detail-page .course-detail-note strong,
+.course-detail-page .course-detail-enrolment-gate strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #4e5d43;
+}
+.course-detail-page .course-detail-note p {
+  margin: 0;
+}
+.course-detail-page .course-detail-enrolment-gate {
+  display: block;
+  border-color: #eee4c8;
+  background: #fcf8ed;
+  color: #756743;
+}
+.course-detail-page .course-detail-enrolment-gate a {
+  display: inline-block;
+  margin-left: 5px;
+  color: #5e704b;
+  font-weight: 700;
+  text-decoration: underline;
+}
+.course-detail-page .course-detail-invite-rule {
+  display: block;
+  margin-bottom: 20px;
+}
+.course-detail-page .course-detail-actions {
+  min-width: 135px;
+}
+.course-detail-page .course-detail-group-choice {
+  display: grid;
+  width: min(210px, 100%);
+  gap: 6px;
+  justify-items: stretch;
+}
+.course-detail-page .course-detail-group-choice label {
+  color: #718064;
+  font-size: 9px;
+  font-weight: 650;
+}
+.course-detail-page .course-detail-group-choice select {
+  width: 100%;
+  min-height: 33px;
+  padding: 6px 8px;
+  border: 1px solid #e2e7d9;
+  border-radius: 7px;
+  background: #fff;
+  color: #43513b;
+  font: inherit;
+  font-size: 9px;
+}
+.course-detail-page .course-detail-group-choice button {
+  justify-content: center;
+}
+.course-detail-page .course-detail-cancel-choice {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: #89947e;
+  font-size: 9px;
+  cursor: pointer;
+}
+.course-detail-page .course-detail-cancel-choice:hover {
+  color: #46583a;
+  text-decoration: underline;
+}
+.course-detail-page .classmate-person .avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  color: #52633f;
+  font-size: 14px;
+  font-weight: 700;
+}
+.course-detail-page .classmate-person h3 {
+  margin: 0;
+}
+.course-detail-page .classmate-person small {
+  overflow-wrap: anywhere;
+}
+.course-detail-page .classmates-toolbar .directory-search,
+.course-detail-page .classmates-toolbar .filter-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 12px;
+  border: 1px solid #e2e7d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #879376;
+}
+.course-detail-page .classmates-toolbar .directory-search {
+  flex: 1 1 320px;
+}
+.course-detail-page .classmates-toolbar .filter-select {
+  flex: 0 1 220px;
+}
+.course-detail-page .classmates-toolbar .directory-search input,
+.course-detail-page .classmates-toolbar .filter-select select {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #4b5743;
+  font: inherit;
+  font-size: 11px;
+}
+.course-detail-page .classmates-toolbar .directory-search:focus-within,
+.course-detail-page .classmates-toolbar .filter-select:focus-within {
+  border-color: #9aaa86;
+  box-shadow: 0 0 0 3px #91a47b20;
+}
+.course-detail-page .classmates-toolbar .directory-search button {
+  border: 0;
+  background: transparent;
+  color: #849078;
+  font-size: 18px;
+  cursor: pointer;
+}
+.course-detail-page .course-directory-state {
+  gap: 10px;
+}
+@media (max-width: 760px) {
+  .course-detail-page .classmates-toolbar {
+    flex-wrap: wrap;
+  }
+  .course-detail-page .classmates-toolbar .directory-search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .course-detail-page .classmates-toolbar .filter-select {
+    flex: 1 1 185px;
+  }
+  .course-detail-page .results-label {
+    margin-left: auto;
+  }
+  .course-detail-page .classmate-card {
+    grid-template-columns: minmax(0, 1fr) minmax(115px, auto);
+  }
+  .course-detail-page .classmate-detail {
+    grid-column: 1 / -1;
+  }
+  .course-detail-page .classmate-actions {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+  }
+}
+@media (max-width: 480px) {
+  .course-detail-page .course-detail-enrolment-gate a {
+    display: block;
+    margin: 8px 0 0;
+  }
+  .course-detail-page .classmate-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .course-detail-page .classmate-detail,
+  .course-detail-page .classmate-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .course-detail-page .classmate-actions {
+    align-items: flex-start;
+  }
+  .course-detail-page .course-detail-group-choice {
+    width: 100%;
+  }
+}

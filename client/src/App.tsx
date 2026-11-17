@@ -11,6 +11,7 @@ import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
 import MyCourses from "@/pages/citylink/MyCourses";
 import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
+import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
 import {
   Invitations,
   MyProfile,
@@ -36,8 +37,13 @@ export default function App() {
               <Route path="/" component={Welcome} />
               <Route path="/demo" component={Dashboard} />
               <Route path="/courses" component={Courses} />
-              <Route path="/courses/:courseId">
+              <Route path="/demo/courses/:courseId">
                 {params => <Classmates courseId={params.courseId} />}
+              </Route>
+              <Route path="/courses/:courseId">
+                {params => (
+                  <AuthenticatedCourseDetail courseId={params.courseId} />
+                )}
               </Route>
               <Route path="/students/:studentId/:courseId">
                 {params => (

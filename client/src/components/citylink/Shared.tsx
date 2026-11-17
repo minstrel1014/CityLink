@@ -139,7 +139,9 @@ export function Shell({
   ).length;
   const active = (href: string) =>
     href === "/courses"
-      ? location.startsWith("/courses") || location.startsWith("/students")
+      ? location.startsWith("/courses") ||
+        location.startsWith("/students") ||
+        location.startsWith("/demo/courses")
       : location === href;
   return (
     <div className="app-shell">
@@ -253,7 +255,7 @@ export function CourseCard({ course }: { course: Course }) {
   );
   const open = roster.filter(s => s.status === "open").length;
   return (
-    <Link href={`/courses/${course.id}`} className="course-card">
+    <Link href={`/demo/courses/${course.id}`} className="course-card">
       <div className="course-card-top">
         <CourseIcon course={course} />
         <span className="course-code">{course.code}</span>

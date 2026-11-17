@@ -121,6 +121,32 @@ export function mapGroupCoursePeers(value: unknown): GroupCoursePeer[] {
   });
 }
 
+export function mapCourseInviteCandidateIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The invitation eligibility response is invalid.");
+  }
+
+  const profileIds = new Set<string>();
+  for (const candidate of value) {
+    if (!isRecord(candidate)) {
+      throw new Error("The invitation eligibility response is invalid.");
+    }
+    if (Object.keys(candidate).some(key => key !== "profile_id")) {
+      throw new Error("The invitation eligibility response is invalid.");
+    }
+    const profileId = requiredString(candidate, "profile_id");
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        profileId
+      )
+    ) {
+      throw new Error("The invitation eligibility profile_id is invalid.");
+    }
+    profileIds.add(profileId);
+  }
+  return [...profileIds];
+}
+
 async function verifyCurrentUser(userId: string) {
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
@@ -146,6 +172,19 @@ export async function listCourseGroupPeers(userId: string, courseId: string) {
   });
   if (error) throw error;
   return mapGroupCoursePeers(data ?? []);
+}
+
+export async function listCourseGroupInviteCandidates(
+  userId: string,
+  courseId: string
+) {
+  const client = await verifyCurrentUser(userId);
+  const { data, error } = await client.rpc(
+    "list_course_group_invite_candidates",
+    { p_course_id: courseId }
+  );
+  if (error) throw error;
+  return mapCourseInviteCandidateIds(data ?? []);
 }
 
 export async function loadGroupWorkflowSnapshot(
