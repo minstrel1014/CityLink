@@ -9,7 +9,11 @@ import { SupabaseSessionProvider } from "@/contexts/SupabaseSessionContext";
 import Welcome from "@/pages/citylink/Welcome";
 import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
 import MyCourses from "@/pages/citylink/MyCourses";
+import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
+import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
+import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
+import StudentPortfolio from "@/pages/citylink/StudentPortfolio";
 import {
   Invitations,
   MyProfile,
@@ -35,8 +39,33 @@ export default function App() {
               <Route path="/" component={Welcome} />
               <Route path="/demo" component={Dashboard} />
               <Route path="/courses" component={Courses} />
-              <Route path="/courses/:courseId">
+              <Route path="/demo/courses/:courseId">
                 {params => <Classmates courseId={params.courseId} />}
+              </Route>
+              <Route path="/courses/:courseId/students/:studentId">
+                {params => (
+                  <StudentPortfolio
+                    key={`${params.courseId}:${params.studentId}`}
+                    courseId={params.courseId}
+                    studentId={params.studentId}
+                  />
+                )}
+              </Route>
+              <Route path="/courses/:courseId/classmates">
+                {params => (
+                  <AuthenticatedCourseDetail
+                    key={params.courseId}
+                    courseId={params.courseId}
+                  />
+                )}
+              </Route>
+              <Route path="/courses/:courseId">
+                {params => (
+                  <AuthenticatedMyGroup
+                    key={params.courseId}
+                    courseId={params.courseId}
+                  />
+                )}
               </Route>
               <Route path="/students/:studentId/:courseId">
                 {params => (
@@ -49,6 +78,7 @@ export default function App() {
               <Route path="/invitations" component={Invitations} />
               <Route path="/me" component={MyProfile} />
               <Route path="/my-courses" component={MyCourses} />
+              <Route path="/my-groups" component={GroupWorkflows} />
               <Route path="/messages" component={Messages} />
               <Route path="/about" component={About} />
               <Route path="/404" component={NotFound} />

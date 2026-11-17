@@ -1,0 +1,142 @@
+.course-detail-page .course-detail-list-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 15px;
+  margin: 0 0 15px;
+  border: 1px solid #e6eadf;
+  border-radius: 9px;
+  background: #f4f6ef;
+  color: #6b785f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.course-detail-page .course-detail-list-link svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.course-detail-page .classmate-group-section {
+  margin-top: 24px;
+}
+.course-detail-page .classmate-group-section .classmates-section-title {
+  margin-bottom: 11px;
+}
+.course-detail-page .classmate-group-meta {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+}
+.course-detail-page .classmate-group-meta strong {
+  color: #526148;
+  font-size: 10px;
+}
+.course-detail-page .classmate-group-meta span {
+  color: #89927f;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.course-detail-page .classmate-group-meta.looking strong {
+  color: #697b58;
+}
+.course-detail-page .classmate-portfolio-link {
+  display: inline-block;
+  margin-top: 5px;
+  color: #60784c;
+  font-size: 9px;
+  font-weight: 700;
+}
+.course-detail-page .classmate-portfolio-link:hover {
+  text-decoration: underline;
+}
+.student-portfolio-page .student-portfolio-card {
+  width: min(820px, 100%);
+  padding: clamp(18px, 4vw, 30px);
+  margin: 20px auto 14px;
+  border: 1px solid #e5eadd;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 24px #29372208;
+}
+.student-portfolio-page .student-portfolio-top {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #edf0e7;
+}
+.student-portfolio-page .student-portfolio-avatar {
+  display: grid;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf0e2;
+  color: #536445;
+  font-size: 19px;
+  font-weight: 750;
+}
+.student-portfolio-page .student-portfolio-top h2 {
+  margin: 0 0 4px;
+  color: #34412f;
+  font-size: 21px;
+}
+.student-portfolio-page .student-portfolio-top p {
+  margin: 0 0 8px;
+  color: #7a8571;
+  font-size: 11px;
+}
+.student-portfolio-page .student-portfolio-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 0;
+  margin: 0;
+  border-bottom: 1px solid #edf0e7;
+}
+.student-portfolio-page .student-portfolio-details div {
+  min-width: 0;
+}
+.student-portfolio-page .student-portfolio-details dt {
+  margin-bottom: 4px;
+  color: #89927f;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.student-portfolio-page .student-portfolio-details dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #4a5744;
+  font-size: 11px;
+}
+.student-portfolio-page .student-portfolio-card section {
+  padding-top: 18px;
+}
+.student-portfolio-page .student-portfolio-card section h3 {
+  margin: 0 0 8px;
+  color: #495741;
+  font-size: 12px;
+}
+.student-portfolio-page .student-portfolio-card section p {
+  margin: 0;
+  color: #75806e;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.student-portfolio-page .data-footnote {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  color: #8b9583;
+  font-size: 9px;
+  line-height: 1.6;
+}
+@media (max-width: 620px) {
+  .student-portfolio-page .student-portfolio-details {
+    grid-template-columns: 1fr;
+  }
+  .student-portfolio-page .student-portfolio-top h2 {
+    font-size: 18px;
+  }
+}

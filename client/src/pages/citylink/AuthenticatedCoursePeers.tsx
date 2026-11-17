@@ -1,0 +1,933 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  BookOpen,
+  RefreshCw,
+  Search,
+  Send,
+  Users,
+} from "lucide-react";
+import { Link } from "wouter";
+import { CourseIcon, EmptyState, Status } from "@/components/citylink/Shared";
+import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import {
+  getCourseDirectoryErrorMessage,
+  loadCourseDirectory,
+  type CourseDirectorySnapshot,
+} from "@/lib/supabaseCourses";
+import {
+  cancelGroupJoinRequest,
+  createGroupAndInvite,
+  getGroupWorkflowErrorMessage,
+  listCourseGroupInviteCandidates,
+  listCourseGroupPeers,
+  listCourseGroupSummaries,
+  loadGroupWorkflowSnapshot,
+  loadOwnCourseProfile,
+  requestToJoinGroup,
+  sendGroupInvitation,
+  type CourseGroupSummary,
+  type GroupCoursePeer,
+  type GroupWorkflowSnapshot,
+  type OwnCourseProfile,
+} from "@/lib/supabaseGroups";
+import {
+  getCourseInviteGroups,
+  getJoinActionState,
+  getPeerInvitationState,
+  isCoursePeerInviteable,
+  splitCoursePeersByGroup,
+} from "@/lib/courseDetailActions";
+import { supabaseClient } from "@/lib/supabaseClient";
+import { AccountHeader } from "@/pages/citylink/MyCourses";
+import "./CourseDetail.css";
+
+type DetailData = {
+  userId: string;
+  directory: CourseDirectorySnapshot;
+  groups: GroupWorkflowSnapshot;
+  ownProfile: OwnCourseProfile;
+};
+type Feedback = { tone: "success" | "error"; message: string };
+type RosterFilter = "all" | "open" | "considering" | "full";
+
+function initials(name: string) {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0]?.toLocaleUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
+
+function AccessScreen({
+  title,
+  message,
+  email,
+}: {
+  title: string;
+  message: string;
+  email?: string;
+}) {
+  return (
+    <div className="authenticated-courses-page course-detail-page">
+      <AccountHeader email={email} />
+      <main className="authenticated-courses-main">
+        <section className="authenticated-courses-state" role="status">
+          <span className="authenticated-courses-state-icon">
+            <BookOpen size={27} />
+          </span>
+          <p className="eyebrow">COURSE DETAIL · CLASSMATES</p>
+          <h1>{title}</h1>
+          <p>{message}</p>
+          <div className="authenticated-courses-state-actions">
+            <Link href="/my-courses" className="primary">
+              My Courses
+            </Link>
+            <Link href="/demo" className="secondary">
+              Fictional demo
+            </Link>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
+  return status === "forming"
+    ? "Forming · awaiting first acceptance"
+    : "Active";
+}
+
+export default function AuthenticatedCoursePeers({
+  courseId,
+}: {
+  courseId: string;
+}) {
+  const session = useSupabaseSession();
+  const userId = session.user?.id ?? null;
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+
+  const [data, setData] = useState<DetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [peers, setPeers] = useState<GroupCoursePeer[]>([]);
+  const [summaries, setSummaries] = useState<CourseGroupSummary[]>([]);
+  const [inviteCandidateIds, setInviteCandidateIds] = useState<string[]>([]);
+  const [peerLoading, setPeerLoading] = useState(false);
+  const [peerError, setPeerError] = useState("");
+  const [groupSummaryError, setGroupSummaryError] = useState("");
+  const [inviteEligibilityError, setInviteEligibilityError] = useState("");
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<RosterFilter>("all");
+  const [busyPeerId, setBusyPeerId] = useState("");
+  const [choosingPeerId, setChoosingPeerId] = useState("");
+  const [chosenGroupId, setChosenGroupId] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
+  const requestGeneration = useRef(0);
+  useEffect(() => {
+    setFeedback(null);
+    setSearch("");
+    setFilter("all");
+    setChoosingPeerId("");
+    setChosenGroupId("");
+    setBusyPeerId("");
+  }, [courseId, userId]);
+
+  useEffect(() => {
+    const generation = ++requestGeneration.current;
+    let active = true;
+    const isCurrent = () =>
+      active &&
+      requestGeneration.current === generation &&
+      userIdRef.current === userId;
+    if (session.status !== "ready" || !userId || !supabaseClient) {
+      setData(null);
+      setLoading(false);
+      setLoadError("");
+      return () => {
+        active = false;
+        if (requestGeneration.current === generation)
+          requestGeneration.current += 1;
+      };
+    }
+    setLoading(true);
+    setLoadError("");
+    void Promise.all([
+      loadCourseDirectory(userId),
+      loadGroupWorkflowSnapshot(userId),
+      loadOwnCourseProfile(userId),
+    ])
+      .then(([directory, groups, ownProfile]) => {
+        if (!isCurrent()) return;
+        setData({ userId, directory, groups, ownProfile });
+        setLoading(false);
+      })
+      .catch(error => {
+        if (!isCurrent()) return;
+        const courseMessage = getCourseDirectoryErrorMessage(error, "read");
+        const groupMessage = getGroupWorkflowErrorMessage(error);
+        setLoadError(
+          courseMessage !==
+            "CityLink could not load the Supabase course catalogue. Check your connection and try again."
+            ? courseMessage
+            : groupMessage
+        );
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+      if (requestGeneration.current === generation)
+        requestGeneration.current += 1;
+    };
+  }, [retryToken, session.status, userId]);
+
+  const ownData = data?.userId === userId ? data : null;
+  const course = ownData?.directory.courses.find(item => item.id === courseId);
+  const enrolled = Boolean(
+    ownData?.directory.enrolledCourseIds.includes(courseId)
+  );
+
+  useEffect(() => {
+    let active = true;
+    if (
+      session.status !== "ready" ||
+      !userId ||
+      ownData?.userId !== userId ||
+      !enrolled
+    ) {
+      setPeers([]);
+      setSummaries([]);
+      setInviteCandidateIds([]);
+      setPeerError("");
+      setGroupSummaryError("");
+      setInviteEligibilityError("");
+      setPeerLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    setPeerLoading(true);
+    setPeerError("");
+    setGroupSummaryError("");
+    setInviteEligibilityError("");
+    setSummaries([]);
+    setInviteCandidateIds([]);
+    void Promise.allSettled([
+      listCourseGroupPeers(userId, courseId),
+      listCourseGroupSummaries(userId, courseId),
+      listCourseGroupInviteCandidates(userId, courseId),
+    ]).then(([rosterResult, summaryResult, eligibilityResult]) => {
+      if (!active || userIdRef.current !== userId) return;
+      if (rosterResult.status === "fulfilled") {
+        setPeers(rosterResult.value.filter(peer => peer.profile_id !== userId));
+      } else {
+        setPeers([]);
+        setPeerError(getGroupWorkflowErrorMessage(rosterResult.reason));
+      }
+      if (summaryResult.status === "fulfilled") {
+        setSummaries(summaryResult.value);
+      } else {
+        setSummaries([]);
+        setGroupSummaryError(
+          "Group membership could not be verified. Student categories and group actions are hidden until the Test group-summary service is available."
+        );
+      }
+      if (eligibilityResult.status === "fulfilled") {
+        setInviteCandidateIds(eligibilityResult.value);
+      } else {
+        setInviteCandidateIds([]);
+        setInviteEligibilityError(
+          "Invitation eligibility could not be verified. Invite actions are hidden until the Test eligibility service is available."
+        );
+      }
+      setPeerLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [courseId, enrolled, ownData?.userId, retryToken, session.status, userId]);
+
+  const inviteGroups = useMemo(
+    () =>
+      ownData && userId
+        ? getCourseInviteGroups(
+            ownData.groups.groups,
+            ownData.groups.memberships,
+            courseId,
+            userId
+          )
+        : [],
+    [courseId, ownData, userId]
+  );
+  const splitPeers = useMemo(
+    () => splitCoursePeersByGroup(peers, summaries),
+    [peers, summaries]
+  );
+  const summaryByProfile = splitPeers.summaryByProfile;
+  const myCourseGroup = useMemo(() => {
+    if (!ownData || !userId) return null;
+    const activeIds = new Set(
+      ownData.groups.memberships
+        .filter(
+          row =>
+            row.course_id === courseId &&
+            row.profile_id === userId &&
+            row.membership_status === "active"
+        )
+        .map(row => row.group_id)
+    );
+    return (
+      ownData.groups.groups.find(
+        group =>
+          group.course_id === courseId &&
+          ((group.status === "active" && activeIds.has(group.id)) ||
+            (group.status === "forming" && group.creator_id === userId))
+      ) ?? null
+    );
+  }, [courseId, ownData, userId]);
+  const searchQuery = search.trim().toLocaleLowerCase();
+  const matchesFilter = (peer: GroupCoursePeer) => {
+    if (filter !== "all" && peer.status !== filter) return false;
+    if (!searchQuery) return true;
+    return [peer.display_name, peer.student_id ?? "", peer.major ?? ""]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(searchQuery);
+  };
+  const visibleInGroup = splitPeers.inGroup.filter(matchesFilter);
+  const visibleLooking = splitPeers.lookingForGroup.filter(matchesFilter);
+  const visibleCount = visibleInGroup.length + visibleLooking.length;
+
+  async function sendInvite(peer: GroupCoursePeer) {
+    if (
+      !userId ||
+      !ownData ||
+      busyPeerId ||
+      groupSummaryError ||
+      !inviteCandidateIds.includes(peer.profile_id) ||
+      summaryByProfile.has(peer.profile_id)
+    )
+      return;
+    setBusyPeerId(peer.profile_id);
+    setFeedback(null);
+    try {
+      if (inviteGroups.length === 0) {
+        await createGroupAndInvite(userId, courseId, peer.profile_id);
+        setFeedback({
+          tone: "success",
+          message:
+            "Your first invitation was sent. A forming group has been created with you as its leader; it becomes active when the invitee accepts.",
+        });
+      } else {
+        const selectedGroupId =
+          inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
+        if (!selectedGroupId) return;
+        await sendGroupInvitation(userId, selectedGroupId, peer.profile_id);
+        setFeedback({
+          tone: "success",
+          message: "Your group invitation was sent.",
+        });
+      }
+      setChoosingPeerId("");
+      setChosenGroupId("");
+      setRetryToken(value => value + 1);
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message: getGroupWorkflowErrorMessage(error),
+      });
+    } finally {
+      setBusyPeerId("");
+    }
+  }
+
+  async function submitJoinRequest(summary: CourseGroupSummary) {
+    if (!userId || busyPeerId || groupSummaryError || myCourseGroup) return;
+    setBusyPeerId(summary.profile_id);
+    setFeedback(null);
+    try {
+      await requestToJoinGroup(userId, summary.group_id);
+      setFeedback({
+        tone: "success",
+        message: "Your request to join the group was sent.",
+      });
+      setRetryToken(value => value + 1);
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message: getGroupWorkflowErrorMessage(error),
+      });
+    } finally {
+      setBusyPeerId("");
+    }
+  }
+
+  async function cancelJoinRequest(requestId: string, profileId: string) {
+    if (!userId || busyPeerId) return;
+    setBusyPeerId(profileId);
+    setFeedback(null);
+    try {
+      await cancelGroupJoinRequest(userId, requestId);
+      setFeedback({
+        tone: "success",
+        message: "Your pending join request was cancelled.",
+      });
+      setRetryToken(value => value + 1);
+    } catch (error) {
+      setFeedback({
+        tone: "error",
+        message: getGroupWorkflowErrorMessage(error),
+      });
+    } finally {
+      setBusyPeerId("");
+    }
+  }
+
+  function renderPeerCard(peer: GroupCoursePeer) {
+    const summary = summaryByProfile.get(peer.profile_id);
+    const invitationState =
+      ownData && userId
+        ? getPeerInvitationState(userId, peer.profile_id, courseId, [
+            ...ownData.groups.incomingInvitations,
+            ...ownData.groups.outgoingInvitations,
+          ])
+        : null;
+    const joinState =
+      summary && ownData && userId
+        ? getJoinActionState({
+            userHasGroup: Boolean(myCourseGroup),
+            userStatus: ownData.ownProfile.status,
+            group: summary,
+            userId,
+            invitations: ownData.groups.incomingInvitations,
+            joinRequests: ownData.groups.joinRequests,
+          })
+        : null;
+    const ownPendingRequest =
+      summary && ownData && userId
+        ? ownData.groups.joinRequests.find(
+            request =>
+              request.group_id === summary.group_id &&
+              request.requester_id === userId &&
+              request.status === "pending"
+          )
+        : undefined;
+    const isChoosing = choosingPeerId === peer.profile_id;
+    const inviteable = Boolean(
+      !summary &&
+        !groupSummaryError &&
+        !inviteEligibilityError &&
+        invitationState !== "connected" &&
+        isCoursePeerInviteable(peer.status) &&
+        inviteCandidateIds.includes(peer.profile_id)
+    );
+    return (
+      <article className="classmate-card" key={peer.profile_id}>
+        <div className="classmate-person">
+          <span className="avatar sage" aria-label={peer.display_name}>
+            {initials(peer.display_name)}
+          </span>
+          <div>
+            <h3>{peer.display_name}</h3>
+            <p>
+              {peer.major || "Major not provided"} <span>·</span> Year{" "}
+              {peer.year}
+            </p>
+            <small>{peer.student_id || "Student ID not provided"}</small>
+            <Link
+              className="classmate-portfolio-link"
+              href={`/courses/${courseId}/students/${peer.profile_id}`}
+            >
+              View portfolio
+            </Link>
+          </div>
+        </div>
+        <div className="classmate-detail">
+          <Status status={peer.status} />
+          {summary ? (
+            <div className="classmate-group-meta">
+              <strong>{summary.group_name || "Study group"}</strong>
+              <span>
+                {summary.group_size}{" "}
+                {summary.group_size === 1 ? "person" : "people"} ·{" "}
+                {groupStatusLabel(summary.group_status)}
+              </span>
+            </div>
+          ) : (
+            <div className="classmate-group-meta looking">
+              <strong>No current group</strong>
+              <span>Looking for a group</span>
+            </div>
+          )}
+          <div className="skill-tags">
+            {peer.skills.slice(0, 3).map(skill => (
+              <span key={skill}>{skill}</span>
+            ))}
+          </div>
+        </div>
+        <div className="classmate-actions course-detail-actions">
+          {summary ? (
+            joinState === "invitation-pending" ? (
+              <Link href="/my-groups" className="invite-status compact">
+                Invitation received
+              </Link>
+            ) : joinState === "request-pending" && ownPendingRequest ? (
+              <button
+                type="button"
+                className="secondary invite-compact"
+                disabled={Boolean(busyPeerId)}
+                onClick={() =>
+                  void cancelJoinRequest(ownPendingRequest.id, peer.profile_id)
+                }
+              >
+                {busyPeerId === peer.profile_id
+                  ? "Cancelling…"
+                  : "Cancel request"}
+              </button>
+            ) : joinState === "request-available" ? (
+              <button
+                type="button"
+                className="primary invite-compact"
+                disabled={Boolean(busyPeerId)}
+                onClick={() => void submitJoinRequest(summary)}
+              >
+                {busyPeerId === peer.profile_id
+                  ? "Sending…"
+                  : "Request to join"}
+              </button>
+            ) : joinState === "forming-group" ? (
+              <button
+                type="button"
+                className="invite-disabled compact"
+                disabled
+                title="Join requests are only allowed for active groups"
+              >
+                Request to join · group forming
+              </button>
+            ) : joinState === "already-grouped" ? (
+              <button
+                type="button"
+                className="invite-disabled compact"
+                disabled
+                title={
+                  summary.group_id === myCourseGroup?.id
+                    ? "This is already your group"
+                    : "You already belong to a group for this course"
+                }
+              >
+                {summary.group_id === myCourseGroup?.id
+                  ? "Your group"
+                  : "Already in a group"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="invite-disabled compact"
+                disabled
+                title="Your profile is not currently eligible to request membership"
+              >
+                Request unavailable
+              </button>
+            )
+          ) : invitationState === "sent" ? (
+            <Link href="/my-groups" className="invite-status compact">
+              Invitation sent
+            </Link>
+          ) : invitationState === "received" ? (
+            <Link href="/my-groups" className="invite-status compact">
+              Invitation received
+            </Link>
+          ) : invitationState === "connected" ? (
+            <button type="button" className="invite-disabled compact" disabled>
+              Previously connected
+            </button>
+          ) : inviteable ? (
+            isChoosing && inviteGroups.length > 1 ? (
+              <div className="course-detail-group-choice">
+                <label htmlFor={`invite-group-${peer.profile_id}`}>
+                  Choose your group
+                </label>
+                <select
+                  id={`invite-group-${peer.profile_id}`}
+                  value={chosenGroupId}
+                  onChange={event => setChosenGroupId(event.target.value)}
+                >
+                  <option value="">Select a group</option>
+                  {inviteGroups.map(group => (
+                    <option value={group.id} key={group.id}>
+                      {group.name || "Study group"} · {group.status}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="primary invite-compact"
+                  disabled={!chosenGroupId || Boolean(busyPeerId)}
+                  onClick={() => void sendInvite(peer)}
+                >
+                  {busyPeerId === peer.profile_id ? "Sending…" : "Send invite"}
+                </button>
+                <button
+                  type="button"
+                  className="course-detail-cancel-choice"
+                  onClick={() => {
+                    setChoosingPeerId("");
+                    setChosenGroupId("");
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="primary invite-compact"
+                disabled={Boolean(busyPeerId)}
+                aria-label={`Invite ${peer.display_name}`}
+                onClick={() => {
+                  if (inviteGroups.length > 1) {
+                    setChoosingPeerId(peer.profile_id);
+                    setChosenGroupId("");
+                  } else {
+                    void sendInvite(peer);
+                  }
+                }}
+              >
+                <Send size={15} />{" "}
+                {busyPeerId === peer.profile_id ? "Sending…" : "Invite"}
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              className="invite-disabled compact"
+              disabled
+              title={
+                groupSummaryError ||
+                inviteEligibilityError ||
+                (peer.status === "full"
+                  ? "This student is not currently accepting invitations"
+                  : "This student is not eligible under the existing invite rules")
+              }
+            >
+              Invite
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  }
+
+  if (session.status === "loading")
+    return (
+      <AccessScreen
+        title="Checking your sign-in…"
+        message="CityLink is restoring your Supabase Auth session before loading coursemates."
+      />
+    );
+  if (session.status === "error")
+    return (
+      <AccessScreen
+        title="Your sign-in is unavailable"
+        message="We could not restore your account session. Return to the sign-in page and try again."
+      />
+    );
+  if (!userId)
+    return (
+      <AccessScreen
+        title="Sign in to view coursemates"
+        message="Course and group information is loaded from the authenticated Test database."
+      />
+    );
+  if (!supabaseClient)
+    return (
+      <AccessScreen
+        email={session.user?.email}
+        title="Course data is unavailable"
+        message="Supabase is not configured. This page does not fall back to fictional samples."
+      />
+    );
+
+  return (
+    <div className="authenticated-courses-page course-detail-page">
+      <AccountHeader email={session.user?.email} />
+      <main className="authenticated-courses-main">
+        <Link href={`/courses/${courseId}`} className="back-link">
+          <ArrowLeft size={17} /> Back to My Group
+        </Link>
+        {loading && (
+          <div className="course-directory-state" role="status">
+            <span className="spinner" /> Loading Test coursemates and group
+            status…
+          </div>
+        )}
+        {!loading && loadError && (
+          <EmptyState
+            title="Course data could not be loaded"
+            description={loadError}
+          >
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setRetryToken(value => value + 1)}
+            >
+              <RefreshCw size={16} /> Try again
+            </button>
+          </EmptyState>
+        )}
+        {!loading && !loadError && !course && (
+          <EmptyState
+            title="Course not found"
+            description="This course ID is not in the authenticated Test catalogue."
+          >
+            <Link href="/my-courses" className="secondary">
+              Open My Courses
+            </Link>
+          </EmptyState>
+        )}
+        {!loading && !loadError && course && (
+          <>
+            <div className="course-page-heading">
+              <CourseIcon course={course} size={28} />
+              <div>
+                <p className="eyebrow">{course.code} · COURSE DETAIL</p>
+                <h1>{course.title}</h1>
+                <p>
+                  {course.department} · {course.semester}
+                </p>
+              </div>
+            </div>
+            <p className="course-description">
+              {course.description || "No course description is available."}
+            </p>
+            <div className="course-detail-list-link">
+              <Users size={17} />
+              <span>
+                Classmate group status and actions are shown below. Students see
+                only the group name, size and status—not other groups’ private
+                requests.
+              </span>
+            </div>
+            {!enrolled && (
+              <div className="course-detail-enrolment-gate" role="status">
+                <strong>You are not enrolled in this course.</strong> The
+                classmate roster and group associations are hidden until you add
+                the course.
+                <Link href="/my-courses">Browse and add courses</Link>
+              </div>
+            )}
+            {enrolled && (
+              <>
+                <div className="course-detail-invite-rule" role="note">
+                  Invite actions follow the existing server eligibility rules.
+                  Any active member may invite to a group; the creator may also
+                  send the first invitation while a group is forming. Join
+                  requests are available only for active groups. Groups have no
+                  maximum size.
+                </div>
+                {feedback && (
+                  <p
+                    className={`group-workflow-feedback ${feedback.tone}`}
+                    role={feedback.tone === "error" ? "alert" : "status"}
+                  >
+                    {feedback.message}
+                  </p>
+                )}
+                <div className="classmates-section-title">
+                  <h2>
+                    Coursemates{" "}
+                    <span className="count-pill">{peers.length}</span>
+                  </h2>
+                  {!peerLoading &&
+                    !groupSummaryError &&
+                    !inviteEligibilityError && (
+                      <span>
+                        <i className="green-dot" />
+                        {inviteCandidateIds.length} eligible to invite
+                      </span>
+                    )}
+                </div>
+                <div className="classmates-toolbar">
+                  <label className="directory-search">
+                    <Search size={18} />
+                    <span className="sr-only">Search coursemates</span>
+                    <input
+                      aria-label="Search coursemates by name, student ID, or major"
+                      placeholder="Search coursemates…"
+                      value={search}
+                      onChange={event => setSearch(event.target.value)}
+                    />
+                    {search && (
+                      <button
+                        type="button"
+                        aria-label="Clear classmate search"
+                        onClick={() => setSearch("")}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </label>
+                  <label className="filter-select">
+                    <span className="sr-only">Filter by availability</span>
+                    <select
+                      aria-label="Filter coursemates by availability"
+                      value={filter}
+                      onChange={event =>
+                        setFilter(event.target.value as RosterFilter)
+                      }
+                    >
+                      <option value="all">All availability</option>
+                      <option value="open">Looking for a group</option>
+                      <option value="considering">Open to invitations</option>
+                      <option value="full">Group formed</option>
+                    </select>
+                  </label>
+                  <span className="results-label">
+                    {visibleCount}{" "}
+                    {visibleCount === 1 ? "coursemate" : "coursemates"}
+                  </span>
+                </div>
+                {peerError && (
+                  <div className="course-directory-feedback error" role="alert">
+                    {peerError}{" "}
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setRetryToken(value => value + 1)}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {groupSummaryError && (
+                  <div className="course-directory-feedback error" role="alert">
+                    {groupSummaryError}{" "}
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setRetryToken(value => value + 1)}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {inviteEligibilityError && (
+                  <div className="course-directory-feedback info" role="status">
+                    {inviteEligibilityError}{" "}
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => setRetryToken(value => value + 1)}
+                    >
+                      Try again
+                    </button>
+                  </div>
+                )}
+                {peerLoading && (
+                  <div className="course-directory-state" role="status">
+                    <span className="spinner" /> Loading current coursemates…
+                  </div>
+                )}
+                {!peerLoading && !peerError && peers.length === 0 && (
+                  <EmptyState
+                    title="No other coursemates are enrolled yet"
+                    description="This list is based on current Test enrolment records. No sample names are added by the page."
+                  />
+                )}
+                {!peerLoading &&
+                  !peerError &&
+                  peers.length > 0 &&
+                  !groupSummaryError &&
+                  visibleCount === 0 && (
+                    <EmptyState
+                      title="No coursemates match those filters"
+                      description="Try another name or availability status."
+                    >
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          setSearch("");
+                          setFilter("all");
+                        }}
+                      >
+                        Clear filters
+                      </button>
+                    </EmptyState>
+                  )}
+                {!peerLoading &&
+                  !peerError &&
+                  peers.length > 0 &&
+                  !groupSummaryError &&
+                  visibleCount > 0 && (
+                    <>
+                      <section
+                        className="classmate-group-section"
+                        aria-labelledby="classmates-in-group"
+                      >
+                        <div className="classmates-section-title">
+                          <h2 id="classmates-in-group">
+                            In a group{" "}
+                            <span className="count-pill">
+                              {visibleInGroup.length}
+                            </span>
+                          </h2>
+                        </div>
+                        {visibleInGroup.length ? (
+                          <div className="classmate-list">
+                            {visibleInGroup.map(renderPeerCard)}
+                          </div>
+                        ) : (
+                          <div className="group-workflow-empty">
+                            No coursemates in a group match this search.
+                          </div>
+                        )}
+                      </section>
+                      <section
+                        className="classmate-group-section"
+                        aria-labelledby="classmates-looking"
+                      >
+                        <div className="classmates-section-title">
+                          <h2 id="classmates-looking">
+                            Looking for a group{" "}
+                            <span className="count-pill">
+                              {visibleLooking.length}
+                            </span>
+                          </h2>
+                        </div>
+                        {visibleLooking.length ? (
+                          <div className="classmate-list">
+                            {visibleLooking.map(renderPeerCard)}
+                          </div>
+                        ) : (
+                          <div className="group-workflow-empty">
+                            No ungrouped coursemates match this search.
+                          </div>
+                        )}
+                      </section>
+                    </>
+                  )}
+                <p className="data-footnote">
+                  Group summaries return only each coursemate’s group
+                  association, name, size and status. The Test server remains
+                  authoritative for invite, request and cancellation
+                  eligibility.
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </main>
+      <footer className="authenticated-courses-footer">
+        Supabase Test course data · not verified university registration
+      </footer>
+    </div>
+  );
+}
