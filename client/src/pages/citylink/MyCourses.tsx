@@ -456,6 +456,14 @@ export default function MyCourses() {
                           ? "Remove"
                           : "Add course"}
                     </button>
+                    {enrolled && (
+                      <Link
+                        href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
+                        className="course-groups-link"
+                      >
+                        Groups &amp; posts <ArrowRight size={14} />
+                      </Link>
+                    )}
                   </div>
                 </article>
               );

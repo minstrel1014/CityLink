@@ -263,7 +263,8 @@
 .authenticated-course-card-footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
   padding-top: 13px;
@@ -298,6 +299,25 @@
 }
 .course-enrolment-action:not(:disabled):hover {
   border-color: #a9b99a;
+}
+.course-groups-link {
+  display: inline-flex;
+  min-height: 33px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 10px;
+  border: 1px solid #e0e7d8;
+  border-radius: 7px;
+  background: #f7f9f4;
+  color: #60764e;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.course-groups-link:hover {
+  border-color: #a9b99a;
+  background: #f0f5e9;
 }
 .authenticated-courses-state {
   width: min(570px, 100%);

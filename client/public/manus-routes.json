@@ -8,6 +8,19 @@
     { "path": "/invitations", "title": "Invitations" },
     { "path": "/me", "title": "My profile" },
     { "path": "/my-courses", "title": "Authenticated My Courses" },
+    {
+      "path": "/my-courses/:courseId/groups",
+      "title": "Study groups and recruitment"
+    },
+    { "path": "/groups/:groupId/chat", "title": "Authenticated group chat" },
+    {
+      "path": "/groups/:groupId/members",
+      "title": "Current-term group members"
+    },
+    {
+      "path": "/groups/:groupId/members/:profileId",
+      "title": "Current-term coursemate profile"
+    },
     { "path": "/messages", "title": "Messages — planned" },
     { "path": "/about", "title": "Demo status and Supabase setup" }
   ]

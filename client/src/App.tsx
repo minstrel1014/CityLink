@@ -9,6 +9,12 @@ import { SupabaseSessionProvider } from "@/contexts/SupabaseSessionContext";
 import Welcome from "@/pages/citylink/Welcome";
 import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
 import MyCourses from "@/pages/citylink/MyCourses";
+import GroupWorkspacePage from "@/pages/citylink/GroupWorkspacePage";
+import GroupChatPage from "@/pages/citylink/GroupChatPage";
+import {
+  GroupMemberProfilePage,
+  GroupMembersPage,
+} from "@/pages/citylink/GroupMembersPage";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import {
   Invitations,
@@ -48,6 +54,23 @@ export default function App() {
               </Route>
               <Route path="/invitations" component={Invitations} />
               <Route path="/me" component={MyProfile} />
+              <Route path="/my-courses/:courseId/groups">
+                {params => <GroupWorkspacePage courseId={params.courseId} />}
+              </Route>
+              <Route path="/groups/:groupId/chat">
+                {params => <GroupChatPage groupId={params.groupId} />}
+              </Route>
+              <Route path="/groups/:groupId/members/:profileId">
+                {params => (
+                  <GroupMemberProfilePage
+                    groupId={params.groupId}
+                    profileId={params.profileId}
+                  />
+                )}
+              </Route>
+              <Route path="/groups/:groupId/members">
+                {params => <GroupMembersPage groupId={params.groupId} />}
+              </Route>
               <Route path="/my-courses" component={MyCourses} />
               <Route path="/messages" component={Messages} />
               <Route path="/about" component={About} />

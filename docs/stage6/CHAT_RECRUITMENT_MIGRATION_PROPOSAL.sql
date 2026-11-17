@@ -59,7 +59,8 @@ ALTER TABLE public.group_recruitment_posts ENABLE ROW LEVEL SECURITY;
 
 -- Private helpers authorize only the signed-in actor; callers cannot pass a
 -- different user ID. The private schema is not to be added to PostgREST's
--- exposed schemas. Role 6 must verify helper EXECUTE/schema grants.
+-- exposed schemas. The draft grants no direct helper EXECUTE to app roles;
+-- Role 6 must verify function owners can call them and schema exposure is safe.
 CREATE OR REPLACE FUNCTION private.can_read_group_chat(p_group_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -191,11 +192,6 @@ REVOKE ALL ON FUNCTION private.can_send_group_chat(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION private.can_browse_current_term_group(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION private.can_read_current_term_post(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION private.can_manage_recruitment_post(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION private.can_read_group_chat(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION private.can_send_group_chat(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION private.can_browse_current_term_group(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION private.can_read_current_term_post(uuid) TO authenticated;
-GRANT EXECUTE ON FUNCTION private.can_manage_recruitment_post(uuid) TO authenticated;
 
 -- Route selectors are exactly the two IDs approved by Jeffery: group UUID and
 -- profile UUID are non-displayed selectors only. Each function reauthorizes.
@@ -204,7 +200,8 @@ RETURNS TABLE (
   group_id uuid,
   group_name text,
   group_status text,
-  active_member_count bigint
+  active_member_count bigint,
+  can_create_post boolean
 )
 LANGUAGE sql
 STABLE
@@ -212,7 +209,13 @@ SECURITY DEFINER
 SET search_path = ''
 AS $function$
   SELECT g.id, g.name, g.status,
-         count(m.id) FILTER (WHERE m.membership_status = 'active')
+         count(m.id) FILTER (WHERE m.membership_status = 'active'),
+         (g.status = 'active' AND EXISTS (
+           SELECT 1 FROM public.group_memberships AS own_membership
+           WHERE own_membership.group_id = g.id
+             AND own_membership.profile_id = (SELECT auth.uid())
+             AND own_membership.membership_status = 'active'
+         ))
   FROM public.study_groups AS g
   JOIN public.citylink_settings AS s
     ON s.singleton AND s.current_term_id = g.term_id
@@ -339,6 +342,24 @@ BEGIN
 END;
 $function$;
 
+-- Return access flags separately so an empty chat can still distinguish a
+-- former member (read-only) from an active member (read/write). Unauthorized
+-- callers receive no message history and a clear permission failure.
+CREATE OR REPLACE FUNCTION public.get_group_chat_access(p_group_id uuid)
+RETURNS TABLE (can_read boolean, can_send boolean)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $function$
+BEGIN
+  IF NOT private.can_read_group_chat(p_group_id) THEN
+    RAISE EXCEPTION 'not authorized to read this group chat';
+  END IF;
+  RETURN QUERY SELECT true, private.can_send_group_chat(p_group_id);
+END;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.send_group_chat_message(
   p_group_id uuid,
   p_body text
@@ -392,7 +413,8 @@ RETURNS TABLE (
   created_at timestamptz,
   updated_at timestamptz,
   closed_at timestamptz,
-  apply_enabled boolean
+  apply_enabled boolean,
+  can_manage boolean
 )
 LANGUAGE sql
 STABLE
@@ -413,7 +435,8 @@ AS $function$
          p.updated_at,
          p.closed_at,
          (p.status = 'open' AND g.status = 'active'
-           AND private.is_current_term(g.term_id))
+           AND private.is_current_term(g.term_id)),
+         private.can_manage_recruitment_post(p.id)
   FROM public.group_recruitment_posts AS p
   JOIN public.study_groups AS g
     ON g.id = p.group_id AND g.course_id = p.course_id AND g.term_id = p.term_id
@@ -593,6 +616,7 @@ REVOKE ALL ON FUNCTION public.list_current_term_course_groups(uuid) FROM PUBLIC,
 REVOKE ALL ON FUNCTION public.list_current_term_group_members(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.get_current_term_group_member_profile(uuid, uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.list_group_chat_messages(uuid, timestamptz, uuid, integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.get_group_chat_access(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.send_group_chat_message(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.list_group_recruitment_posts(uuid) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.create_group_recruitment_post(uuid, text) FROM PUBLIC, anon;
@@ -602,6 +626,7 @@ GRANT EXECUTE ON FUNCTION public.list_current_term_course_groups(uuid) TO authen
 GRANT EXECUTE ON FUNCTION public.list_current_term_group_members(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_current_term_group_member_profile(uuid, uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_group_chat_messages(uuid, timestamptz, uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_group_chat_access(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.send_group_chat_message(uuid, text) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.list_group_recruitment_posts(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_group_recruitment_post(uuid, text) TO authenticated;
