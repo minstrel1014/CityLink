@@ -1,190 +1,142 @@
-.course-detail-page .course-detail-note,
-.course-detail-page .course-detail-enrolment-gate,
-.course-detail-page .course-detail-invite-rule {
+.course-detail-page .course-detail-list-link {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
-  padding: 13px 16px;
+  gap: 10px;
+  padding: 12px 15px;
   margin: 0 0 15px;
-  border: 1px solid #e5ead9;
-  border-radius: 10px;
-  background: #f0f4e9;
-  color: #657456;
+  border: 1px solid #e6eadf;
+  border-radius: 9px;
+  background: #f4f6ef;
+  color: #6b785f;
   font-size: 11px;
-  line-height: 1.65;
+  line-height: 1.6;
 }
-.course-detail-page .course-detail-note svg {
+.course-detail-page .course-detail-list-link svg {
   flex: 0 0 auto;
   margin-top: 1px;
 }
-.course-detail-page .course-detail-note strong,
-.course-detail-page .course-detail-enrolment-gate strong {
-  display: block;
-  margin-bottom: 3px;
-  color: #4e5d43;
+.course-detail-page .classmate-group-section {
+  margin-top: 24px;
 }
-.course-detail-page .course-detail-note p {
-  margin: 0;
+.course-detail-page .classmate-group-section .classmates-section-title {
+  margin-bottom: 11px;
 }
-.course-detail-page .course-detail-enrolment-gate {
-  display: block;
-  border-color: #eee4c8;
-  background: #fcf8ed;
-  color: #756743;
+.course-detail-page .classmate-group-meta {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
 }
-.course-detail-page .course-detail-enrolment-gate a {
+.course-detail-page .classmate-group-meta strong {
+  color: #526148;
+  font-size: 10px;
+}
+.course-detail-page .classmate-group-meta span {
+  color: #89927f;
+  font-size: 9px;
+  line-height: 1.45;
+}
+.course-detail-page .classmate-group-meta.looking strong {
+  color: #697b58;
+}
+.course-detail-page .classmate-portfolio-link {
   display: inline-block;
-  margin-left: 5px;
-  color: #5e704b;
+  margin-top: 5px;
+  color: #60784c;
+  font-size: 9px;
   font-weight: 700;
+}
+.course-detail-page .classmate-portfolio-link:hover {
   text-decoration: underline;
 }
-.course-detail-page .course-detail-invite-rule {
-  display: block;
-  margin-bottom: 20px;
-}
-.course-detail-page .course-detail-actions {
-  min-width: 135px;
-}
-.course-detail-page .course-detail-group-choice {
-  display: grid;
-  width: min(210px, 100%);
-  gap: 6px;
-  justify-items: stretch;
-}
-.course-detail-page .course-detail-group-choice label {
-  color: #718064;
-  font-size: 9px;
-  font-weight: 650;
-}
-.course-detail-page .course-detail-group-choice select {
-  width: 100%;
-  min-height: 33px;
-  padding: 6px 8px;
-  border: 1px solid #e2e7d9;
-  border-radius: 7px;
+.student-portfolio-page .student-portfolio-card {
+  width: min(820px, 100%);
+  padding: clamp(18px, 4vw, 30px);
+  margin: 20px auto 14px;
+  border: 1px solid #e5eadd;
+  border-radius: 14px;
   background: #fff;
-  color: #43513b;
-  font: inherit;
-  font-size: 9px;
+  box-shadow: 0 8px 24px #29372208;
 }
-.course-detail-page .course-detail-group-choice button {
-  justify-content: center;
-}
-.course-detail-page .course-detail-cancel-choice {
-  justify-self: end;
-  border: 0;
-  background: transparent;
-  color: #89947e;
-  font-size: 9px;
-  cursor: pointer;
-}
-.course-detail-page .course-detail-cancel-choice:hover {
-  color: #46583a;
-  text-decoration: underline;
-}
-.course-detail-page .classmate-person .avatar {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  color: #52633f;
-  font-size: 14px;
-  font-weight: 700;
-}
-.course-detail-page .classmate-person h3 {
-  margin: 0;
-}
-.course-detail-page .classmate-person small {
-  overflow-wrap: anywhere;
-}
-.course-detail-page .classmates-toolbar .directory-search,
-.course-detail-page .classmates-toolbar .filter-select {
+.student-portfolio-page .student-portfolio-top {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 0 12px;
-  border: 1px solid #e2e7d9;
-  border-radius: 8px;
-  background: #fff;
-  color: #879376;
+  gap: 17px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #edf0e7;
 }
-.course-detail-page .classmates-toolbar .directory-search {
-  flex: 1 1 320px;
+.student-portfolio-page .student-portfolio-avatar {
+  display: grid;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf0e2;
+  color: #536445;
+  font-size: 19px;
+  font-weight: 750;
 }
-.course-detail-page .classmates-toolbar .filter-select {
-  flex: 0 1 220px;
+.student-portfolio-page .student-portfolio-top h2 {
+  margin: 0 0 4px;
+  color: #34412f;
+  font-size: 21px;
 }
-.course-detail-page .classmates-toolbar .directory-search input,
-.course-detail-page .classmates-toolbar .filter-select select {
-  min-width: 0;
-  width: 100%;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #4b5743;
-  font: inherit;
+.student-portfolio-page .student-portfolio-top p {
+  margin: 0 0 8px;
+  color: #7a8571;
   font-size: 11px;
 }
-.course-detail-page .classmates-toolbar .directory-search:focus-within,
-.course-detail-page .classmates-toolbar .filter-select:focus-within {
-  border-color: #9aaa86;
-  box-shadow: 0 0 0 3px #91a47b20;
+.student-portfolio-page .student-portfolio-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 0;
+  margin: 0;
+  border-bottom: 1px solid #edf0e7;
 }
-.course-detail-page .classmates-toolbar .directory-search button {
-  border: 0;
-  background: transparent;
-  color: #849078;
-  font-size: 18px;
-  cursor: pointer;
+.student-portfolio-page .student-portfolio-details div {
+  min-width: 0;
 }
-.course-detail-page .course-directory-state {
-  gap: 10px;
+.student-portfolio-page .student-portfolio-details dt {
+  margin-bottom: 4px;
+  color: #89927f;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-@media (max-width: 760px) {
-  .course-detail-page .classmates-toolbar {
-    flex-wrap: wrap;
-  }
-  .course-detail-page .classmates-toolbar .directory-search {
-    flex: 1 1 100%;
-    max-width: none;
-  }
-  .course-detail-page .classmates-toolbar .filter-select {
-    flex: 1 1 185px;
-  }
-  .course-detail-page .results-label {
-    margin-left: auto;
-  }
-  .course-detail-page .classmate-card {
-    grid-template-columns: minmax(0, 1fr) minmax(115px, auto);
-  }
-  .course-detail-page .classmate-detail {
-    grid-column: 1 / -1;
-  }
-  .course-detail-page .classmate-actions {
-    grid-column: 2;
-    grid-row: 1;
-    align-self: start;
-  }
+.student-portfolio-page .student-portfolio-details dd {
+  overflow-wrap: anywhere;
+  margin: 0;
+  color: #4a5744;
+  font-size: 11px;
 }
-@media (max-width: 480px) {
-  .course-detail-page .course-detail-enrolment-gate a {
-    display: block;
-    margin: 8px 0 0;
+.student-portfolio-page .student-portfolio-card section {
+  padding-top: 18px;
+}
+.student-portfolio-page .student-portfolio-card section h3 {
+  margin: 0 0 8px;
+  color: #495741;
+  font-size: 12px;
+}
+.student-portfolio-page .student-portfolio-card section p {
+  margin: 0;
+  color: #75806e;
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+.student-portfolio-page .data-footnote {
+  width: min(820px, 100%);
+  margin: 0 auto;
+  color: #8b9583;
+  font-size: 9px;
+  line-height: 1.6;
+}
+@media (max-width: 620px) {
+  .student-portfolio-page .student-portfolio-details {
+    grid-template-columns: 1fr;
   }
-  .course-detail-page .classmate-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-  .course-detail-page .classmate-detail,
-  .course-detail-page .classmate-actions {
-    grid-column: 1;
-    grid-row: auto;
-  }
-  .course-detail-page .classmate-actions {
-    align-items: flex-start;
-  }
-  .course-detail-page .course-detail-group-choice {
-    width: 100%;
+  .student-portfolio-page .student-portfolio-top h2 {
+    font-size: 18px;
   }
 }

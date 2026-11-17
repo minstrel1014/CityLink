@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   getCourseInviteGroups,
+  getInvitationHistoryLabel,
+  getJoinActionState,
+  getOwnCourseGroup,
   getPeerInvitationState,
   isCoursePeerInviteable,
+  splitCoursePeersByGroup,
 } from "@/lib/courseDetailActions";
 import type {
+  CourseGroupSummary,
+  GroupCoursePeer,
   GroupInvitationRow,
+  GroupJoinRequestRow,
   GroupMembershipRow,
   StudyGroupRow,
 } from "@/lib/supabaseGroups";
@@ -121,5 +128,125 @@ describe("authenticated course detail invitation actions", () => {
     expect(
       getPeerInvitationState("user-1", "unknown", "course-1", invitations)
     ).toBeNull();
+  });
+});
+
+describe("two-view course detail helpers", () => {
+  it("locates only the signed-in student's active group or forming creator group", () => {
+    const memberships: GroupMembershipRow[] = [
+      {
+        id: "membership-1",
+        group_id: "active-member",
+        course_id: "course-1",
+        profile_id: "user-1",
+        display_name_snapshot: "Student One",
+        membership_status: "active",
+        joined_at: "2026-11-01T00:00:00Z",
+      },
+    ];
+    expect(
+      getOwnCourseGroup(groups, memberships, "course-1", "user-1")?.id
+    ).toBe("active-member");
+    expect(getOwnCourseGroup(groups, [], "course-1", "user-1")?.id).toBe(
+      "forming-creator"
+    );
+    expect(getOwnCourseGroup(groups, [], "course-1", "peer-1")).toBeNull();
+  });
+
+  it("splits real coursemates by the server-returned group association", () => {
+    const peers: GroupCoursePeer[] = [
+      {
+        profile_id: "peer-1",
+        student_id: null,
+        display_name: "Avery Chan",
+        major: null,
+        year: 2,
+        bio: "",
+        skills: [],
+        status: "open",
+      },
+      {
+        profile_id: "peer-2",
+        student_id: null,
+        display_name: "Blair Lam",
+        major: null,
+        year: 3,
+        bio: "",
+        skills: [],
+        status: "considering",
+      },
+    ];
+    const summaries: CourseGroupSummary[] = [
+      {
+        profile_id: "peer-2",
+        group_id: "group-2",
+        group_name: "Research team",
+        group_status: "active",
+        group_size: 3,
+      },
+    ];
+    const result = splitCoursePeersByGroup(peers, summaries);
+    expect(result.inGroup.map(peer => peer.profile_id)).toEqual(["peer-2"]);
+    expect(result.lookingForGroup.map(peer => peer.profile_id)).toEqual([
+      "peer-1",
+    ]);
+  });
+
+  it("preserves first-pending-action rules and only permits requests to active groups", () => {
+    const group: CourseGroupSummary = {
+      profile_id: "peer-1",
+      group_id: "group-1",
+      group_name: "Research team",
+      group_status: "active",
+      group_size: 2,
+    };
+    const request: GroupJoinRequestRow = {
+      id: "request-1",
+      group_id: "group-1",
+      course_id: "course-1",
+      requester_id: "user-1",
+      requester_name_snapshot: "Student One",
+      status: "pending",
+      created_at: "2026-11-04T00:00:00Z",
+    };
+    const pendingInvite: GroupInvitationRow = {
+      id: "invite-1",
+      group_id: "group-1",
+      course_id: "course-1",
+      sender_id: "peer-1",
+      recipient_id: "user-1",
+      sender_name_snapshot: "Student Two",
+      recipient_name_snapshot: "Student One",
+      status: "pending",
+      created_at: "2026-11-04T00:00:00Z",
+    };
+    const base = {
+      userHasGroup: false,
+      userStatus: "open" as const,
+      group,
+      userId: "user-1",
+      invitations: [] as GroupInvitationRow[],
+      joinRequests: [] as GroupJoinRequestRow[],
+    };
+    expect(getJoinActionState({ ...base, invitations: [pendingInvite] })).toBe(
+      "invitation-pending"
+    );
+    expect(getJoinActionState({ ...base, joinRequests: [request] })).toBe(
+      "request-pending"
+    );
+    expect(getJoinActionState({ ...base, userHasGroup: true })).toBe(
+      "already-grouped"
+    );
+    expect(
+      getJoinActionState({
+        ...base,
+        group: { ...group, group_status: "forming" },
+      })
+    ).toBe("forming-group");
+  });
+
+  it("uses the requested 'Rejected' label for the stored declined status", () => {
+    expect(getInvitationHistoryLabel("declined")).toBe("Rejected");
+    expect(getInvitationHistoryLabel("pending")).toBe("Pending");
   });
 });

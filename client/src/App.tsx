@@ -12,6 +12,8 @@ import MyCourses from "@/pages/citylink/MyCourses";
 import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
+import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
+import StudentPortfolio from "@/pages/citylink/StudentPortfolio";
 import {
   Invitations,
   MyProfile,
@@ -40,9 +42,29 @@ export default function App() {
               <Route path="/demo/courses/:courseId">
                 {params => <Classmates courseId={params.courseId} />}
               </Route>
+              <Route path="/courses/:courseId/students/:studentId">
+                {params => (
+                  <StudentPortfolio
+                    key={`${params.courseId}:${params.studentId}`}
+                    courseId={params.courseId}
+                    studentId={params.studentId}
+                  />
+                )}
+              </Route>
+              <Route path="/courses/:courseId/classmates">
+                {params => (
+                  <AuthenticatedCourseDetail
+                    key={params.courseId}
+                    courseId={params.courseId}
+                  />
+                )}
+              </Route>
               <Route path="/courses/:courseId">
                 {params => (
-                  <AuthenticatedCourseDetail courseId={params.courseId} />
+                  <AuthenticatedMyGroup
+                    key={params.courseId}
+                    courseId={params.courseId}
+                  />
                 )}
               </Route>
               <Route path="/students/:studentId/:courseId">

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   getGroupWorkflowErrorMessage,
   mapCourseInviteCandidateIds,
+  mapCourseGroupSummaries,
   mapGroupCoursePeers,
+  mapOwnCourseProfile,
+  mapActiveGroupMemberships,
 } from "@/lib/supabaseGroups";
 
 describe("group workflow Supabase response mapping", () => {
@@ -105,5 +108,101 @@ describe("course invite eligibility response mapping", () => {
     expect(() =>
       mapCourseInviteCandidateIds([{ profile_id: "not-a-uuid" }])
     ).toThrow(/profile_id is invalid/i);
+  });
+});
+
+describe("course detail group data mapping", () => {
+  it("accepts only peer-to-group summaries and group-size metadata", () => {
+    expect(
+      mapCourseGroupSummaries([
+        {
+          profile_id: "11111111-1111-4111-8111-111111111111",
+          group_id: "22222222-2222-4222-8222-222222222222",
+          group_name: "Research team",
+          group_status: "active",
+          group_size: 3,
+        },
+      ])
+    ).toEqual([
+      {
+        profile_id: "11111111-1111-4111-8111-111111111111",
+        group_id: "22222222-2222-4222-8222-222222222222",
+        group_name: "Research team",
+        group_status: "active",
+        group_size: 3,
+      },
+    ]);
+    expect(() =>
+      mapCourseGroupSummaries([
+        {
+          profile_id: "11111111-1111-4111-8111-111111111111",
+          group_id: "22222222-2222-4222-8222-222222222222",
+          group_name: "Research team",
+          group_status: "active",
+          group_size: 3,
+          member_names: ["Private Name"],
+        },
+      ])
+    ).toThrow(/response is invalid/i);
+  });
+
+  it("rejects duplicate peer associations and invalid group sizes", () => {
+    const row = {
+      profile_id: "11111111-1111-4111-8111-111111111111",
+      group_id: "22222222-2222-4222-8222-222222222222",
+      group_name: "Research team",
+      group_status: "forming",
+      group_size: 1,
+    };
+    expect(() => mapCourseGroupSummaries([{ ...row, group_size: 0 }])).toThrow(
+      /invalid data/i
+    );
+    expect(() => mapCourseGroupSummaries([row, row])).toThrow(/invalid data/i);
+  });
+
+  it("accepts only the signed-in user's minimal own-profile fields", () => {
+    expect(
+      mapOwnCourseProfile(
+        {
+          id: "11111111-1111-4111-8111-111111111111",
+          display_name: "Chloe Chan",
+          status: "open",
+        },
+        "11111111-1111-4111-8111-111111111111"
+      )
+    ).toEqual({
+      id: "11111111-1111-4111-8111-111111111111",
+      display_name: "Chloe Chan",
+      status: "open",
+    });
+    expect(() =>
+      mapOwnCourseProfile(
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          display_name: "Other student",
+          status: "open",
+        },
+        "11111111-1111-4111-8111-111111111111"
+      )
+    ).toThrow(/did not match/i);
+  });
+
+  it("accepts only active membership rows for the current group list", () => {
+    expect(
+      mapActiveGroupMemberships([
+        {
+          id: "membership-1",
+          group_id: "22222222-2222-4222-8222-222222222222",
+          course_id: "33333333-3333-4333-8333-333333333333",
+          profile_id: "11111111-1111-4111-8111-111111111111",
+          display_name_snapshot: "Chloe Chan",
+          membership_status: "active",
+          joined_at: "2026-11-17T00:00:00Z",
+        },
+      ])
+    ).toHaveLength(1);
+    expect(() =>
+      mapActiveGroupMemberships([{ membership_status: "left" }])
+    ).toThrow(/invalid membership data/i);
   });
 });
