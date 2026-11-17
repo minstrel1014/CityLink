@@ -108,3 +108,11 @@ Status: implementation and local checks are complete; feature-code commit `b3eb7
 Route clarification (2026-11-17): the course catalogue/browse page where students can add courses is authenticated `/my-courses`. Add total current-term Test enrolment counts there; leave the fictional `/courses`, `/demo`, and `/demo/courses/:courseId` surfaces unchanged.
 
 Group-size display clarification: count active memberships plus the forming group creator when the creator is not already an active member; this recognizes the establishing student and does not add a capacity limit.
+
+## PR #5 join-request integration decision (2026-11-17)
+
+- [x] Record the accepted PR #5 integration contract in `docs/team/DECISIONS.md`: succession model reaffirmed, abandoned-group join requests become `cancelled`, and PR #5 must reuse Role 5’s RPCs.
+- [x] Add the forward-decision note and current-Test distinction to `docs/stage5/GROUP_AUTHORITY_HANDOFF.md`.
+- [ ] Prepare a reviewed forward-only migration and catalog/behavior tests for the `cancelled` abandonment status. Do not apply it until Role 6 review and separate explicit lead approval; the current Stage 5 behavior remains `expired`.
+- [ ] Integrate PR #5 with `feature/roy-group-workflows` so the existing group RPCs are present; preserve Role 5’s `supabaseGroups.ts` additions; verify Apply calls `requestToJoinGroup` and never inserts members directly.
+- [ ] Run signed-in multi-account checks for succession review, abandonment cancellation, first-pending-action conflicts, and Apply-to-join.
