@@ -52,7 +52,7 @@ Verified locally on 2026-11-17:
 - `corepack pnpm check` — **passed after final UI/doc correction**, TypeScript `tsc --noEmit`, final exit 0.
 - `corepack pnpm test` — **passed after final UI/doc correction**, 9 test files and 57 tests, final exit 0. Output includes existing OAuth configuration/session-payload stderr from `server/platform.test.ts`; the test suite still passed.
 - `corepack pnpm build:static` — **passed after final UI correction**, Vite build exit 0. Existing warning: `/api/platform/config.js` is a non-module script and cannot be bundled as a module.
-- Initial `prettier --check` — **failed** on seven TypeScript/TSX/JSON files. Ran Prettier `--write` on the flagged files and all changed text/UI/docs. A successful final `prettier --check` is still required below.
+- Initial `prettier --check` — **failed** on seven TypeScript/TSX/JSON files. Ran Prettier `--write` on the flagged files and all changed text/UI/docs. Final `prettier --check` on every changed non-SQL file **passed**, exit 0.
 - Prettier does not infer a parser for `.sql` files in this project’s installed setup; those two SQL files were not run through Prettier. Their SQL formatting and security semantics require human/Role 6 review.
 - `git diff --check` — **passed after final changes**, exit 0.
 - Route manifest JSON parse — **passed after final changes**; both `/courses/:courseId` and `/demo/courses/:courseId` are present.
