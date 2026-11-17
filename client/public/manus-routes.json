@@ -21,6 +21,7 @@
     { "path": "/me", "title": "My profile" },
     { "path": "/my-courses", "title": "Authenticated My Courses" },
     { "path": "/my-groups", "title": "Authenticated group workflows" },
+    { "path": "/group-chat", "title": "Group chat — placeholder" },
     { "path": "/messages", "title": "Messages — planned" },
     { "path": "/about", "title": "Demo status and Supabase setup" }
   ]

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  MessageCircle,
   RefreshCw,
   Save,
   Send,
@@ -45,6 +46,7 @@ import {
   PageHeading,
 } from "@/components/citylink/Shared";
 import "./CourseDetail.css";
+import "./AuthenticatedMyGroup.css";
 
 type Notice = { tone: "success" | "error"; message: string };
 type MyGroupData = {
@@ -95,6 +97,48 @@ function prettyGroupStatus(status: StudyGroupRow["status"]) {
   return status === "forming"
     ? "Forming · awaiting first acceptance"
     : "Active";
+}
+
+function GroupCard({
+  eyebrow,
+  title,
+  count,
+  description,
+  headerExtra,
+  footer,
+  className = "",
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  count?: number;
+  description?: string;
+  headerExtra?: ReactNode;
+  footer?: ReactNode;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`my-group-card ${className}`.trim()}>
+      <header className="my-group-card-header">
+        <div>
+          <p className="my-group-card-eyebrow">{eyebrow}</p>
+          <h2>
+            {title}
+            {typeof count === "number" && (
+              <span className="count-pill">{count}</span>
+            )}
+          </h2>
+        </div>
+        {headerExtra}
+      </header>
+      {description && (
+        <p className="my-group-card-description">{description}</p>
+      )}
+      <div className="my-group-card-body">{children}</div>
+      {footer && <footer className="my-group-card-footer">{footer}</footer>}
+    </section>
+  );
 }
 
 export default function AuthenticatedMyGroup({
@@ -381,6 +425,87 @@ export default function AuthenticatedMyGroup({
     ownData?.group !== undefined &&
     groupName.trim() !== ownData.group.name;
 
+  const invitationHistoryCard =
+    ownData && ownData.enrolled ? (
+      <GroupCard
+        eyebrow="INVITATIONS"
+        title="Invitation history"
+        count={outgoingInvitations.length}
+        description="Statuses reflect the Test invitation records."
+        className="my-group-invitations-card"
+      >
+        {outgoingInvitations.length > 0 ? (
+          <div className="group-invitation-history">
+            {outgoingInvitations.map(invitation => {
+              const group = ownData.workflow?.groups.find(
+                item => item.id === invitation.group_id
+              );
+              return (
+                <article className="group-invitation-row" key={invitation.id}>
+                  <div>
+                    <strong>{invitation.recipient_name_snapshot}</strong>
+                    <span>
+                      {group?.name || "Study group"} ·{" "}
+                      {new Date(invitation.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <span
+                    className={`group-workflow-status ${invitation.status}`}
+                  >
+                    {getInvitationHistoryLabel(invitation.status)}
+                  </span>
+                  {invitation.status === "pending" && (
+                    <button
+                      type="button"
+                      className="text-button"
+                      disabled={busyAction !== ""}
+                      onClick={() => void cancelInvite(invitation.id)}
+                    >
+                      {busyAction === `cancel-${invitation.id}`
+                        ? "Cancelling…"
+                        : "Cancel invitation"}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="group-workflow-empty">
+            <strong>No outgoing invitations yet.</strong> Invitations you send
+            for this course will appear here.
+          </div>
+        )}
+      </GroupCard>
+    ) : null;
+
+  const classmateListCard =
+    ownData && ownData.enrolled ? (
+      <GroupCard
+        eyebrow="DISCOVER"
+        title="Classmate list"
+        description="Browse everyone enrolled in this course and see who is already in a group."
+        className="my-group-classmates-card"
+      >
+        <div className="my-group-classmates-intro">
+          <span className="my-group-card-icon" aria-hidden="true">
+            <Users size={22} />
+          </span>
+          <p className="my-group-rules-note">
+            Groups have no maximum size. The first invite creates a forming
+            group with you as leader; active members may invite, and only the
+            original group creator may review join requests.
+          </p>
+        </div>
+        <Link
+          href={`/courses/${courseId}/classmates`}
+          className="secondary my-group-classmates-link"
+        >
+          Open the full classmate list <ArrowRight size={16} />
+        </Link>
+      </GroupCard>
+    ) : null;
+
   return (
     <div className="authenticated-courses-page course-detail-page my-group-page">
       <AccountHeader email={session.user?.email} />
@@ -440,29 +565,24 @@ export default function AuthenticatedMyGroup({
                 <Link href="/my-courses">Browse and add courses</Link>
               </div>
             ) : ownData.group && ownData.profile ? (
-              <>
-                <section className="course-detail-panel group-summary-panel">
-                  <div className="group-summary-heading">
-                    <div>
-                      <span
-                        className={`group-workflow-status ${ownData.group.status}`}
-                      >
-                        {prettyGroupStatus(ownData.group.status)}
-                      </span>
-                      <h2>{ownData.group.name || "Study group"}</h2>
-                      <p>
-                        {ownData.group.creator_id === userId
-                          ? "You are the group leader."
-                          : `Group leader: ${leaderName}.`}
-                      </p>
-                    </div>
+              <div className="my-group-card-grid">
+                <GroupCard
+                  eyebrow="GROUP SETTINGS"
+                  title="Group name"
+                  className="my-group-name-card"
+                  description={
+                    ownData.group.creator_id === userId
+                      ? "You are the group leader."
+                      : `Group leader: ${leaderName}.`
+                  }
+                  headerExtra={
                     <span
-                      className="count-pill"
-                      aria-label={`${groupSize} people in the group`}
+                      className={`group-workflow-status ${ownData.group.status}`}
                     >
-                      {groupSize} {groupSize === 1 ? "person" : "people"}
+                      {prettyGroupStatus(ownData.group.status)}
                     </span>
-                  </div>
+                  }
+                >
                   <form
                     className="group-name-form"
                     onSubmit={event => {
@@ -501,15 +621,24 @@ export default function AuthenticatedMyGroup({
                       </button>
                     )}
                   </form>
-                </section>
+                </GroupCard>
 
-                <section className="course-detail-panel">
-                  <div className="section-title">
-                    <h2>
-                      Current members{" "}
-                      <span className="count-pill">{groupSize}</span>
-                    </h2>
-                  </div>
+                <GroupCard
+                  eyebrow="MEMBERSHIP"
+                  title="Current members"
+                  count={groupSize}
+                  description="Active members in this group."
+                  className="my-group-members-card"
+                  footer={
+                    <Link
+                      href="/group-chat"
+                      className="secondary my-group-chat-link"
+                    >
+                      <MessageCircle size={16} /> Open Group Chat{" "}
+                      <ArrowRight size={15} />
+                    </Link>
+                  }
+                >
                   {members.length > 0 ? (
                     <div className="group-member-list">
                       {members.map(member => (
@@ -549,194 +678,117 @@ export default function AuthenticatedMyGroup({
                       description="Refresh to check the current group membership."
                     />
                   )}
-                </section>
-              </>
+                </GroupCard>
+
+                {invitationHistoryCard}
+                {classmateListCard}
+              </div>
             ) : (
-              <section className="course-detail-panel my-group-empty-state">
-                <span className="authenticated-courses-state-icon">
-                  <Users size={26} />
-                </span>
-                <h2>You do not have a group for this course yet</h2>
-                <p>
-                  Create a group by sending the first invitation, or browse
-                  active groups and request to join one.
-                </p>
-                <div className="authenticated-courses-state-actions">
-                  <button
-                    type="button"
-                    className="primary"
-                    onClick={() => void openCreateGroup()}
-                  >
-                    <Send size={16} /> Create a group
-                  </button>
-                  <Link
-                    href={`/courses/${courseId}/classmates`}
-                    className="secondary"
-                  >
-                    Request to join <ArrowRight size={16} />
-                  </Link>
-                </div>
-                {createOpen && (
-                  <div
-                    className="first-invite-picker"
-                    aria-labelledby="first-invite-heading"
-                  >
-                    <h3 id="first-invite-heading">
-                      Choose the first coursemate to invite
-                    </h3>
-                    {inviteOptionsLoading && (
-                      <p role="status">
-                        Checking current invitation eligibility…
-                      </p>
-                    )}
-                    {inviteOptionsError && (
-                      <p
-                        className="course-directory-feedback error"
-                        role="alert"
-                      >
-                        {inviteOptionsError}
-                      </p>
-                    )}
-                    {!inviteOptionsLoading &&
-                      !inviteOptionsError &&
-                      eligiblePeers.length === 0 && (
-                        <p>
-                          No coursemates are currently eligible for an
-                          invitation. You can still browse the full classmate
-                          list.
-                        </p>
-                      )}
-                    {eligiblePeers.length > 0 && (
-                      <>
-                        <label htmlFor="first-invitee">First invitee</label>
-                        <select
-                          id="first-invitee"
-                          value={inviteeId}
-                          onChange={event => setInviteeId(event.target.value)}
-                        >
-                          <option value="">Select a coursemate</option>
-                          {eligiblePeers.map(peer => (
-                            <option
-                              key={peer.profile_id}
-                              value={peer.profile_id}
-                            >
-                              {peer.display_name}
-                              {peer.major ? ` · ${peer.major}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={!inviteeId || busyAction !== ""}
-                          onClick={() => void createFirstInvite()}
-                        >
-                          <Send size={15} />{" "}
-                          {busyAction === "create"
-                            ? "Creating…"
-                            : "Create group and invite"}
-                        </button>
-                      </>
-                    )}
-                    <Link
-                      href={`/courses/${courseId}/classmates`}
-                      className="text-link"
-                    >
-                      Open all coursemates <ArrowRight size={14} />
-                    </Link>
+              <div className="my-group-card-grid my-group-card-grid-empty">
+                <section className="my-group-card my-group-empty-state">
+                  <span className="authenticated-courses-state-icon">
+                    <Users size={26} />
+                  </span>
+                  <h2>You do not have a group for this course yet</h2>
+                  <p>
+                    Create a group by sending the first invitation, or browse
+                    active groups and request to join one.
+                  </p>
+                  <div className="authenticated-courses-state-actions">
                     <button
                       type="button"
-                      className="text-button"
-                      onClick={() => setCreateOpen(false)}
+                      className="primary"
+                      onClick={() => void openCreateGroup()}
                     >
-                      <X size={14} /> Close
+                      <Send size={16} /> Create a group
                     </button>
+                    <Link
+                      href={`/courses/${courseId}/classmates`}
+                      className="secondary"
+                    >
+                      Request to join <ArrowRight size={16} />
+                    </Link>
                   </div>
-                )}
-              </section>
-            )}
-
-            {ownData.enrolled && (
-              <section className="course-detail-panel">
-                <div className="section-title">
-                  <h2>
-                    People you invited{" "}
-                    <span className="count-pill">
-                      {outgoingInvitations.length}
-                    </span>
-                  </h2>
-                  <span>Statuses reflect the Test invitation records.</span>
-                </div>
-                {outgoingInvitations.length > 0 ? (
-                  <div className="group-invitation-history">
-                    {outgoingInvitations.map(invitation => {
-                      const group = ownData.workflow?.groups.find(
-                        item => item.id === invitation.group_id
-                      );
-                      return (
-                        <article
-                          className="group-invitation-row"
-                          key={invitation.id}
+                  {createOpen && (
+                    <div
+                      className="first-invite-picker"
+                      aria-labelledby="first-invite-heading"
+                    >
+                      <h3 id="first-invite-heading">
+                        Choose the first coursemate to invite
+                      </h3>
+                      {inviteOptionsLoading && (
+                        <p role="status">
+                          Checking current invitation eligibility…
+                        </p>
+                      )}
+                      {inviteOptionsError && (
+                        <p
+                          className="course-directory-feedback error"
+                          role="alert"
                         >
-                          <div>
-                            <strong>
-                              {invitation.recipient_name_snapshot}
-                            </strong>
-                            <span>
-                              {group?.name || "Study group"} ·{" "}
-                              {new Date(
-                                invitation.created_at
-                              ).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <span
-                            className={`group-workflow-status ${invitation.status}`}
+                          {inviteOptionsError}
+                        </p>
+                      )}
+                      {!inviteOptionsLoading &&
+                        !inviteOptionsError &&
+                        eligiblePeers.length === 0 && (
+                          <p>
+                            No coursemates are currently eligible for an
+                            invitation. You can still browse the full classmate
+                            list.
+                          </p>
+                        )}
+                      {eligiblePeers.length > 0 && (
+                        <>
+                          <label htmlFor="first-invitee">First invitee</label>
+                          <select
+                            id="first-invitee"
+                            value={inviteeId}
+                            onChange={event => setInviteeId(event.target.value)}
                           >
-                            {getInvitationHistoryLabel(invitation.status)}
-                          </span>
-                          {invitation.status === "pending" && (
-                            <button
-                              type="button"
-                              className="text-button"
-                              disabled={busyAction !== ""}
-                              onClick={() => void cancelInvite(invitation.id)}
-                            >
-                              {busyAction === `cancel-${invitation.id}`
-                                ? "Cancelling…"
-                                : "Cancel invitation"}
-                            </button>
-                          )}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="group-workflow-empty">
-                    <strong>No outgoing invitations yet.</strong> Invitations
-                    you send for this course will appear here.
-                  </div>
-                )}
-              </section>
-            )}
-
-            {ownData.enrolled && (
-              <div className="course-detail-note" role="note">
-                <Users size={18} />
-                <div>
-                  <strong>Invitation and join rules stay unchanged</strong>
-                  <p>
-                    Groups have no maximum size. The first invite creates a
-                    forming group with you as leader; active members may invite,
-                    and only the original group creator may review join
-                    requests.
-                  </p>
-                  <Link
-                    href={`/courses/${courseId}/classmates`}
-                    className="text-link"
-                  >
-                    Open the full classmate list <ArrowRight size={14} />
-                  </Link>
-                </div>
+                            <option value="">Select a coursemate</option>
+                            {eligiblePeers.map(peer => (
+                              <option
+                                key={peer.profile_id}
+                                value={peer.profile_id}
+                              >
+                                {peer.display_name}
+                                {peer.major ? ` · ${peer.major}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled={!inviteeId || busyAction !== ""}
+                            onClick={() => void createFirstInvite()}
+                          >
+                            <Send size={15} />{" "}
+                            {busyAction === "create"
+                              ? "Creating…"
+                              : "Create group and invite"}
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        href={`/courses/${courseId}/classmates`}
+                        className="text-link"
+                      >
+                        Open all coursemates <ArrowRight size={14} />
+                      </Link>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setCreateOpen(false)}
+                      >
+                        <X size={14} /> Close
+                      </button>
+                    </div>
+                  )}
+                </section>
+                {invitationHistoryCard}
+                {classmateListCard}
               </div>
             )}
           </>

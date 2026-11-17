@@ -13,6 +13,7 @@ import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
 import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
+import GroupChatPlaceholder from "@/pages/citylink/GroupChatPlaceholder";
 import StudentPortfolio from "@/pages/citylink/StudentPortfolio";
 import {
   Invitations,
@@ -79,6 +80,7 @@ export default function App() {
               <Route path="/me" component={MyProfile} />
               <Route path="/my-courses" component={MyCourses} />
               <Route path="/my-groups" component={GroupWorkflows} />
+              <Route path="/group-chat" component={GroupChatPlaceholder} />
               <Route path="/messages" component={Messages} />
               <Route path="/about" component={About} />
               <Route path="/404" component={NotFound} />
