@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Link } from "wouter";
+import { CourseGroupLink } from "@/components/citylink/GroupNavigationLinks";
 import {
   CourseIcon,
   EmptyState,
@@ -22,6 +23,7 @@ import {
   COURSE_ENROLMENT_EMPTY_MESSAGE,
   filterCourseDirectory,
   getCourseDirectoryErrorMessage,
+  loadCurrentTermCourseEnrollmentCounts,
   loadCourseDirectory,
   removeOwnCourseEnrolment,
   type CourseDirectoryScope,
@@ -31,7 +33,7 @@ import {
 type LoadState = "idle" | "loading" | "ready" | "error";
 type Banner = { tone: "success" | "error" | "info"; message: string };
 
-function AccountHeader({ email }: { email?: string }) {
+export function AccountHeader({ email }: { email?: string }) {
   return (
     <header className="authenticated-courses-header">
       <Link href="/" className="authenticated-courses-brand">
@@ -43,6 +45,8 @@ function AccountHeader({ email }: { email?: string }) {
       </div>
       <nav aria-label="Account navigation">
         <Link href="/me">My profile</Link>
+        <Link href="/my-courses">My Courses</Link>
+        <Link href="/my-groups">My groups</Link>
         <Link href="/demo">Fictional demo</Link>
       </nav>
     </header>
@@ -94,6 +98,11 @@ export default function MyCourses() {
   >(null);
   const [loadState, setLoadState] = useState<LoadState>("idle");
   const [loadError, setLoadError] = useState("");
+  const [enrollmentCounts, setEnrollmentCounts] = useState<Map<string, number>>(
+    new Map()
+  );
+  const [countsLoading, setCountsLoading] = useState(false);
+  const [countsError, setCountsError] = useState("");
   const [notice, setNotice] = useState<Banner | null>(null);
   const [scope, setScope] = useState<CourseDirectoryScope>("catalogue");
   const [query, setQuery] = useState("");
@@ -115,6 +124,9 @@ export default function MyCourses() {
       setSnapshot(null);
       setLoadState("idle");
       setLoadError("");
+      setEnrollmentCounts(new Map());
+      setCountsLoading(false);
+      setCountsError("");
       setBusyCourseId(null);
       return () => {
         active = false;
@@ -126,20 +138,37 @@ export default function MyCourses() {
 
     setLoadState("loading");
     setLoadError("");
+    setEnrollmentCounts(new Map());
+    setCountsLoading(true);
+    setCountsError("");
     setNotice(null);
     setBusyCourseId(null);
 
-    void loadCourseDirectory(userId)
-      .then(result => {
-        if (!isCurrent()) return;
-        setSnapshot({ ...result, userId });
+    void Promise.allSettled([
+      loadCourseDirectory(userId),
+      loadCurrentTermCourseEnrollmentCounts(userId),
+    ]).then(([directoryResult, countResult]) => {
+      if (!isCurrent()) return;
+      if (directoryResult.status === "fulfilled") {
+        setSnapshot({ ...directoryResult.value, userId });
         setLoadState("ready");
-      })
-      .catch(error => {
-        if (!isCurrent()) return;
-        setLoadError(getCourseDirectoryErrorMessage(error, "read"));
+      } else {
+        setLoadError(
+          getCourseDirectoryErrorMessage(directoryResult.reason, "read")
+        );
         setLoadState("error");
-      });
+      }
+      if (countResult.status === "fulfilled") {
+        setEnrollmentCounts(countResult.value);
+        setCountsError("");
+      } else {
+        setEnrollmentCounts(new Map());
+        setCountsError(
+          "Live Test enrollment counts could not be loaded. The course catalogue remains available."
+        );
+      }
+      setCountsLoading(false);
+    });
 
     return () => {
       active = false;
@@ -199,6 +228,19 @@ export default function MyCourses() {
       const refreshed = await loadCourseDirectory(expectedUserId);
       if (!isCurrent()) return;
       setSnapshot({ ...refreshed, userId: expectedUserId });
+      try {
+        const refreshedCounts =
+          await loadCurrentTermCourseEnrollmentCounts(expectedUserId);
+        if (!isCurrent()) return;
+        setEnrollmentCounts(refreshedCounts);
+        setCountsError("");
+      } catch {
+        if (!isCurrent()) return;
+        setEnrollmentCounts(new Map());
+        setCountsError(
+          "Live Test enrollment counts could not be refreshed. The course change was saved, but counts may be temporarily unavailable."
+        );
+      }
       setNotice({
         tone: "success",
         message: wasEnrolled
@@ -356,6 +398,11 @@ export default function MyCourses() {
             {notice.message}
           </p>
         )}
+        {countsError && (
+          <p className="course-directory-feedback info" role="status">
+            {countsError} Refresh the page to try again.
+          </p>
+        )}
 
         {loadState === "loading" && (
           <div className="course-directory-state" role="status">
@@ -434,36 +481,64 @@ export default function MyCourses() {
                     {course.description ||
                       "No course description is available."}
                   </p>
+                  <p
+                    className="authenticated-course-enrollment-count"
+                    aria-label={
+                      countsLoading
+                        ? "Loading current-term enrollment count"
+                        : countsError
+                          ? "Current-term enrollment count unavailable"
+                          : enrollmentCounts.has(course.id)
+                            ? `${enrollmentCounts.get(course.id)} students enrolled`
+                            : "Course is not in the current term"
+                    }
+                  >
+                    {countsLoading
+                      ? "Loading enrollment count…"
+                      : countsError
+                        ? "Enrollment count unavailable"
+                        : enrollmentCounts.has(course.id)
+                          ? `${enrollmentCounts.get(course.id)} ${enrollmentCounts.get(course.id) === 1 ? "student" : "students"} enrolled`
+                          : "Not in the current term"}
+                  </p>
                   <div className="authenticated-course-card-footer">
                     <span>{course.semester}</span>
-                    <button
-                      type="button"
-                      className={`course-enrolment-action ${enrolled ? "remove" : "add"}`}
-                      disabled={
-                        !COURSE_ENROLMENT_WRITES_ENABLED ||
-                        busyCourseId !== null
-                      }
-                      aria-describedby={
-                        COURSE_ENROLMENT_WRITES_ENABLED
-                          ? undefined
-                          : "course-write-gate"
-                      }
-                      onClick={() => void changeEnrolment(course.id)}
-                    >
-                      {busyCourseId === course.id
-                        ? "Saving…"
-                        : enrolled
-                          ? "Remove"
-                          : "Add course"}
-                    </button>
-                    {enrolled && (
-                      <Link
-                        href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
-                        className="course-groups-link"
+                    <div className="authenticated-course-card-actions">
+                      <CourseGroupLink
+                        courseId={course.id}
+                        className="course-detail-link"
                       >
-                        Groups &amp; posts <ArrowRight size={14} />
-                      </Link>
-                    )}
+                        My group
+                      </CourseGroupLink>
+                      <button
+                        type="button"
+                        className={`course-enrolment-action ${enrolled ? "remove" : "add"}`}
+                        disabled={
+                          !COURSE_ENROLMENT_WRITES_ENABLED ||
+                          busyCourseId !== null
+                        }
+                        aria-describedby={
+                          COURSE_ENROLMENT_WRITES_ENABLED
+                            ? undefined
+                            : "course-write-gate"
+                        }
+                        onClick={() => void changeEnrolment(course.id)}
+                      >
+                        {busyCourseId === course.id
+                          ? "Saving…"
+                          : enrolled
+                            ? "Remove"
+                            : "Add course"}
+                      </button>
+                      {enrolled && (
+                        <Link
+                          href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
+                          className="course-groups-link"
+                        >
+                          Groups &amp; posts <ArrowRight size={14} />
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </article>
               );

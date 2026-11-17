@@ -115,6 +115,49 @@ export function mapOwnEnrolledCourseIds(
   return [...courseIds];
 }
 
+export function mapCurrentTermCourseEnrollmentCounts(
+  value: unknown
+): Map<string, number> {
+  if (!Array.isArray(value)) {
+    throw new Error("The course enrolment-count response is invalid.");
+  }
+
+  const counts = new Map<string, number>();
+  for (const candidate of value) {
+    if (
+      !isRecord(candidate) ||
+      Object.keys(candidate).some(
+        key => key !== "course_id" && key !== "enrolled_count"
+      )
+    ) {
+      throw new Error("The course enrolment-count response is invalid.");
+    }
+    const courseId = candidate.course_id;
+    const rawCount = candidate.enrolled_count;
+    const enrolledCount =
+      typeof rawCount === "number"
+        ? rawCount
+        : typeof rawCount === "string" && /^\d+$/.test(rawCount)
+          ? Number(rawCount)
+          : Number.NaN;
+    if (
+      typeof courseId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        courseId
+      ) ||
+      !Number.isSafeInteger(enrolledCount) ||
+      enrolledCount < 0 ||
+      counts.has(courseId)
+    ) {
+      throw new Error(
+        "The course enrolment-count response contains invalid data."
+      );
+    }
+    counts.set(courseId, enrolledCount);
+  }
+  return counts;
+}
+
 export function filterCourseDirectory(
   courses: Course[],
   enrolledCourseIds: ReadonlySet<string>,
@@ -171,6 +214,29 @@ export async function loadCourseDirectory(
       userId
     ),
   };
+}
+
+export async function loadCurrentTermCourseEnrollmentCounts(
+  userId: string
+): Promise<Map<string, number>> {
+  if (!supabaseClient) {
+    throw new Error("Supabase is not configured in this environment.");
+  }
+  if (!userId) {
+    throw new Error("A signed-in CityLink account is required.");
+  }
+  const { data: authData, error: authError } =
+    await supabaseClient.auth.getUser();
+  if (authError || authData.user?.id !== userId) {
+    throw new Error(
+      "Your sign-in could not be verified. Sign in again before viewing course counts."
+    );
+  }
+  const { data, error } = await supabaseClient.rpc(
+    "list_current_course_enrolment_counts"
+  );
+  if (error) throw error;
+  return mapCurrentTermCourseEnrollmentCounts(data ?? []);
 }
 
 async function verifyCurrentOwner(userId: string) {

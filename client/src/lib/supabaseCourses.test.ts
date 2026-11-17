@@ -4,6 +4,7 @@ import {
   COURSE_ENROLMENT_EMPTY_MESSAGE,
   filterCourseDirectory,
   getCourseDirectoryErrorMessage,
+  mapCurrentTermCourseEnrollmentCounts,
   mapOwnEnrolledCourseIds,
   mapSupabaseCourseRows,
 } from "@/lib/supabaseCourses";
@@ -32,6 +33,58 @@ const courseRows = [
 ];
 
 describe("Supabase course directory mapping", () => {
+  it("maps count-only current-term enrolment results", () => {
+    const counts = mapCurrentTermCourseEnrollmentCounts([
+      {
+        course_id: "11111111-1111-4111-8111-111111111111",
+        enrolled_count: 12,
+      },
+      {
+        course_id: "22222222-2222-4222-8222-222222222222",
+        enrolled_count: "0",
+      },
+    ]);
+    expect(Object.fromEntries(counts)).toEqual({
+      "11111111-1111-4111-8111-111111111111": 12,
+      "22222222-2222-4222-8222-222222222222": 0,
+    });
+  });
+
+  it("rejects malformed counts, duplicate courses and unexpected identity fields", () => {
+    expect(() => mapCurrentTermCourseEnrollmentCounts({})).toThrow(
+      /response is invalid/i
+    );
+    expect(() =>
+      mapCurrentTermCourseEnrollmentCounts([
+        {
+          course_id: "11111111-1111-4111-8111-111111111111",
+          enrolled_count: -1,
+        },
+      ])
+    ).toThrow(/invalid data/i);
+    expect(() =>
+      mapCurrentTermCourseEnrollmentCounts([
+        {
+          course_id: "11111111-1111-4111-8111-111111111111",
+          enrolled_count: 1,
+          student_ids: ["unexpected"],
+        },
+      ])
+    ).toThrow(/response is invalid/i);
+    expect(() =>
+      mapCurrentTermCourseEnrollmentCounts([
+        {
+          course_id: "11111111-1111-4111-8111-111111111111",
+          enrolled_count: 1,
+        },
+        {
+          course_id: "11111111-1111-4111-8111-111111111111",
+          enrolled_count: 2,
+        },
+      ])
+    ).toThrow(/invalid data/i);
+  });
+
   it("maps database course rows to the existing display type", () => {
     const courses = mapSupabaseCourseRows(courseRows);
     expect(courses[0]).toEqual({

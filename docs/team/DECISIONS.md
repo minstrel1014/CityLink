@@ -1,0 +1,229 @@
+# CityLink Team Decisions
+
+This file records explicit human-approved decisions that affect more than one role. Proposals and unresolved questions are identified separately; do not treat them as approved requirements. Update this file when the lead confirms a shared decision, and link the relevant feature handoff or pull request.
+
+## Approved decisions
+
+### 2026-11-14 — Study groups have no maximum size
+
+- **Status:** Approved.
+- **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
+- **Decision:** Study groups have no maximum size. Do not add a capacity limit, capacity-based rejection, or invented default capacity.
+- **Roles affected:** Project/integration lead; study-group creation and management (Roy); join requests and membership (Roy); group invitation (Roy); QA/live testing/documentation (Eunice); group chat and recruitment posts (Jeffery); AI and project-room file upload (Kayk).
+- **Data/API implications:** Do not add a group capacity column or an arbitrary group-size check to implement a maximum. A member count is not a capacity. If a future request proposes limits, ask the human lead for a new explicit decision before designing or implementing it.
+- **Unresolved questions:** None about the maximum-size rule. Other membership and lifecycle behavior remains governed by the shared feature contract.
+
+### 2026-11-14 — Current group leader reviews join requests; transfer on departure
+
+- **Status:** Approved.
+- **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
+- **Decision:** The group leader must be an active group member to review join requests. At group establishment, the original student who first invites others is the leader, represented by `public.study_groups.creator_id`. If that leader leaves the group or their account is deleted/unavailable, the earliest-joined remaining active group member becomes the new leader and inherits join-request review authority. Use the existing `creator_id` as the current leader identifier; do not add a separate leader column under this decision. After transfer, `creator_id` no longer preserves the original founder's identity; no separate founder-history record is approved here. If no active members remain, the outcome was approved later, on 2026-11-17: the group is marked `abandoned` and pending invitations/requests expire (see the leader-succession edge-case decision below).
+- **Roles affected:** Project/integration lead; group creation and management (Roy); invitations (Roy); join requests and membership (Roy); QA/live testing/documentation (Eunice); group chat and recruitment posts (Jeffery).
+- **Data/API implications:** The live Test schema currently uses nullable `study_groups.creator_id` with `ON DELETE SET NULL`. `create_group_and_invite` initially sets it to the establishing student. The review RPC must require the active `creator_id` holder, and pending-request RLS must not expose other students' requests to ordinary members; requesters may still access their own request/status. When the current leader leaves or is deleted, the approved successor must be selected by earliest group-join time and `creator_id` transferred so the successor can review. Before implementation, verify the existing membership timestamp field and propose a deterministic ordering; ask the lead if the schema cannot identify the earliest member unambiguously. Enforce reviewer checks and transfer in backend operations/RLS, not UI-only logic.
+- **Observed mismatch in Test (read-only inspection, 2026-11-14):** `public.review_group_join_request` currently permits any active group member, and the `group_join_requests` SELECT policy currently permits the requester or any active group member. The RPC/policy must be brought into alignment with this approved decision before the feature is treated as complete. No database changes were made during inspection.
+- **Unresolved questions:** Resolved on 2026-11-17 by the leader-succession edge-case decision below. Ties are ordered by `joined_at`, then `created_at`, then membership UUID; if no active members remain, the group is marked `abandoned` and pending invitations/requests expire. No further lead decision is required for these two cases.
+
+### 2026-11-14 — Recruitment posts are visible to eligible coursemates
+
+- **Status:** Approved.
+- **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
+- **Decision:** Group recruitment posts may be seen by eligible coursemates who are not already members of that group. This is a coursemate audience, not public-internet access.
+- **Roles affected:** Project/integration lead; group creation and management/recruitment posts (Jeffery); join requests and invitations (Roy); QA/live testing/documentation (Eunice); AI and project-room file upload (Kayk where room links or attachments are involved).
+- **Data/API implications:** The read contract for recruitment posts must include eligible non-member coursemates; it cannot be limited to current group membership. The exact eligibility check must follow the approved course/enrolment contract. This decision does not grant posting, editing, deleting, reporting, chat, or moderation privileges.
+- **Unresolved questions at original approval:** See the partial 2026-11-17 decision below for answers about course eligibility, group-member visibility, author authority, closed posts, and reporting/deletion. Other open behavior and data/API contracts remain blocked.
+
+### 2026-11-17 — Partial Stage 6 decisions from the project lead
+
+- **Status:** Partially approved. The project lead delegated Stage 6 decision authority to Jeffery. Implementation remains blocked on the two conflicts below; this entry does not approve an implementation or an actual Test migration.
+- **Human approver/delegator:** CityLink project lead (real name remains TBD; choices and delegation were given in the project-lead task).
+- **Approved decisions so far:** The lead selected profile fields `display_name`, `major`, `year`, `bio`, and `skills`; do not expose account `status` without a separate decision. The lead selected “any signed-in CityLink student” for profile-link access, but explained that coursemates can already see each other in the coursemate list; because those statements could mean different audiences, do not implement either profile-access scope until Jeffery resolves it. The lead also decided that former members who leave or are removed may read existing chat history but may not send; pending invitees and join-requesters get no chat access until membership is active; history remains accessible to former members while the group record exists, including after archive or abandonment; a sender may edit their own message; any eligible current-term coursemate may create a recruitment post; the author may edit or close their post; if the author leaves or is removed, the post auto-closes and remains visible with Apply disabled; reporting and deletion are out of Stage 6 v1. “Eligible coursemate” means a student enrolled in the associated course for the current term.
+- **Roles affected:** Project/integration lead; Group Chat and Recruitment Posts owner Jeffery; Group Creation/Management and existing join-request owner Roy (Apply dependency); QA/live testing/documentation owner Eunice. The existing owner assignments remain unchanged.
+- **Delegated authority:** As of 2026-11-17, the lead authorizes Jeffery to make and approve product, permission, API, and RLS design decisions for Stage 6 Group Chat and Recruitment Posts. The delegation is limited to those features and does not override approved Stage 5 group rules, Test-only access, reviewed forward-only migration requirements, or the ban on direct pushes/merges to `main`. It does not authorize resetting or deleting Test.
+- **Data/API implications:** Test metadata shows eligible nonmembers may read an active group row, but the current `group_memberships` SELECT policy does not expose the full roster to nonmembers. Member-list/profile access therefore needs a backend-enforced audience contract and reviewed RLS change; the audience conflict must be resolved first. Test has no chat or recruitment-post tables/APIs, so Jeffery must document and review any proposed migration/RPC design before changes. Pending users must not reach chat before active membership. Former members' chat access is read-only while the group record exists. The lead selected sender-owned message editing, but whether a former member may edit their own old messages remains unresolved. Recruitment-post Apply must reuse the existing join-request flow and preserve first-pending-action-wins and leader-only review. No Test changes are made by these decisions.
+- **Unresolved questions before implementation:** (1) The profile audience answer is internally unclear: does “any signed-in CityLink student” mean every authenticated student, or did the lead mean only current-term coursemates? (2) Does a sender's edit permission end when they leave or are removed, so former members remain strictly read-only, or may former members still edit their own old messages? Jeffery is authorized to resolve these two points and record the exact outcomes.
+- **Next step:** The project lead attempted to hand off the decision authority through the Manus Tasks tool, but `list_tasks` returned `permission_denied`; the Jeffery task ID could not be verified and no task message was sent. Until Jeffery receives the delegated decisions and resolves the two open points, do not start implementation or change Test. After resolution, update this record and proceed on Jeffery's assigned feature branch.
+
+### 2026-11-14 — First pending group action wins
+
+- **Status:** Approved.
+- **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
+- **Decision:** For the same student and group, a pending invitation and a pending join request must not coexist. The first pending action remains; reject the later opposite action and show a clear error to the person who attempted it. For example, if the student already has a pending invitation, reject their later join request; if they already have a pending join request, reject a later invitation to that student.
+- **Roles affected:** Project/integration lead; group invitations, creation, and join requests (Roy); QA/live testing/documentation (Eunice).
+- **Data/API implications:** `send_group_invitation` and `request_to_join_group` must reject the opposing pending action atomically and return a conflict that the UI can explain to the actor whose later action was rejected. The 2026-11-17 Role 6 Test-only catalog handoff reports that the current RPC definitions reject opposite pending invitations/requests after acquiring per-course/profile locks; no RPC was invoked and concurrent authenticated runtime behavior was not tested. The definitions are consistent with the approved rule at source level, but race-safety still needs QA. Do not assume a migration is required or unnecessary without reviewing the existing contract and tests. No database change was made by this decision record.
+- **Unresolved questions:** None about the first-action-wins rule. Exact user-facing error wording may be finalized during UI implementation, while preserving the approved meaning.
+
+## Test-only inspection evidence relevant to these decisions
+
+On 2026-11-14, the lead task and Roy's task used the authorized Supabase MCP connection to inspect metadata in disposable Test project `CityLink-Stage5-Test` (`wkzclgmhrtecnpexfesr`) only. Roy's audit found migration-history entries `20261102131343 / 20261102_stage5_groups` and `20261102140927 / 20261102_stage5_course_roster_rpc`; no corresponding migration source exists in the checked-in GitHub repository. Inspections covered public table/column metadata, RLS policies, constraints, indexes, triggers, group RPC definitions, and execute grants. No application rows were read or changed, no migration was applied, and Main was not accessed. Test contains the group tables and RPCs described above. The checked-in GitHub `main` snapshot inspected for this record is `da1351997b7ad2c35fc32e8b599caee45a70a917`; its checked-in schema is not a substitute for the live Test schema.
+
+## Process for future decisions
+
+When behavior, permissions, RLS, API contracts, or database changes are unclear or disputed, stop the affected work and ask the human lead directly in plain language. State the exact question, provide clear options and consequences, and keep asking when the answer is absent or ambiguous. Mark the work blocked; do not implement unresolved behavior. Once answered, record the date, exact decision, human approver, roles affected, data/API implications, and remaining questions here or in the relevant feature handoff.
+
+Decision documentation belongs on the responsible feature branch. Run relevant checks, commit a meaningful local checkpoint, push that feature branch to GitHub, verify the remote branch, and open or update a pull request. Never push directly to `main`, force-push, or merge without lead approval. Tell the lead where the decision is recorded and provide the PR link.
+
+## 2026-11-17 — Stage 6 contract clarification from Jeffery
+
+This is the latest Stage 6 product decision record. It supersedes the profile-audience and chat-message-edit open questions in the earlier partial Stage 6 entry. It does not authorize code changes, schema changes, migrations, or writes to Supabase Test.
+
+**Status.** The product rules below are approved under the project lead's previously recorded Stage 6 delegation to Jeffery. The remaining post-edit question was resolved as option A on 2026-11-17. Implementation remains blocked by the missing Role 6 Test-only schema/RLS/API handoff.
+
+**Human decision-maker.** Jeffery, acting under the delegated Stage 6 decision authority. The project lead's real name remains TBD in the shared roster.
+
+**Task ledger addendum.** Human owner Jeffery; preserve this task's existing Project Lead/Integration base role; add Group Chat and Recruitment Posts without removing prior assignments. `feature/jeffery-group-chat-recruitment` remains a suggestion only and has not been created. This does not replace Roy's group-workflow ownership, Kayk's AI/file scope, or Eunice's QA/documentation scope. The Manus task-management update returned `permission_denied`; this role ledger is recorded here and in the current conversation, not in task metadata.
+
+### Approved decisions
+
+**Profile and member-list audience.** Only eligible students enrolled in the same associated course for the current term may view the permitted group-member list and click through to member profiles. Do not broaden existing profile permissions to every signed-in student. Permitted profile fields are `display_name`, `major`, `year`, `bio`, and `skills`; do not expose account `status`.
+
+**Group-chat access and retention.** Active group members may read and send plain-text messages. Pending invitees and join-requesters have no chat access until membership becomes active. After leaving or removal, former members are read-only: they may read existing history but may not send. Message editing is out of v1 for everyone. History remains available while the group record exists, including archived or abandoned groups. Do not add group deletion or message purging in v1.
+
+**Recruitment-post visibility and author eligibility.** Eligible current-term coursemates may view posts, including eligible nonmembers. A post author must also be an active member of the specific group being advertised; a nonmember may not publish on another group's behalf. The author may edit or close a post while their group membership is active. If the author leaves or is removed, the post auto-closes, becomes read-only, remains visible, and has Apply disabled.
+
+**Moderation and excluded scope.** There is no separate moderator role or reporting/deletion workflow in v1. Attachments, AI features, and extra notifications are also outside this first version.
+
+**Join-request integration.** “Apply to join” must reuse Roy's existing join-request service. It must not directly add a member or duplicate/change Roy's approval rules. Preserve first-pending-action-wins and leader-only join-request review.
+
+**Roles affected.** Project/integration lead; Jeffery (Group Chat and Recruitment Posts); Roy (group creation/management, invitations, and join-request dependency); Eunice (QA/live testing/documentation); Kayk (AI/files, with attachments excluded from this v1 scope).
+
+### Data/API implications and blockers
+
+Enforce course eligibility, active group membership for post creation, and chat read/send permissions in backend/RLS, not only in the UI. The last documented Test metadata inspection found that the `group_memberships` SELECT policy does not expose the full roster to eligible nonmember coursemates, and found no chat or recruitment-post tables/APIs. Role 6 must inspect the disposable Test schema/RLS/functions and provide the required handoff before any implementation proposal or migration. Use the narrowest backend-enforced access that supports the approved audience; do not broaden profile permissions. No Test schema, RLS, or data changes are authorized by this entry.
+
+**Remaining product questions.** None. On 2026-11-17, Jeffery approved option A: editing ends when the author’s group membership ends; the auto-closed post is read-only, remains visible, and Apply stays disabled.
+
+## 2026-11-17 — Join-request reviewer after leader succession
+
+**Status.** Approved by the CityLink project lead on 2026-11-17 as option B. This resolves the conflict between the project instruction saying “original founder only” and the later current-leader rule recorded above. The current-leader rule supersedes the original-founder-only wording for join-request review.
+
+**Decision.** The current group leader is authorized to review join requests. The leader is identified by `public.study_groups.creator_id`, and when leadership succession transfers that field to an eligible successor, review authority transfers with it. The original founder does not retain exclusive review authority after succession. This is consistent with the approved Stage 5 leader-succession model; do not add an immutable founder identity solely to preserve review authority.
+
+**Human approver.** CityLink project lead (real name not supplied; owner ledger remains TBD).
+
+**Roles affected.** Project/integration lead; Roy (group creation, management, invitations, join requests, and membership); Jeffery (recruitment-post Apply integration); Eunice (QA/live testing/documentation); Role 6/database-security owner.
+
+**Data/API implications.** The review RPC and pending-request visibility policy must authorize only the current `creator_id` holder who remains an active group member, plus the requester reading their own request. Leadership transfer must update `creator_id` so the successor can review; former leaders must not retain review rights through a founder-only exception. The Test handoff reports that the live RPC currently uses `creator_id`, matching this decision. This decision does not authorize any migration, policy change, or Test database write. The separately reported succession tie-break and no-active-member/pending-request cleanup behavior are not changed by this reviewer-authority choice and must follow their own approved records.
+
+**Unresolved questions.** None about who reviews join requests after succession. This decision does not resolve other group-lifecycle edge cases.
+
+**Remaining technical blocker.** Role 6's Test-only handoff is available in [documentation PR #4](https://github.com/minstrel1014/CityLink/pull/4) on `qa/security-workflows`. It reports no CityLink-owned chat or recruitment-post schema/API and identifies profile/classmate audience and field-scope gaps; it does not provide a narrow, approved course-detail roster/group-summary API. No implementation or Test changes may begin until the relevant field-limited contract is reviewed.
+
+## 2026-11-17 — Plan Test-backed course-detail roster for 12 sample students
+
+**Status.** Approved for planning only by the CityLink project lead on 2026-11-17 (choice B). This does not authorize reading student records, changing RLS/grants, adding an API/RPC, writing a migration, implementing the feature, or publishing a changed application version.
+
+**Decision.** Based on the project lead's report that 12 sample student records have been prepared in the disposable Test project, plan an update to the enrolled-course detail page to display those students' names, whether each has a group, the group name when applicable, and the group member count. This is a Test-data display, not permission to expose records to the public internet or broaden profile visibility. Preserve the existing authenticated/enrolled-course page guard; do not add other audiences without a separate explicit decision. The My Courses catalogue remains count-only, and its current sample count/list behavior is not changed by this decision.
+
+**Human approver.** CityLink project lead (real name remains TBD in the role ledger).
+
+**Task/owner ledger.** This planning addendum belongs to the existing Project Lead/Integration task. Preserve that base role and all earlier assignments. The added scope is planning a Test-backed enrolled-course detail roster; an implementation owner has not been assigned and remains TBD.
+
+**Roles affected.** Project/integration lead; Eunice (existing Classmate Discovery and QA/documentation role); Role 6 database-security owner; Roy (group/membership data and any future join-request integration); Jeffery (existing group/recruitment scope where group discovery intersects). Existing role assignments are not replaced.
+
+**Data/API implications.** Role 6's Test-only handoff reports that `list_course_classmates(p_course_id uuid)` filters to the current term and enrolled course but also returns `student_id` and profile `status`, beyond the prior approved profile-field allowlist. The `profiles` SELECT policy is broader than current-term coursemates and does not restrict columns; the `group_memberships` SELECT policy exposes memberships only to active group members or the student's own row. No approved field-limited path for returning the 12 students' group affiliation, group name, and member count has been verified. Do not call these sources or read application rows until a narrow, backend-authorized contract is reviewed. Do not use account `status` as the requested group-affiliation state; these are distinct concepts. Do not introduce a group-size cap or imply that a member count is a capacity.
+
+The currently published course-detail “Request to join” control remains browser-local and does not call Test. The later 2026-11-17 decision below approves a future real request through Roy's existing service once the authorized course/group data path and client contract are reviewed; that future behavior has not been implemented or published.
+
+**Unresolved before implementation.** (1) Role 6/security must provide or approve a field-limited, current-term eligible-coursemate course/group data contract and any separately reviewed migration/RLS/RPC proposal; do not weaken broad profile policies. (2) The project lead must assign an implementation owner; no owner is inferred. The request-button choice is resolved by the follow-up below. Until the data path is approved and an owner is assigned, the work remains blocked. No Test rows were read, and no database, source-code, or deployment change was made by the planning decision.
+
+## 2026-11-17 — Real join-request action for future Test-backed course detail
+
+**Status.** Approved by the CityLink project lead on 2026-11-17 (choice B) as the intended behavior for a future implementation. The live app has not been changed.
+
+**Decision.** Once a field-limited, authorized group-data path is reviewed, the enrolled-course detail page's “Request to join” action should submit through Roy's existing join-request service and the existing Test RPC. Do not insert requests directly from the page, create memberships directly, duplicate Roy's workflow, or change the approval process. Preserve first-pending-action-wins and current-leader-only review.
+
+**Human approver.** CityLink project lead (real name remains TBD in the role ledger).
+
+**Roles affected.** Project/integration lead; Roy (group creation, invitations, join-request service and approval rules); Eunice (Classmate Discovery and QA/documentation); Role 6 (authorized data/API and RLS review).
+
+**Data/API implications.** The page must use a real group ID returned by the approved course/group-summary path and pass it through Roy's existing client service. The action must display pending/already-requested and opposing-pending-action conflict states from that service; it must never approve or directly add the student. This decision does not authorize a new RPC, a profile/group RLS change, direct table writes, a migration, or any Test request until the required data path and client contract are reviewed. The published version remains browser-local until an implementation is completed, tested, and separately published.
+
+**Unresolved before implementation.** Role 6/security must provide or approve a field-limited current-term course/group data contract that supplies only the fields and group ID needed by the page; the implementation owner remains TBD. No code, student rows, or database state were changed by this decision.
+
+## 2026-11-17 — Leader succession edge cases: tie-break and no-active-member outcome
+
+**Status.** Approved by the CityLink project lead (Adam) on 2026-11-17 in the Project Lead/Integration task. This resolves the two questions left open in the 2026-11-14 leader-succession decision above.
+
+**Decision.** When the current leader leaves or is removed and the remaining active members' earliest `joined_at` values are equal, choose the successor by natural ordering: earliest `joined_at`, then membership `created_at`, then membership UUID. No manual intervention is needed for a tie. When no active members remain, the group is dismissed: set `study_groups.status` to `abandoned` and expire its pending invitations and join requests. No new owner or capacity rule is introduced by either choice.
+
+**Human approver.** CityLink project lead (Adam).
+
+**Roles affected.** Project/integration lead; Roy (group creation, management, invitations, join requests and membership); Role 6/database-security owner; Eunice (QA/live testing/documentation); Jeffery (group chat and recruitment posts, where group status is visible).
+
+**Data/API implications.** These rules describe the behavior Role 6 reported from the existing Test helper: successor order `joined_at`, then `created_at`, then `id`, and on no successor, group `abandoned` plus expiry of pending invitations and requests. This entry records the approved product rule; it does not authorize a migration, policy change, reset, or any Test write. QA should confirm the live routines match this rule before the feature is signed off, and report any mismatch to the lead rather than changing routines unilaterally.
+
+**Unresolved questions.** None about these two edge cases. Other group-lifecycle behavior remains governed by the existing approved decisions.
+
+## 2026-11-17 — Stage 5 implementation records merged from PR #2
+
+These records were written on Roy’s `feature/roy-group-workflows` branch. They are preserved here after merging PR #2 into the shared decision log. The abandoned-group wording in the PR #5 integration record has been corrected to the lead’s option A (pending join requests expire).
+
+### 2026-11-15 — Empty-group dismissal and deterministic leader succession
+
+- **Status:** Approved.
+- **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
+- **Decision:** When a group has no remaining active members, dismiss it by setting `study_groups.status = 'abandoned'` and `creator_id = NULL`. Expire its pending group invitations and join requests, recording the transition timestamps. When multiple remaining active members share the earliest `joined_at`, select deterministically by `joined_at ASC`, then `created_at ASC`, then membership `id ASC`.
+- **Roles affected:** Project/integration lead; group creation and management (Roy); group invitations (Roy); join requests and membership (Roy); QA/live testing/documentation (Eunice).
+- **Data/API implications:** Use the existing profile-deletion history trigger function to preserve its anonymization/cancellation behavior while transferring leadership or dismissing empty groups. Add a membership-ending trigger so trusted membership status changes/deletes also transfer the leader or dismiss the empty group atomically. Do not create a new client leave/remove RPC solely to implement succession. If no successor exists, clear the leader, abandon the group, expire pending invitations and requests, and keep all transitions in the same transaction. The selected ordering is explicit because PostgreSQL row order is otherwise undefined.
+- **Unresolved questions:** None for these edge cases. No group capacity or maximum size is approved.
+
+### 2026-11-16 — Public Test demo retains existing course and profile writes
+
+- **Status:** Approved for the separate public demo release only.
+- **Human approver:** CityLink project lead; real human name remains TBD.
+- **Decision:** Keep the existing authenticated `/my-courses` add/remove-own-enrolment controls and `/me` own-profile edit controls available in the public Test-connected demo, alongside the three Stage 5 group workflows. This preserves existing behavior only; it does not authorize additional features or database-policy changes.
+- **Roles affected:** Project/integration lead (human owner TBD); group workflow owner Roy; course-enrollment and profile feature owners (names/roles TBD); QA and documentation owner Eunice.
+- **Data/API implications:** Once the browser client is configured for disposable Test, signed-in users may use the existing own-row `enrolments` insert/delete and `profiles` update flows, plus the existing group RPCs. Existing identity checks and RLS remain the security boundary. This does not authorize anonymous writes, weaker RLS, a service-role key, schema changes, or data seeding. This decision is limited to Test ref `wkzclgmhrtecnpexfesr` and the public demo copy.
+- **Unresolved questions:** Test Auth redirect editing is blocked until an edit-capable account is used; protected Webdev Production values are still pending. Live multi-account behavior tests remain outstanding.
+
+### 2026-11-17 — Course detail invite controls use server-computed eligibility
+
+- **Status:** Approved and applied to disposable Test only on 2026-11-17; the separate public WebDev demo was published on 2026-11-17 as version `2611844d02d6078c37b898df6c4deb6d7e72bf55` at `https://clinkdemo-z7jrfxui.manus.space`. Never apply this migration to Main.
+- **Human approver:** CityLink project lead (real name not supplied); on 2026-11-17 the lead selected the least-privilege eligibility-RPC option and delegated approval for feature/API behavior to Roy.
+- **Decision:** The authenticated course detail page must show an Invite action only when the server identifies the coursemate as eligible. The eligibility response must not expose a group ID, group name, membership role, or membership row. Existing invitation RPCs remain authoritative for changes and for race/conflict checks. Existing invitation authorization remains unchanged: any active member may invite to a forming or active group, and the creator may also invite while a forming group has no active members; the permission is not leader-only for active members.
+- **Roles affected:** Project/integration lead; join-request and membership owner Roy (including the added course-detail/group-invite integration); database security and QA owner (Role 6); QA/live-testing/documentation owner Eunice; group invitation owner Roy.
+- **Data/API contract:** The authenticated course-detail page shows Invite only when the server identifies the coursemate as eligible. The eligibility response contains no group ID, group name, membership role, or membership row. `public.list_course_group_invite_candidates(p_course_id uuid) returns table(profile_id uuid)` is stable, read-only, SECURITY DEFINER with an empty search_path and authenticated-only execute grant. It requires the caller and peer to be enrolled in the selected current-term course, restricts peers to `open` or `considering`, and excludes peers with an active group membership for that course and term. The UI intersects these IDs with `list_course_classmates`; existing invitation RPCs remain authoritative for group-specific conflicts and races. Invitation authorization remains unchanged: any active member may invite to forming or active groups, and the creator may invite before a forming group has active memberships.
+- **Applied migration and verification:** Applied to `CityLink-Stage5-Test` (`wkzclgmhrtecnpexfesr`) as migration `20261117044721 / stage5_course_group_invite_candidates`, after read-only Test schema/RLS/helper review and explicit user instruction. Seven read-only catalog checks passed: exact UUID-only result; stable SECURITY DEFINER/empty search_path; enrolled caller/current-term course; only other open/considering profiles; active course-term membership exclusion; authenticated execute/anon denied; no group/membership data in result. The migration changed no application rows. No Main access occurred.
+- **Unresolved questions:** Signed-in multi-account roster/Invite behavior and mobile viewport rendering remain untested. The public root, unauthenticated detail route, and 14-route manifest were verified in the sandbox browser; no group or invitation mutations were performed during that smoke check.
+
+### 2026-11-17 — Test demo sample roster enrolment
+
+- **Status:** Approved and completed in disposable Test only.
+- **Human approver:** CityLink project lead (real name not supplied).
+- **Decision:** Use the 12 disposable Test Auth accounts supplied for the named sample students and enroll every one in all ten current Test courses. Update each linked profile's display name to the supplied student name. Do not modify other profile fields or repurpose unrelated generic profiles.
+- **Roles affected:** Project/integration lead; join-request and membership owner Roy (including course detail and invitations); database security/QA Role 6; QA/documentation owner Eunice.
+- **Data/API implications:** On 2026-11-17, 12 linked profile display names were updated and 120 missing enrolment rows were inserted with duplicate-safe `ON CONFLICT DO NOTHING`; existing enrolments were preserved. Read-only verification confirmed all 12 sample profiles have all ten course codes: `BUS101`, `BUS220`, `COMM105`, `COMP101`, `COMP203`, `COMP215`, `DATA201`, `DATA310`, `FIN201`, and `MATH120`. The broad all-course roster was explicitly chosen for disposable Test demo data; it should not be represented as actual university registration. No passwords, Auth UUIDs, or secret keys are included in the repository documentation.
+- **Unresolved questions:** Functional invitation tests with account-owner sign-in remain outstanding. Public deployment is complete; GitHub PR #2 remains open and unmerged.
+
+### 2026-11-17 — My Courses counts and two-view course detail
+
+- **Status:** Product/API defaults approved for implementation by the CityLink project lead on 2026-11-17 (“Approve all defaults”). Any new migration requires Role 6 review and separate explicit lead approval before applying it to disposable Test.
+- **Human approver:** CityLink project lead; real name remains TBD.
+- **Decision:** Use the authenticated `/my-courses` page—the browse/add catalogue—for real current-term Test enrollment counts. Leave the fictional `/courses` catalogue and `/demo` routes unchanged. Split authenticated course detail into a first “My Group” view and a second coursemate list. The first view shows only the signed-in student's own group, active members, current leader, outgoing invitation statuses, pending cancellation, and group rename by the current leader. A no-group state offers the existing first-invitation group-creation flow and a link to request to join an active group. The second view splits coursemates into “In a group” and “Looking for a group,” shows group name/size/status, links to coursemate portfolios, and offers the existing join-request or Invite actions as applicable.
+- **Roles affected:** Role 5 (Join-Request and Membership base role with added course-detail, group creation and invitation work), Role 6 (Test schema/RLS review), and Project/Integration Lead.
+- **Data/API implications:** Counts use a narrow authenticated RPC that returns only current-term course IDs and totals, not student IDs. The peer-summary RPC returns only peer ID, group ID/name/status/size to an enrolled coursemate, with no other member IDs/names or private invitation/request rows. Group size is active memberships plus the forming group's creator if the creator is not already an active member. Portfolios use only the existing coursemate-visible profile fields. Group rename is a separate current-leader-authorized RPC; no direct table-update grant is added. Existing invitation/review authorization, first-pending-action conflicts, unlimited group size, authentication, profiles, and enrolment rules remain unchanged.
+- **Migration gate:** The proposed exact SQL and catalog regression require Role 6 review, then separate explicit lead approval before any Test application. Never apply to Main or reset/delete Test.
+- **Unresolved product questions:** None in the approved defaults. For this exact migration, Role 6 review and separate lead approval were confirmed, and Test-only application completed on 2026-11-17; signed-in multi-account UI verification remains pending.
+
+### 2026-11-17 — Migration application and verification
+
+- **Human approval:** On 2026-11-17, the CityLink lead confirmed that Role 6 reviewed the exact migration and explicitly approved Test-only application. The lead's real name and Role 6 reviewer name remain TBD.
+- **Roles affected:** Role 5 (Join-Request and Membership base role; human owner TBD) and Role 6 (database security and QA).
+- **Application:** `supabase/migrations/20261117205600_stage5_course_detail_group_views.sql` was applied successfully through Supabase MCP at 21:37 +08:00 to `CityLink-Stage5-Test`, ref `wkzclgmhrtecnpexfesr`, under migration name `stage5_course_detail_group_views`. Main was not accessed; Test was not reset or deleted; no application rows were changed by applying the migration.
+- **Verification:** The checked-in `supabase/tests/stage5_course_detail_group_views_catalog.sql` completed without an exception. Post-application checks confirmed the three reviewed signatures; authenticated execute is granted and anon execute is denied; each function has an empty `search_path`; the two read RPCs are `STABLE SECURITY DEFINER`. RLS remained enabled on all seven relevant tables and their policy count remained 10. Preflight data showed current term `2026-Fall`, 10 courses, 132 enrolments in total (12–18 per course).
+- **Unresolved questions and next steps:** No product questions remain. Signed-in multi-account and mobile verification is still needed. This update was not published to the separate WebDev demo; its prior public version remains unchanged.
+
+### 2026-11-17 — PR #5 join-request integration: succession, abandonment, shared RPC reuse
+
+- **Status:** Approved as the forward integration contract. This decision does not prepare, apply, or authorize a database migration. Any migration still requires Role 6 review and separate explicit lead approval before Test application.
+- **Human approver:** Role 5 owner (Roy role; real name TBD), using the lead-delegated authority for feature/API behavior; the CityLink project lead’s real name remains TBD. The decision was confirmed in the Role 5 task on 2026-11-17 (“No objections from my side”).
+- **Decision:** The team accepts Jeffery’s PR #5 approach for the join-request integration points:
+  1. Reaffirm the existing succession model. The current group leader is the active student named by `study_groups.creator_id`. If that leader leaves, is removed, or becomes unavailable, the earliest-joined remaining active member becomes the leader using the approved `joined_at ASC`, then `created_at ASC`, then membership `id ASC` order, and inherits join-request review authority. This matches the 2026-11-14 and 2026-11-15 decisions; no separate leader column or immutable-founder record is added.
+  2. When a group is abandoned, its pending group invitations **and** pending join requests expire (`expired`), matching the lead’s 2026-11-17 leader-succession edge-case decision above. The earlier suggestion to mark join requests `cancelled` was not adopted. The applied Test Stage 5 behavior already uses `expired`, so no forward migration is needed for this rule; Jeffery’s PR #5 proposal SQL must change its abandonment path from `cancelled` to `expired` before any migration review.
+  3. PR #5 must integrate with Role 5’s existing group RPCs. “Apply to join” must keep using `requestToJoinGroup` / `request_to_join_group`; it must not add a second join-request service or insert `group_memberships` directly. The existing first-pending-action-wins rule remains authoritative.
+- **Roles affected:** Role 5 (join-request and membership; Roy role), Role 6 (database security and migration review), Jeffery (PR #5 implementation), Project/Integration Lead, and QA/documentation (Eunice).
+- **Data/API implications:** No schema change is required. `group_join_requests.status` already supports `cancelled`; the abandonment path sets `cancelled_at`. `study_groups.creator_id` remains the current-leader reference used by `review_group_join_request`. UI copy, service error handling, and tests must treat `cancelled` as the abandoned-group outcome rather than `expired`. Current Test behavior is unchanged until a future migration is applied. PR #5’s copied `supabaseGroups.ts` contains matching join-request wrappers but is not byte-identical to Role 5’s current file; integration must preserve newer Role 5 additions instead of overwriting them.
+- **Unresolved technical details:** Confirm that PR #5’s `private.maybe_abandon_empty_forming_group` is actually invoked by the existing membership/group lifecycle or wire it explicitly; decide whether `reviewed_at`/`reviewed_by` should also be set when abandonment cancels requests (PR #5 currently sets only `cancelled_at`); and verify trigger ordering, transaction behavior, grants, and RLS with Role 6 before any migration. These are implementation review items, not approval to change Test.
+- **References:** [PR #5](https://github.com/minstrel1014/CityLink/pull/5) and [PR #2](https://github.com/minstrel1014/CityLink/pull/2).
+
+**Lead clarification (2026-11-17, option A).** The CityLink project lead (Adam) resolved the conflict between this section’s earlier `cancelled` wording and the 2026-11-17 edge-case decision: abandoned-group pending join requests **expire**, not cancel. Pending invitations also expire. This correction applies to documentation and to Jeffery’s still-unreviewed PR #5 SQL proposal; it authorizes no database change.

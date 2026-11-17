@@ -11,6 +11,20 @@ export interface GroupCoursePeer {
   status: "open" | "considering" | "full";
 }
 
+export interface CourseGroupSummary {
+  profile_id: string;
+  group_id: string;
+  group_name: string;
+  group_status: "forming" | "active";
+  group_size: number;
+}
+
+export interface OwnCourseProfile {
+  id: string;
+  display_name: string;
+  status: "open" | "considering" | "full";
+}
+
 export interface StudyGroupRow {
   id: string;
   course_id: string;
@@ -147,6 +161,138 @@ export function mapCourseInviteCandidateIds(value: unknown): string[] {
   return [...profileIds];
 }
 
+export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The coursemate group-summary response is invalid.");
+  }
+
+  const byProfile = new Map<string, CourseGroupSummary>();
+  for (const candidate of value) {
+    if (
+      !isRecord(candidate) ||
+      Object.keys(candidate).some(
+        key =>
+          ![
+            "profile_id",
+            "group_id",
+            "group_name",
+            "group_status",
+            "group_size",
+          ].includes(key)
+      )
+    ) {
+      throw new Error("The coursemate group-summary response is invalid.");
+    }
+    const profileId = requiredString(candidate, "profile_id");
+    const groupId = requiredString(candidate, "group_id");
+    const groupName = candidate.group_name;
+    const groupStatus = candidate.group_status;
+    const rawGroupSize = candidate.group_size;
+    const groupSize =
+      typeof rawGroupSize === "number"
+        ? rawGroupSize
+        : typeof rawGroupSize === "string" && /^\d+$/.test(rawGroupSize)
+          ? Number(rawGroupSize)
+          : Number.NaN;
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        profileId
+      ) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        groupId
+      ) ||
+      typeof groupName !== "string" ||
+      (groupStatus !== "forming" && groupStatus !== "active") ||
+      !Number.isSafeInteger(groupSize) ||
+      groupSize < 1 ||
+      byProfile.has(profileId)
+    ) {
+      throw new Error(
+        "The coursemate group-summary response contains invalid data."
+      );
+    }
+    byProfile.set(profileId, {
+      profile_id: profileId,
+      group_id: groupId,
+      group_name: groupName,
+      group_status: groupStatus,
+      group_size: groupSize,
+    });
+  }
+  return [...byProfile.values()];
+}
+
+export function mapOwnCourseProfile(
+  value: unknown,
+  expectedUserId: string
+): OwnCourseProfile {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some(
+      key => !["id", "display_name", "status"].includes(key)
+    )
+  ) {
+    throw new Error("Your course profile response is invalid.");
+  }
+  const id = requiredString(value, "id");
+  const displayName = requiredString(value, "display_name");
+  const status = value.status;
+  if (
+    id !== expectedUserId ||
+    (status !== "open" && status !== "considering" && status !== "full")
+  ) {
+    throw new Error(
+      "Your course profile did not match your signed-in account."
+    );
+  }
+  return { id, display_name: displayName, status };
+}
+
+export function mapActiveGroupMemberships(
+  value: unknown
+): GroupMembershipRow[] {
+  if (!Array.isArray(value)) {
+    throw new Error("The group member list response is invalid.");
+  }
+  return value.map(candidate => {
+    if (
+      !isRecord(candidate) ||
+      Object.keys(candidate).some(
+        key =>
+          ![
+            "id",
+            "group_id",
+            "course_id",
+            "profile_id",
+            "display_name_snapshot",
+            "membership_status",
+            "joined_at",
+          ].includes(key)
+      )
+    ) {
+      throw new Error("The group member list response is invalid.");
+    }
+    const profileId = candidate.profile_id;
+    if (
+      candidate.membership_status !== "active" ||
+      (profileId !== null && typeof profileId !== "string")
+    ) {
+      throw new Error(
+        "The group member list contains invalid membership data."
+      );
+    }
+    return {
+      id: requiredString(candidate, "id"),
+      group_id: requiredString(candidate, "group_id"),
+      course_id: requiredString(candidate, "course_id"),
+      profile_id: profileId,
+      display_name_snapshot: requiredString(candidate, "display_name_snapshot"),
+      membership_status: "active",
+      joined_at: requiredString(candidate, "joined_at"),
+    };
+  });
+}
+
 async function verifyCurrentUser(userId: string) {
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
@@ -185,6 +331,48 @@ export async function listCourseGroupInviteCandidates(
   );
   if (error) throw error;
   return mapCourseInviteCandidateIds(data ?? []);
+}
+
+export async function listCourseGroupSummaries(
+  userId: string,
+  courseId: string
+): Promise<CourseGroupSummary[]> {
+  const client = await verifyCurrentUser(userId);
+  const { data, error } = await client.rpc("list_course_group_summaries", {
+    p_course_id: courseId,
+  });
+  if (error) throw error;
+  return mapCourseGroupSummaries(data ?? []);
+}
+
+export async function loadOwnCourseProfile(
+  userId: string
+): Promise<OwnCourseProfile> {
+  const client = await verifyCurrentUser(userId);
+  const { data, error } = await client
+    .from("profiles")
+    .select("id, display_name, status")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return mapOwnCourseProfile(data, userId);
+}
+
+export async function listActiveGroupMembers(
+  userId: string,
+  groupId: string
+): Promise<GroupMembershipRow[]> {
+  const client = await verifyCurrentUser(userId);
+  const { data, error } = await client
+    .from("group_memberships")
+    .select(
+      "id, group_id, course_id, profile_id, display_name_snapshot, membership_status, joined_at"
+    )
+    .eq("group_id", groupId)
+    .eq("membership_status", "active")
+    .order("joined_at", { ascending: true });
+  if (error) throw error;
+  return mapActiveGroupMemberships(data ?? []);
 }
 
 export async function loadGroupWorkflowSnapshot(
@@ -251,7 +439,8 @@ async function callGroupRpc<T>(
     | "cancel_group_invitation"
     | "request_to_join_group"
     | "review_group_join_request"
-    | "cancel_group_join_request",
+    | "cancel_group_join_request"
+    | "rename_study_group",
   args: Record<string, unknown>
 ): Promise<T> {
   const client = await verifyCurrentUser(userId);
@@ -312,6 +501,23 @@ export function respondToGroupInvitation(
 export function cancelGroupInvitation(userId: string, invitationId: string) {
   return callGroupRpc<void>(userId, "cancel_group_invitation", {
     p_invitation_id: invitationId,
+  });
+}
+
+export function renameStudyGroup(
+  userId: string,
+  groupId: string,
+  name: string
+) {
+  const normalizedName = name.trim();
+  if (!normalizedName || normalizedName.length > 120) {
+    return Promise.reject(
+      new Error("Group names must contain between 1 and 120 characters.")
+    );
+  }
+  return callGroupRpc<void>(userId, "rename_study_group", {
+    p_group_id: groupId,
+    p_name: normalizedName,
   });
 }
 

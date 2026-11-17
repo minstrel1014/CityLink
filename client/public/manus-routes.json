@@ -3,11 +3,24 @@
     { "path": "/", "title": "Demo entry" },
     { "path": "/demo", "title": "Dashboard" },
     { "path": "/courses", "title": "Course directory" },
-    { "path": "/courses/:courseId", "title": "Course classmates" },
+    {
+      "path": "/demo/courses/:courseId",
+      "title": "Fictional course classmates"
+    },
+    { "path": "/courses/:courseId", "title": "Authenticated My Group" },
+    {
+      "path": "/courses/:courseId/classmates",
+      "title": "Authenticated coursemate list"
+    },
+    {
+      "path": "/courses/:courseId/students/:studentId",
+      "title": "Authenticated coursemate portfolio"
+    },
     { "path": "/students/:studentId/:courseId", "title": "Academic profile" },
     { "path": "/invitations", "title": "Invitations" },
     { "path": "/me", "title": "My profile" },
     { "path": "/my-courses", "title": "Authenticated My Courses" },
+    { "path": "/my-groups", "title": "Authenticated group workflows" },
     {
       "path": "/my-courses/:courseId/groups",
       "title": "Study groups and recruitment"

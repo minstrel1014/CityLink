@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Users } from "lucide-react";
 import { Link } from "wouter";
+import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { PageHeading } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
@@ -362,12 +363,12 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                       server when opened.
                     </p>
                     <div className="stage6-card-actions">
-                      <Link
+                      <GroupChatLink
+                        groupId={group.groupId}
                         className="secondary"
-                        href={`/groups/${encodeURIComponent(group.groupId)}/chat`}
                       >
                         Open chat <ArrowRight size={15} />
-                      </Link>
+                      </GroupChatLink>
                       <Link
                         className="secondary"
                         href={`/groups/${encodeURIComponent(group.groupId)}/members`}
