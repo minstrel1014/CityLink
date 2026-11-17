@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { CourseGroupLink } from "@/components/citylink/GroupNavigationLinks";
+import { courseGroupsWorkspacePath } from "@/lib/citylinkNavigation";
 import {
   CourseIcon,
   EmptyState,
@@ -532,7 +533,7 @@ export default function MyCourses() {
                       </button>
                       {enrolled && (
                         <Link
-                          href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
+                          href={courseGroupsWorkspacePath(course.id)}
                           className="course-groups-link"
                         >
                           Groups &amp; posts <ArrowRight size={14} />

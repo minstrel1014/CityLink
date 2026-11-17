@@ -6,6 +6,10 @@ export function courseGroupManagementPath(courseId: string) {
   return `/courses/${encodeURIComponent(courseId)}`;
 }
 
+export function courseGroupsWorkspacePath(courseId: string) {
+  return `/my-courses/${encodeURIComponent(courseId)}/groups`;
+}
+
 export function groupChatPath(groupId: string) {
   return `/groups/${encodeURIComponent(groupId)}/chat`;
 }
