@@ -41,8 +41,18 @@ The authorized read-only metadata check targeted only disposable Test ref `wkzcl
 
 Each RPC returns up to its page-size limit plus a `has_more` boolean on each returned row; it does not return an extra sentinel row. When `has_more` is true, the client sends the last row's cursor values on the next request: post `created_at` + `post_id`; group `group_name` + `group_id`; or member `cursor_joined_at` + `cursor_membership_id`. An empty page means there are no results after that cursor. Cursor IDs are opaque continuation values, not display text or authorization.
 
-## Validation and delivery status
+## Initial validation and delivery status (at the original handoff)
 
 The SQL file is [`docs/proposals/CHAT_RECRUITMENT_MIGRATION_PROPOSAL_V2.sql`](CHAT_RECRUITMENT_MIGRATION_PROPOSAL_V2.sql). It is deliberately under `docs/proposals/`, not `supabase/migrations/`, because it is not yet a reviewed, forward-only migration. Offline parser checks passed: 63 top-level SQL statements, 13 PL/pgSQL function definitions, and 6 SQL-language function bodies parsed. These checks do not resolve live table/column names, grants, policies, function ownership, or execute any SQL. Role 6 and Roy should review database/security changes; Jeffery should review API fields, cursor behavior, and feature behavior. Only after review should a reproducible migration be prepared. Applying it to disposable Test still requires Adam's separate explicit approval. Supabase Main must not be accessed.
 
 The local worktree is on `qa/security-workflows`; local `main` snapshot is `da135199` and the pre-edit worktree was clean. The environment has no Manus Tasks connector or GitHub integration, so this handoff has **not** been sent to Jeffery's task, no branch push was made, and no PR was opened or verified. Share this file and the proposal with Jeffery through the existing task once task messaging is available. No database changes were made.
+
+
+## 2026-11-17 — Adam confirms current-leader review authority (option B)
+
+- **Status:** Explicitly confirmed by Adam, Project/Integration Lead, in this Role 6 task on 2026-11-17. This resolves the conflict raised during migration review and aligns with the latest `docs/team/DECISIONS.md` entry.
+- **Decision:** The current active group leader, identified by `study_groups.creator_id`, may review join requests. When approved leadership succession transfers `creator_id` to a new active leader, join-request review authority transfers too; the former leader loses that authority. This supersedes the earlier original-founder-only wording.
+- **Roles affected:** Adam/project lead; Roy (group membership, succession, join-request review and RLS); Jeffery (Apply integration); Role 6 (database/security/QA). Existing role assignments remain unchanged; Role 6 human owner remains TBD.
+- **Data/API implications:** The review RPC and pending-request visibility policy must enforce the current `creator_id` holder while active, not any active group member and not a historical founder. “Apply to join” still reuses Roy's existing request service/RPC and preserves first-pending-action-wins. When no active members remain, the group becomes abandoned and pending requests are cancelled; pending invitations expire.
+- **Open technical issue:** The approved succession rule selects the earliest-joined remaining active member. The Role 6 proposal adds `created_at`/membership `id` tie-breaks after `joined_at`; Adam has not approved that tie-break. Roy/Role 6 must establish whether the Test schema makes a tie impossible or pause for a separate lead decision. Do not silently encode a new succession rule.
+- **Implementation gate:** This is a product/permission decision, not migration approval. No SQL has been applied. A final reviewed migration and Test-only execution plan still require Adam's separate explicit approval.
