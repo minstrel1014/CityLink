@@ -8,6 +8,7 @@ import {
   getStage6ErrorMessage,
   listCurrentTermGroupMembers,
   type CurrentTermGroupMember,
+  type GroupMemberCursor,
 } from "@/lib/supabaseStage6";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
@@ -19,6 +20,9 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
   const currentUserId = useRef(userId);
   currentUserId.current = userId;
   const [members, setMembers] = useState<CurrentTermGroupMember[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [cursor, setCursor] = useState<GroupMemberCursor | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
@@ -46,12 +50,17 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
       };
     }
     setMembers([]);
+    setHasMore(false);
+    setCursor(null);
+    setLoadingMore(false);
     setState("loading");
     setError("");
     void listCurrentTermGroupMembers(userId, groupId)
       .then(result => {
         if (!isCurrent()) return;
-        setMembers(result);
+        setMembers(result.items);
+        setHasMore(result.hasMore);
+        setCursor(result.nextCursor);
         setState("ready");
       })
       .catch(loadError => {
@@ -70,12 +79,42 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
     };
   }, [groupId, reloadToken, session.status, userId]);
 
+  async function loadMore() {
+    if (!userId || !hasMore || !cursor || loadingMore) return;
+    const expectedGeneration = generation.current;
+    setLoadingMore(true);
+    try {
+      const page = await listCurrentTermGroupMembers(userId, groupId, cursor);
+      if (
+        currentUserId.current !== userId ||
+        generation.current !== expectedGeneration
+      )
+        return;
+      setMembers(previous => {
+        const known = new Set(previous.map(member => member.profileId));
+        return [
+          ...previous,
+          ...page.items.filter(member => !known.has(member.profileId)),
+        ];
+      });
+      setHasMore(page.hasMore);
+      setCursor(page.nextCursor);
+      setError("");
+    } catch (loadError) {
+      if (generation.current === expectedGeneration) {
+        setError(getStage6ErrorMessage(loadError));
+      }
+    } finally {
+      if (generation.current === expectedGeneration) setLoadingMore(false);
+    }
+  }
+
   return (
     <Stage6Layout title="Group members">
       <PageHeading
         eyebrow="CURRENT-TERM GROUP"
         title="Group members"
-        description="The server verifies that you and every listed member are enrolled in the same course for the current term."
+        description="The server limits this roster to the existing any-shared-course audience. The group itself must be in the current term and have at least two active members."
       />
       <div className="stage6-notice" role="note">
         Only the approved profile fields are requested: name, major, year, bio
@@ -94,7 +133,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
           title="You cannot view this member list"
           message={
             error ||
-            "Sign in and confirm that you are an eligible current-term coursemate."
+            "Sign in and confirm that you are eligible under the group’s server-checked audience rules."
           }
         />
       ) : state === "error" ? (
@@ -114,6 +153,11 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
           className="stage6-member-list"
           aria-label="Current active group members"
         >
+          {error && (
+            <p className="stage6-feedback error" role="alert">
+              {error}
+            </p>
+          )}
           {members.map(member => (
             <article className="stage6-member-card" key={member.profileId}>
               <span className="stage6-member-avatar" aria-hidden="true">
@@ -139,6 +183,16 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               </Link>
             </article>
           ))}
+          {hasMore && (
+            <button
+              className="secondary"
+              type="button"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+            >
+              {loadingMore ? "Loading members…" : "Load more members"}
+            </button>
+          )}
         </section>
       )}
     </Stage6Layout>
@@ -211,7 +265,7 @@ export function GroupMemberProfilePage({
   return (
     <Stage6Layout title="Coursemate profile">
       <PageHeading
-        eyebrow="CURRENT-TERM COURSEMATE"
+        eyebrow="GROUP MEMBER PROFILE"
         title="Coursemate profile"
         description="This profile is re-authorized by the server each time it is opened."
       />
@@ -224,7 +278,7 @@ export function GroupMemberProfilePage({
         <Stage6Status
           kind="loading"
           title="Checking profile access…"
-          message="The profile is not opened from the route ID alone; the server checks course and group eligibility again."
+          message="The profile is not opened from the route ID alone; the server rechecks the approved group and shared-course audience."
         />
       ) : !userId || state === "unauthorized" ? (
         <Stage6Status

@@ -176,8 +176,9 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       />
       <div className="stage6-notice" role="note">
         Chat access is checked by the server for this group on every request.
-        Active members can read and send. Former members can read history but
-        cannot send. Pending invitations and join requests do not grant chat
+        Active members can read and send, including in archived groups. Former
+        members can read history but cannot send; abandoned groups are
+        read-only. Pending invitations and join requests do not grant chat
         access.
       </div>
 
@@ -289,8 +290,9 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
             </form>
           ) : (
             <p className="stage6-readonly-note" role="status">
-              This chat is read-only for your account. Former group members may
-              keep reading saved history, but cannot send new messages.
+              This chat is read-only for your account. This can mean
+              former-member history access or an abandoned group; the server
+              decides whether sending is allowed.
             </p>
           )}
         </section>

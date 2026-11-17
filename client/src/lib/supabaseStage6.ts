@@ -1,8 +1,17 @@
 import { supabaseClient } from "@/lib/supabaseClient";
 
 export const CHAT_PAGE_SIZE = 50;
+export const COURSE_GROUPS_PAGE_SIZE = 25;
+export const GROUP_MEMBERS_PAGE_SIZE = 50;
+export const RECRUITMENT_POSTS_PAGE_SIZE = 20;
 export const MAX_CHAT_MESSAGE_LENGTH = 4000;
 export const MAX_RECRUITMENT_POST_LENGTH = 2000;
+
+export interface PageResult<T, C> {
+  items: T[];
+  hasMore: boolean;
+  nextCursor: C | null;
+}
 
 export interface CourseGroupSummary {
   groupId: string;
@@ -10,6 +19,11 @@ export interface CourseGroupSummary {
   status: "forming" | "active";
   activeMemberCount: number;
   canCreatePost: boolean;
+}
+
+export interface CourseGroupCursor {
+  groupName: string;
+  groupId: string;
 }
 
 export interface GroupChatAccess {
@@ -36,6 +50,13 @@ export interface CurrentTermGroupMember {
   year: number;
   bio: string;
   skills: string[];
+  cursorJoinedAt?: string;
+  cursorMembershipId?: string;
+}
+
+export interface GroupMemberCursor {
+  joinedAt: string;
+  membershipId: string;
 }
 
 export interface GroupRecruitmentPost {
@@ -51,6 +72,11 @@ export interface GroupRecruitmentPost {
   closedAt: string | null;
   applyEnabled: boolean;
   canManage: boolean;
+}
+
+export interface RecruitmentPostCursor {
+  createdAt: string;
+  id: string;
 }
 
 type RpcName =
@@ -118,6 +144,15 @@ function parseRows(value: unknown, label: string) {
   });
 }
 
+function pageHasMore(rows: Record<string, unknown>[]) {
+  if (rows.length === 0) return false;
+  const hasMore = requiredBoolean(rows[0], "has_more");
+  if (rows.some(row => row.has_more !== hasMore)) {
+    throw new Error("The Stage 6 page contains inconsistent pagination data.");
+  }
+  return hasMore;
+}
+
 async function authenticatedClient(userId: string) {
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
@@ -139,14 +174,19 @@ async function callRpc<T>(userId: string, name: RpcName, args: object) {
   return data as T;
 }
 
-export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
-  return parseRows(value, "group list").map(row => {
+export function mapCourseGroupSummaries(
+  value: unknown
+): PageResult<CourseGroupSummary, CourseGroupCursor> {
+  const rows = parseRows(value, "group list");
+  const hasMore = pageHasMore(rows);
+  const items = rows.map(row => {
     allowOnlyKeys(row, [
       "group_id",
       "group_name",
       "group_status",
       "active_member_count",
       "can_create_post",
+      "has_more",
     ]);
     const status = row.group_status;
     if (status !== "forming" && status !== "active") {
@@ -155,11 +195,19 @@ export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
     return {
       groupId: requiredString(row, "group_id"),
       groupName: requiredString(row, "group_name"),
-      status,
+      status: status as CourseGroupSummary["status"],
       activeMemberCount: requiredCount(row, "active_member_count"),
       canCreatePost: requiredBoolean(row, "can_create_post"),
     };
   });
+  const last = items.at(-1);
+  return {
+    items,
+    hasMore,
+    nextCursor: last
+      ? { groupName: last.groupName, groupId: last.groupId }
+      : null,
+  };
 }
 
 export function mapGroupChatAccess(value: unknown): GroupChatAccess {
@@ -194,8 +242,10 @@ export function mapGroupChatMessages(value: unknown): GroupChatMessage[] {
 
 export function mapCurrentTermGroupMembers(
   value: unknown
-): CurrentTermGroupMember[] {
-  return parseRows(value, "group member list").map(row => {
+): PageResult<CurrentTermGroupMember, GroupMemberCursor> {
+  const rows = parseRows(value, "group member list");
+  const hasMore = pageHasMore(rows);
+  const items = rows.map(row => {
     allowOnlyKeys(row, [
       "profile_id",
       "display_name",
@@ -203,6 +253,9 @@ export function mapCurrentTermGroupMembers(
       "year",
       "bio",
       "skills",
+      "cursor_joined_at",
+      "cursor_membership_id",
+      "has_more",
     ]);
     const major = nullableString(row, "major");
     const year = Number(row.year);
@@ -224,14 +277,63 @@ export function mapCurrentTermGroupMembers(
       year,
       bio: row.bio,
       skills,
+      cursorJoinedAt: requiredString(row, "cursor_joined_at"),
+      cursorMembershipId: requiredString(row, "cursor_membership_id"),
+    };
+  });
+  const last = items.at(-1);
+  return {
+    items,
+    hasMore,
+    nextCursor:
+      last?.cursorJoinedAt && last.cursorMembershipId
+        ? {
+            joinedAt: last.cursorJoinedAt,
+            membershipId: last.cursorMembershipId,
+          }
+        : null,
+  };
+}
+
+function mapCurrentTermGroupMemberProfiles(value: unknown) {
+  return parseRows(value, "group member profile").map(row => {
+    allowOnlyKeys(row, [
+      "profile_id",
+      "display_name",
+      "major",
+      "year",
+      "bio",
+      "skills",
+    ]);
+    const major = nullableString(row, "major");
+    const year = Number(row.year);
+    if (!Number.isInteger(year) || year < 1 || year > 12) {
+      throw new Error("The member profile contains an invalid study year.");
+    }
+    if (
+      typeof row.bio !== "string" ||
+      !Array.isArray(row.skills) ||
+      !row.skills.every((skill: unknown) => typeof skill === "string")
+    ) {
+      throw new Error("The member profile contains invalid profile details.");
+    }
+    return {
+      profileId: requiredString(row, "profile_id"),
+      displayName: requiredString(row, "display_name"),
+      major,
+      year,
+      bio: row.bio,
+      skills: row.skills as string[],
     };
   });
 }
 
 export function mapGroupRecruitmentPosts(
   value: unknown
-): GroupRecruitmentPost[] {
-  return parseRows(value, "recruitment post list").map(row => {
+): PageResult<GroupRecruitmentPost, RecruitmentPostCursor> {
+  const rows = parseRows(value, "recruitment post list");
+  const hasMore = pageHasMore(rows);
+  const items = rows.map(row => {
     allowOnlyKeys(row, [
       "post_id",
       "group_id",
@@ -245,6 +347,7 @@ export function mapGroupRecruitmentPosts(
       "closed_at",
       "apply_enabled",
       "can_manage",
+      "has_more",
     ]);
     const status = row.post_status;
     if (status !== "open" && status !== "closed") {
@@ -284,7 +387,7 @@ export function mapGroupRecruitmentPosts(
       activeMemberCount: parsedCount,
       authorName: requiredString(row, "author_name"),
       body: requiredString(row, "body"),
-      status,
+      status: status as GroupRecruitmentPost["status"],
       createdAt,
       updatedAt,
       closedAt,
@@ -292,26 +395,40 @@ export function mapGroupRecruitmentPosts(
       canManage: requiredBoolean(row, "can_manage"),
     };
   });
+  const last = items.at(-1);
+  return {
+    items,
+    hasMore,
+    nextCursor: last ? { createdAt: last.createdAt, id: last.id } : null,
+  };
 }
 
 export async function listCurrentTermCourseGroups(
   userId: string,
-  courseId: string
+  courseId: string,
+  after?: CourseGroupCursor
 ) {
   return mapCourseGroupSummaries(
     await callRpc(userId, "list_current_term_course_groups", {
       p_course_id: courseId,
+      p_after_group_name: after?.groupName ?? null,
+      p_after_group_id: after?.groupId ?? null,
+      p_limit: COURSE_GROUPS_PAGE_SIZE,
     })
   );
 }
 
 export async function listCurrentTermGroupMembers(
   userId: string,
-  groupId: string
+  groupId: string,
+  after?: GroupMemberCursor
 ) {
   return mapCurrentTermGroupMembers(
     await callRpc(userId, "list_current_term_group_members", {
       p_group_id: groupId,
+      p_after_joined_at: after?.joinedAt ?? null,
+      p_after_membership_id: after?.membershipId ?? null,
+      p_limit: GROUP_MEMBERS_PAGE_SIZE,
     })
   );
 }
@@ -321,7 +438,7 @@ export async function getCurrentTermGroupMemberProfile(
   groupId: string,
   profileId: string
 ) {
-  const profiles = mapCurrentTermGroupMembers(
+  const profiles = mapCurrentTermGroupMemberProfiles(
     await callRpc(userId, "get_current_term_group_member_profile", {
       p_group_id: groupId,
       p_profile_id: profileId,
@@ -377,11 +494,15 @@ export async function sendGroupChatMessage(
 
 export async function listGroupRecruitmentPosts(
   userId: string,
-  courseId: string
+  courseId: string,
+  after?: RecruitmentPostCursor
 ) {
   return mapGroupRecruitmentPosts(
     await callRpc(userId, "list_group_recruitment_posts", {
       p_course_id: courseId,
+      p_after_created_at: after?.createdAt ?? null,
+      p_after_id: after?.id ?? null,
+      p_limit: RECRUITMENT_POSTS_PAGE_SIZE,
     })
   );
 }

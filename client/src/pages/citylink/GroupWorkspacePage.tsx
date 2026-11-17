@@ -11,8 +11,10 @@ import {
   listCurrentTermCourseGroups,
   listGroupRecruitmentPosts,
   MAX_RECRUITMENT_POST_LENGTH,
+  type CourseGroupCursor,
   type CourseGroupSummary,
   type GroupRecruitmentPost,
+  type RecruitmentPostCursor,
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
@@ -23,8 +25,13 @@ import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 type LoadState = "loading" | "ready" | "error";
 type Snapshot = {
   groups: CourseGroupSummary[];
+  groupsHasMore: boolean;
+  groupsCursor: CourseGroupCursor | null;
   posts: GroupRecruitmentPost[];
+  postsHasMore: boolean;
+  postsCursor: RecruitmentPostCursor | null;
   userId: string;
+  generation: number;
 };
 
 export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
@@ -38,6 +45,8 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [reloadToken, setReloadToken] = useState(0);
   const [feedback, setFeedback] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [groupsPageBusy, setGroupsPageBusy] = useState(false);
+  const [postsPageBusy, setPostsPageBusy] = useState(false);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -75,9 +84,18 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       listCurrentTermCourseGroups(userId, courseId),
       listGroupRecruitmentPosts(userId, courseId),
     ])
-      .then(([groups, posts]) => {
+      .then(([groupsPage, postsPage]) => {
         if (!isCurrent()) return;
-        setSnapshot({ groups, posts, userId });
+        setSnapshot({
+          groups: groupsPage.items,
+          groupsHasMore: groupsPage.hasMore,
+          groupsCursor: groupsPage.nextCursor,
+          posts: postsPage.items,
+          postsHasMore: postsPage.hasMore,
+          postsCursor: postsPage.nextCursor,
+          userId,
+          generation,
+        });
         setState("ready");
       })
       .catch(loadError => {
@@ -94,6 +112,100 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
 
   async function reload() {
     setReloadToken(value => value + 1);
+  }
+
+  async function loadMoreGroups() {
+    if (
+      !userId ||
+      !ownSnapshot?.groupsHasMore ||
+      !ownSnapshot.groupsCursor ||
+      groupsPageBusy
+    )
+      return;
+    setGroupsPageBusy(true);
+    setFeedback("");
+    const expectedGeneration = loadGeneration.current;
+    try {
+      const page = await listCurrentTermCourseGroups(
+        userId,
+        courseId,
+        ownSnapshot.groupsCursor
+      );
+      if (
+        currentUserId.current !== userId ||
+        loadGeneration.current !== expectedGeneration
+      )
+        return;
+      setSnapshot(previous => {
+        if (
+          !previous ||
+          previous.userId !== userId ||
+          previous.generation !== expectedGeneration
+        )
+          return previous;
+        const known = new Set(previous.groups.map(group => group.groupId));
+        return {
+          ...previous,
+          groups: [
+            ...previous.groups,
+            ...page.items.filter(group => !known.has(group.groupId)),
+          ],
+          groupsHasMore: page.hasMore,
+          groupsCursor: page.nextCursor,
+        };
+      });
+    } catch (pageError) {
+      setFeedback(getStage6ErrorMessage(pageError));
+    } finally {
+      setGroupsPageBusy(false);
+    }
+  }
+
+  async function loadMorePosts() {
+    if (
+      !userId ||
+      !ownSnapshot?.postsHasMore ||
+      !ownSnapshot.postsCursor ||
+      postsPageBusy
+    )
+      return;
+    setPostsPageBusy(true);
+    setFeedback("");
+    const expectedGeneration = loadGeneration.current;
+    try {
+      const page = await listGroupRecruitmentPosts(
+        userId,
+        courseId,
+        ownSnapshot.postsCursor
+      );
+      if (
+        currentUserId.current !== userId ||
+        loadGeneration.current !== expectedGeneration
+      )
+        return;
+      setSnapshot(previous => {
+        if (
+          !previous ||
+          previous.userId !== userId ||
+          previous.generation !== expectedGeneration
+        )
+          return previous;
+        const known = new Set(previous.posts.map(post => post.id));
+        return {
+          ...previous,
+          posts: [
+            ...previous.posts,
+            ...page.items.filter(post => !known.has(post.id)),
+          ],
+          postsHasMore: page.hasMore,
+          postsCursor: page.nextCursor,
+        };
+      });
+    } catch (pageError) {
+      setFeedback(getStage6ErrorMessage(pageError));
+    } finally {
+      setPostsPageBusy(false);
+    }
   }
 
   async function applyToJoin(post: GroupRecruitmentPost) {
@@ -179,7 +291,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       <PageHeading
         eyebrow="CURRENT-TERM COURSEMATES"
         title="Study groups and recruitment"
-        description="Browse groups and open posts for this course. The server checks your current-term course eligibility for every request."
+        description="Browse current-term groups and recruitment posts. The server rechecks your eligibility for every request."
       />
       <div className="stage6-notice" role="note">
         These screens use the proposed authenticated Supabase APIs only. No
@@ -229,7 +341,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
               <Stage6Status
                 kind="empty"
                 title="No browseable groups yet"
-                message="This course has no forming or active groups available through the approved current-term API."
+                message="There are no forming or active groups with at least two active members available in this course’s current term. Pending invitations do not count as members."
               />
             ) : (
               <div className="stage6-group-grid">
@@ -323,6 +435,16 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                 ))}
               </div>
             )}
+            {ownSnapshot?.groupsHasMore && (
+              <button
+                className="secondary"
+                type="button"
+                disabled={groupsPageBusy}
+                onClick={() => void loadMoreGroups()}
+              >
+                {groupsPageBusy ? "Loading more groups…" : "Load more groups"}
+              </button>
+            )}
           </section>
 
           <section
@@ -374,7 +496,14 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                     {post.groupId === null && (
                       <p className="stage6-readonly-note">
                         This post remains visible, but its group is not
-                        available for coursemate browsing. Applying is disabled.
+                        available for coursemate browsing. Group details and all
+                        actions are disabled.
+                      </p>
+                    )}
+                    {post.status === "closed" && post.groupId !== null && (
+                      <p className="stage6-readonly-note">
+                        This post is closed. It remains visible, but cannot be
+                        edited, reopened, or applied to.
                       </p>
                     )}
                     {editingPostId === post.id ? (
@@ -464,6 +593,16 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                   </article>
                 ))}
               </div>
+            )}
+            {ownSnapshot?.postsHasMore && (
+              <button
+                className="secondary"
+                type="button"
+                disabled={postsPageBusy}
+                onClick={() => void loadMorePosts()}
+              >
+                {postsPageBusy ? "Loading more posts…" : "Load more posts"}
+              </button>
             )}
           </section>
         </>
