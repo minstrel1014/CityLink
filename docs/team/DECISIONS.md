@@ -92,4 +92,18 @@ Enforce course eligibility, active group membership for post creation, and chat 
 
 **Remaining product questions.** None. On 2026-11-17, Jeffery approved option A: editing ends when the author’s group membership ends; the auto-closed post is read-only, remains visible, and Apply stays disabled.
 
+## 2026-11-17 — Join-request reviewer after leader succession
+
+**Status.** Approved by the CityLink project lead on 2026-11-17 as option B. This resolves the conflict between the project instruction saying “original founder only” and the later current-leader rule recorded above. The current-leader rule supersedes the original-founder-only wording for join-request review.
+
+**Decision.** The current group leader is authorized to review join requests. The leader is identified by `public.study_groups.creator_id`, and when leadership succession transfers that field to an eligible successor, review authority transfers with it. The original founder does not retain exclusive review authority after succession. This is consistent with the approved Stage 5 leader-succession model; do not add an immutable founder identity solely to preserve review authority.
+
+**Human approver.** CityLink project lead (real name not supplied; owner ledger remains TBD).
+
+**Roles affected.** Project/integration lead; Roy (group creation, management, invitations, join requests, and membership); Jeffery (recruitment-post Apply integration); Eunice (QA/live testing/documentation); Role 6/database-security owner.
+
+**Data/API implications.** The review RPC and pending-request visibility policy must authorize only the current `creator_id` holder who remains an active group member, plus the requester reading their own request. Leadership transfer must update `creator_id` so the successor can review; former leaders must not retain review rights through a founder-only exception. The Test handoff reports that the live RPC currently uses `creator_id`, matching this decision. This decision does not authorize any migration, policy change, or Test database write. The separately reported succession tie-break and no-active-member/pending-request cleanup behavior are not changed by this reviewer-authority choice and must follow their own approved records.
+
+**Unresolved questions.** None about who reviews join requests after succession. This decision does not resolve other group-lifecycle edge cases.
+
 **Remaining technical blocker.** The Role 6 Test-only schema/RLS/API handoff is not available in this task/repository. No group-chat or recruitment-post database-dependent implementation may begin until that inspection and its reviewed contract are available.
