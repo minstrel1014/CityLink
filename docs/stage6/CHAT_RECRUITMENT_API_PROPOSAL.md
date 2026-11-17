@@ -4,7 +4,7 @@
 
 ## Owner and scope ledger
 
-Human owner: **Jeffery**. Retain this task’s existing base role, Project Lead/Integration role task. Additional features: **Group Chat** and **Recruitment Posts**. Work remains on `feature/jeffery-group-chat-recruitment`, based on `main` SHA `da1351997b7ad2c35fc32e8b599caee45a70a917`; [PR #5](https://github.com/minstrel1014/CityLink/pull/5) is open and unmerged. The client/service/pages and mocked tests have now been aligned to the v2 pagination and roster audience contract in the same PR branch. Live integration remains blocked on separate technical migration review and Test application approval.
+Human owner: **Jeffery**. Base role retained: **Study-Group Creation and Management Feature Owner**. Additional features: **Group Chat** and **Recruitment Posts**. Work remains on `feature/jeffery-group-chat-recruitment`, based on `main` SHA `da1351997b7ad2c35fc32e8b599caee45a70a917`; [PR #5](https://github.com/minstrel1014/CityLink/pull/5) is open and unmerged. The client/service/pages and mocked tests have now been aligned to the v2 pagination and roster audience contract in the same PR branch. Live integration remains blocked on separate technical migration review and Test application approval.
 
 Scope is limited to the group chat, recruitment posts, and the minimal group/member/profile navigation needed to browse those features. It does not redesign general Classmate Discovery, change Roy’s group creation/invitations/review/request workflow, add AI/files/attachments/notifications/moderation, change group capacity, or broaden direct table access.
 
