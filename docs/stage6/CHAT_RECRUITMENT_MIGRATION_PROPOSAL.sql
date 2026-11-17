@@ -5,6 +5,7 @@
 -- This draft needs SQL-owner review, policy review, and explicit approval.
 -- It intentionally does not alter existing profiles RLS, Roy's group RPCs,
 -- membership/leader succession, group capacity, or direct table write grants.
+-- Approved v1 rule: manually or automatically closed posts are read-only; no reopen RPC.
 
 BEGIN;
 
@@ -160,6 +161,7 @@ AS $function$
         AND e.student_id = (SELECT auth.uid())
        WHERE p.id = p_post_id
          AND p.author_id = (SELECT auth.uid())
+         AND p.status = 'open'
          AND g.status = 'active'
          AND EXISTS (
            SELECT 1 FROM public.group_memberships AS m
