@@ -119,6 +119,7 @@ Group-size display clarification: count active memberships plus the forming grou
 
 ## My Group four-card layout — 2026-11-17
 
+- [x] Commit `d746d12888fecc12715ed91d81dd4271720a5048` is pushed on `feature/roy-my-group-cards`; open [PR #7](https://github.com/minstrel1014/CityLink/pull/7).
 - [x] Separate the group view into four spaced cards: Group name, Current members, Invitation history, and Classmate list.
 - [x] Add an **Open Group Chat** link at the bottom of Current members; it targets the placeholder path `/group-chat`.
 - [x] Add a minimal `/group-chat` placeholder page and route manifest entry without implementing chat.

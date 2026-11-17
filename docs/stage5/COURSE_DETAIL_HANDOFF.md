@@ -123,7 +123,7 @@ Existing PR #2 was updated (not replaced) with the expanded scope, tests, Test-o
 ## My Group card layout update — 2026-11-17 (post-merge)
 
 - **Source base:** GitHub `main` at `525ddc0be59b4b088bc8fd0a67a29c0dfd839fca` (PR #2 merged).
-- **Branch:** `feature/roy-my-group-cards`.
+- **Branch and checkpoint:** `feature/roy-my-group-cards`, commit `d746d12888fecc12715ed91d81dd4271720a5048`; open [PR #7](https://github.com/minstrel1014/CityLink/pull/7).
 - **Scope:** visual-only layout change on `/courses/:courseId`. No API, database, Auth, RLS, invitation, join-request, rename, or cancellation behavior was changed.
 - **Cards:** the group view now uses four separate cards with a 22px desktop gap and 16px mobile gap: Group name, Current members, Invitation history, and Classmate list. The current-members card has an **Open Group Chat** link at its bottom.
 - **Placeholder:** `/group-chat` is a minimal placeholder page and route. It contains no chat logic, messaging API, or Test data access; the actual group chat remains owned by the other teammate.
@@ -131,4 +131,4 @@ Existing PR #2 was updated (not replaced) with the expanded scope, tests, Test-o
 - **Files:** `client/src/pages/citylink/AuthenticatedMyGroup.tsx`, `AuthenticatedMyGroup.css`, `GroupChatPlaceholder.tsx`, `client/src/App.tsx`, and `client/public/manus-routes.json`.
 - **Checks:** `corepack pnpm check` — pass (exit 0); `corepack pnpm test` — pass, 9 files and 67 tests; `corepack pnpm build` — pass, Vite 1,723 modules, exit 0; Prettier and `git diff --check` — pass. Existing OAuth test stderr and the non-module `/api/platform/config.js` Vite warning remain non-fatal.
 - **Not verified:** signed-in visual and mobile rendering with a real Test account, because no account session or password is available in this task. The four-card layout was verified by TypeScript/build checks and source review, not by a signed-in browser screenshot.
-- **Next step:** open a PR from `feature/roy-my-group-cards`, then have an authorized tester confirm the card spacing and the `/group-chat` placeholder on desktop and mobile.
+- **Next step:** review PR #7, then have an authorized tester confirm the card spacing and the `/group-chat` placeholder on desktop and mobile before any merge.
