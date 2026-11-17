@@ -116,3 +116,12 @@ Group-size display clarification: count active memberships plus the forming grou
 - [ ] Prepare a reviewed forward-only migration and catalog/behavior tests for the `cancelled` abandonment status. Do not apply it until Role 6 review and separate explicit lead approval; the current Stage 5 behavior remains `expired`.
 - [ ] Integrate PR #5 with `feature/roy-group-workflows` so the existing group RPCs are present; preserve Role 5’s `supabaseGroups.ts` additions; verify Apply calls `requestToJoinGroup` and never inserts members directly.
 - [ ] Run signed-in multi-account checks for succession review, abandonment cancellation, first-pending-action conflicts, and Apply-to-join.
+
+## My Group four-card layout — 2026-11-17
+
+- [x] Separate the group view into four spaced cards: Group name, Current members, Invitation history, and Classmate list.
+- [x] Add an **Open Group Chat** link at the bottom of Current members; it targets the placeholder path `/group-chat`.
+- [x] Add a minimal `/group-chat` placeholder page and route manifest entry without implementing chat.
+- [x] Preserve group rename, member display, invitation status/cancel, create-group, request-to-join, and full-classmate-list behavior.
+- [x] Run `corepack pnpm check` (pass), `corepack pnpm test` (9 files, 67 tests), `corepack pnpm build` (pass), Prettier, and `git diff --check`.
+- [ ] Signed-in desktop/mobile visual check with an authorized Test account remains outstanding.

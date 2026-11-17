@@ -1,0 +1,369 @@
+.my-group-page .page-heading {
+  margin-bottom: 24px;
+}
+
+.my-group-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  align-items: start;
+  margin-top: 24px;
+}
+
+.my-group-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid #e3e8d9;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 28px #2937220a;
+}
+
+.my-group-invitations-card,
+.my-group-classmates-card,
+.my-group-empty-state {
+  grid-column: 1 / -1;
+}
+
+.my-group-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.my-group-card-eyebrow {
+  margin: 0 0 5px;
+  color: #8b9d73;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.my-group-card-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  color: #2f3a2c;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.35px;
+}
+
+.my-group-card-description {
+  margin: 0 0 16px;
+  color: #829078;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.my-group-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.my-group-card-footer {
+  padding-top: 18px;
+  margin-top: 18px;
+  border-top: 1px solid #edf0e7;
+}
+
+.my-group-card .group-workflow-status {
+  flex: 0 0 auto;
+}
+
+.my-group-chat-link {
+  width: 100%;
+  min-height: 42px;
+  font-size: 12px;
+}
+
+.my-group-name-card .group-name-form {
+  display: grid;
+  gap: 10px;
+}
+
+.my-group-name-card .group-name-form label {
+  color: #68745f;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.my-group-name-card .group-name-form input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #dfe5d6;
+  border-radius: 9px;
+  background: #fff;
+  color: #43513b;
+  font: inherit;
+  font-size: 12px;
+}
+
+.my-group-name-card .group-name-form input:focus {
+  border-color: #a9b99a;
+  outline: 2px solid #b9c9a6;
+  outline-offset: 1px;
+}
+
+.my-group-name-card .group-name-form input:disabled {
+  background: #f6f7f3;
+  color: #8b9583;
+}
+
+.my-group-name-card .group-name-form p {
+  margin: 0;
+  color: #8b9583;
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.my-group-name-card .group-name-form .primary {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.my-group-card .group-member-list,
+.my-group-card .group-invitation-history {
+  display: grid;
+  gap: 10px;
+}
+
+.my-group-card .group-member-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #edf0e8;
+  border-radius: 10px;
+  background: #fcfdfb;
+}
+
+.my-group-card .member-initials {
+  display: grid;
+  flex: 0 0 38px;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eaf0e2;
+  color: #536445;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.my-group-card .group-member-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.my-group-card .group-member-row strong {
+  overflow-wrap: anywhere;
+  color: #3d4a35;
+  font-size: 11px;
+}
+
+.my-group-card .group-member-row span:not(.member-initials) {
+  color: #89947e;
+  font-size: 10px;
+}
+
+.my-group-card .group-invitation-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #edf0e8;
+  border-radius: 10px;
+  background: #fcfdfb;
+}
+
+.my-group-card .group-invitation-row > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.my-group-card .group-invitation-row strong {
+  overflow-wrap: anywhere;
+  color: #3d4a35;
+  font-size: 11px;
+}
+
+.my-group-card .group-invitation-row > div > span {
+  color: #89947e;
+  font-size: 10px;
+}
+
+.my-group-card .group-invitation-row .text-button {
+  color: #7d6b4a;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.my-group-card .group-invitation-row .text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.my-group-classmates-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.my-group-card-icon {
+  display: grid;
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 12px;
+  background: #edf2e7;
+  color: #71885d;
+}
+
+.my-group-rules-note {
+  margin: 0;
+  color: #657456;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.my-group-classmates-link {
+  justify-self: start;
+}
+
+.my-group-empty-state {
+  align-items: flex-start;
+}
+
+.my-group-empty-state .authenticated-courses-state-icon {
+  margin: 0 0 16px;
+}
+
+.my-group-empty-state h2 {
+  margin: 0 0 8px;
+  color: #2f3a2c;
+  font-size: 20px;
+  letter-spacing: -0.4px;
+}
+
+.my-group-empty-state > p {
+  max-width: 620px;
+  margin: 0;
+  color: #829078;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.my-group-empty-state .authenticated-courses-state-actions {
+  justify-content: flex-start;
+  margin-top: 18px;
+}
+
+.my-group-empty-state .first-invite-picker {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 16px;
+  margin-top: 20px;
+  border: 1px solid #e3e8d9;
+  border-radius: 12px;
+  background: #fafbf7;
+}
+
+.my-group-empty-state .first-invite-picker h3 {
+  margin: 0;
+  color: #3d4a35;
+  font-size: 13px;
+}
+
+.my-group-empty-state .first-invite-picker p {
+  margin: 0;
+  color: #829078;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.my-group-empty-state .first-invite-picker label {
+  color: #68745f;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.my-group-empty-state .first-invite-picker select {
+  width: min(390px, 100%);
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid #e2e7d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #43513b;
+  font: inherit;
+  font-size: 11px;
+}
+
+.my-group-empty-state .first-invite-picker .primary {
+  justify-self: start;
+}
+
+@media (max-width: 860px) {
+  .my-group-card-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .my-group-invitations-card,
+  .my-group-classmates-card,
+  .my-group-empty-state {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 560px) {
+  .my-group-card {
+    padding: 18px;
+    border-radius: 14px;
+  }
+
+  .my-group-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .my-group-card .group-invitation-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .my-group-card .group-invitation-row .text-button {
+    justify-self: start;
+  }
+
+  .my-group-chat-link,
+  .my-group-classmates-link {
+    width: 100%;
+  }
+
+  .my-group-empty-state .authenticated-courses-state-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .my-group-empty-state .authenticated-courses-state-actions .primary,
+  .my-group-empty-state .authenticated-courses-state-actions .secondary {
+    width: 100%;
+  }
+}
