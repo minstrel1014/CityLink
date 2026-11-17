@@ -2,7 +2,7 @@
 
 ## Status and owner ledger
 
-- **Status:** Source work is on `feature/roy-group-workflows`. The course detail uses the existing authenticated course directory and course-roster RPC. The read-only invitation-eligibility RPC is a migration proposal for review only; it has **not** been applied to Test. No sample Auth accounts/profiles/enrolments have been created. No PR update, merge, or public deployment is claimed until the checks and remote operations are verified.
+- **Status:** Source work is on `feature/roy-group-workflows`. The course detail uses the existing authenticated course directory and course-roster RPC. The lead-approved read-only invitation-eligibility RPC was applied to disposable Test `wkzclgmhrtecnpexfesr` on 2026-11-17 as migration `20261117044721`; all seven read-only catalog regression checks passed. The requested named sample profiles/course enrolments have not been created; six generic `New CityLink member` profile rows currently exist. The feature branch/PR is updated; no merge or public deployment is claimed.
 - **Human owner:** Roy (as assigned by the lead; base role retained).
 - **Base role:** Join-Request and Membership Feature Owner.
 - **Additional assigned features, retained:** Study group creation/management and invitation workflows; authenticated Test-backed course detail/classmate roster and its Invite entry point (assigned 2026-11-17).
@@ -19,18 +19,18 @@
 
 ## Approved direction and review-only API proposal
 
-On 2026-11-17 the CityLink lead selected the least-privilege eligibility-RPC option for migration review. The exact function SQL remains pending Role 6/lead review; the migration is not applied to Test.
+On 2026-11-17 the CityLink lead selected the least-privilege eligibility-RPC option and explicitly requested that it be applied to Test. After verifying the Test project reference, migration history, relevant tables, RLS and existing helper/RPC definitions, the migration was applied to `wkzclgmhrtecnpexfesr`. Supabase recorded migration version `20261117044721`, name `stage5_course_group_invite_candidates`.
 
 Proposed public RPC: `list_course_group_invite_candidates(p_course_id uuid) returns table(profile_id uuid)`. It is stable, read-only, `SECURITY DEFINER`, and uses an empty `search_path`. Its query requires the caller to be enrolled in the selected course for the current term; only other current-term enrollees whose profile status is `open` or `considering` and who have no active membership for that course/term are returned. It returns only eligible profile UUIDs—no group IDs, group names, membership roles, or membership rows. The UI intersects the result with the already-authorized course-roster RPC response. Existing `create_group_and_invite`/`send_group_invitation` remain authoritative if eligibility changes after the read and for group-specific pending-action conflicts or races.
 
 - Proposed migration: `supabase/migrations/20261117043100_stage5_course_group_invite_candidates.sql`.
 - Read-only catalog regression: `supabase/tests/stage5_course_group_invite_candidates_catalog.sql`.
-- Do not apply the migration to Test without explicit lead approval after review. Never apply it to Main. Do not reset/delete Test.
+- Applied to disposable Test only with the user's explicit instruction. Never apply it to Main. Do not reset/delete Test.
 - A catalog test is not a functional behavior test; disposable two-account checks remain necessary after the approved migration is applied.
 
 ## Sample Test data and public demo blockers
 
-The user requested Chloe Chan, Ethan Lee, Sophie Lam, Ryan Cheung, and other sample students as real Test profiles and course enrolments. These are fictional sample identities, but each `profiles.id` must still correspond to a real Supabase Auth UUID. The exact course-to-student mapping is not specified and the Test catalog codes differ from the old sample fixture. No Auth users or database rows have been created. Before seeding, the lead must identify the approved sample-name set, provide or approve disposable Auth accounts and confirm the per-course roster mapping (or explicitly authorize a course-wide mapping such as every sample student in every current Test course). Do not write fake UUIDs, query `auth.users` through the frontend, or use a service-role key.
+The user requested Chloe Chan, Ethan Lee, Sophie Lam, Ryan Cheung, and other sample students as real Test profiles and course enrolments. These fictional sample identities must each be connected to a genuine disposable Supabase Auth UUID; the six existing Test profiles are generic `New CityLink member` rows, and must not be repurposed without confirmation. No supported Auth-admin user-creation tool is available in this session. The checked-in fictional roster maps students to `IS3100`, `IS2200`, `CB2500`, `IS3230`, `CB2300`, `IS3300`, `MKT3600`, and `CS2300`; Test instead has `BUS101`, `BUS220`, `COMM105`, `COMP101`, `COMP203`, `COMP215`, `DATA201`, `DATA310`, `FIN201`, and `MATH120`. No one-to-one course mapping is defined. Before seeding, obtain disposable Auth accounts (or have an authorized admin provision them) and have the lead specify per-student Test course mappings. Do not write fake UUIDs, query Auth from the frontend, or use a service-role key.
 
 No WebDev project resource or public demo URL is attached to this session; the public GitHub repository has no homepage URL. No replacement site was created and no deployment has been performed. To publish, the lead must identify the existing demo's deployment resource/platform and approve its release path. The feature branch must first pass checks and be reviewed; never push directly to `main` or merge without lead approval.
 
@@ -56,7 +56,7 @@ Verified locally on 2026-11-17:
 - Prettier does not infer a parser for `.sql` files in this project’s installed setup; those two SQL files were not run through Prettier. Their SQL formatting and security semantics require human/Role 6 review.
 - `git diff --check` — **passed after final changes**, exit 0.
 - Route manifest JSON parse — **passed after final changes**; both `/courses/:courseId` and `/demo/courses/:courseId` are present.
-- The Test migration/catalog query — **not run**; migration not approved for application.
+- The Test migration catalog regression — **7/7 checks passed** after apply: UUID-only result/signature; stable SECURITY DEFINER and empty search_path; enrolled caller/current-term requirement; only other open/considering profiles; exclusion of active course-term members; authenticated can execute/anon cannot; no group or membership fields in output. No application rows were read or written by the migration.
 - Authenticated two-account course-roster and invite tests — **not run**; approved disposable accounts/mapping and migration approval are outstanding.
 - Browser/mobile visual review — **not run**; no attached Preview project/browser.
 
@@ -75,6 +75,6 @@ Build warnings are not build failures. Do not count a test/build/formatter comma
 ## Assumptions and known issues
 
 - The course directory and roster RPC are the existing approved source of database-backed details; the UI does not invent course or profile fields.
-- Invitation eligibility is intentionally checked by a read-only server RPC, but the exact migration SQL is still pending Role 6 and lead review and has not been applied.
+- Invitation eligibility is checked by the read-only `list_course_group_invite_candidates` RPC now applied to disposable Test; the seven catalog checks passed. Functional two-account checks are still outstanding.
 - The old sample demo remains fictional; its course detail is moved to `/demo/courses/:courseId`.
 - Test records, invite outcomes, and public release are not complete. No live Test writes, schema changes, merge, or deployment were performed in this handoff.
