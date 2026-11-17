@@ -15,7 +15,7 @@
 
 ## Recorded decisions for proposal v2
 
-1. Preserve the current Test `profiles` read audience: authenticated users may read profiles of people sharing any course, without a current-term filter. New member-list RPCs follow that same any-shared-course audience, but return only the approved fields: `display_name`, `major`, `year`, `bio`, and `skills`. Do not add `student_id` or account `status` to the new RPC result. Existing direct profile-table access is unchanged.
+1. Preserve the current Test `profiles` read audience: authenticated users may read profiles of people sharing any course, without a current-term filter. New member-list RPCs follow that same any-shared-course audience, returning `profile_id` only as a non-display selector, the approved profile fields `display_name`, `major`, `year`, `bio`, and `skills`, and required pagination metadata. Do not add `student_id` or account `status` to the new RPC result. Existing direct profile-table access is unchanged.
 2. Course-detail group discovery shows only groups with at least two actual active membership rows. Pending invitations are not members and do not count. Existing creator/recipient access needed to manage their own forming-group invitation is not removed by this listing rule.
 3. Group chat is private to the group. Active members may read and send; former members may read history only; pending invitees and join requesters have no chat access. Sending is blocked for an `abandoned` group. Active members may still send in an `archived` group; only abandoned status freezes chat.
 4. Recruitment posts for archived or abandoned groups remain readable but have no Apply/edit/close interaction. Proposal v2 closes open posts when the group changes to either status and disables management/application RPC results.
@@ -23,7 +23,7 @@
 6. Use RPC-only access for new chat/post tables: no direct browser table grants or direct SELECT policies. RPCs must authorize each caller; private helpers are not browser API entry points.
 7. Preserve the current-leader review rule. If a membership-ending event leaves no active members, the group becomes `abandoned` (including when its last active member leaves an archived group); pending join requests become `cancelled` (not `expired`). Pending group invitations retain the existing `expired` behavior in proposal v2. This requires updating Roy's existing membership-end and empty-forming-group functions and coordinating those changes with Roy.
 8. Pagination defaults: recruitment posts 20 rows, course-detail groups 25, member list 50; maximum 100 per call. These are page sizes, not a group-size cap. Keyset cursors and a `has_more` flag are included.
-9. UUIDs are identifiers passed to RPCs, not secrets or permissions. Every RPC must authorize regardless of whether a caller knows an identifier.
+9. Adam approved group UUID and profile UUID as non-display RPC selectors. They are identifiers, not secrets or permissions; every RPC must authorize regardless of whether a caller knows an identifier. Pagination cursor UUIDs are continuation values for Jeffery to review as part of the API contract.
 
 ## Test-only evidence checked before drafting
 

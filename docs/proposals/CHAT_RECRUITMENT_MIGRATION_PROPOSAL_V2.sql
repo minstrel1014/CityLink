@@ -5,7 +5,8 @@
 -- This proposal has not been applied. Role 6 and Roy must review the SQL and
 -- tests; Adam must separately approve any application to Test.
 -- Preserves the existing broad profiles policy. New member-list RPCs use the
--- same any-shared-course (any term) audience but return only approved fields.
+-- same any-shared-course audience; profile_id is a non-display selector, with
+-- only the approved profile attributes plus pagination metadata returned.
 -- Course-detail group discovery is current-term only and requires >=2 active
 -- members; pending invitations never count as members for that listing.
 -- New chat/post tables are RPC-only (no direct app table grants or RLS policies).
