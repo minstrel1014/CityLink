@@ -6,7 +6,8 @@
 -- text and has neither academic_terms nor citylink_settings, so the five
 -- Stage 5 files cannot run there until this migration is applied first.
 --
--- Current term: the lead approved "2026 sem A" on 2026-11-18. The migration
+-- Current term: the lead approved 2026-Fall on 2026-11-18 (confirmed as the
+-- only semester string on Main). The migration
 -- aborts if no course on Main is linked to that term, so a mismatched string
 -- fails loudly instead of silently misconfiguring current-term checks.
 --
@@ -49,7 +50,7 @@ from public.academic_terms t
 where c.term_id is null and t.code = btrim(c.semester);
 
 insert into public.academic_terms (code)
-values ('2026 sem A')
+values ('2026-Fall')
 on conflict (code) do nothing;
 
 do $$
@@ -61,9 +62,9 @@ begin
     select 1
     from public.courses c
     join public.academic_terms t on t.id = c.term_id
-    where t.code = '2026 sem A'
+    where t.code = '2026-Fall'
   ) then
-    raise exception 'no course is linked to the approved current term 2026 sem A';
+    raise exception 'no course is linked to the approved current term 2026-Fall';
   end if;
 end
 $$;
@@ -83,7 +84,7 @@ create index if not exists courses_term_id_idx
 insert into public.citylink_settings (singleton, current_term_id)
 select true, t.id
 from public.academic_terms t
-where t.code = '2026 sem A'
+where t.code = '2026-Fall'
 on conflict (singleton) do update
   set current_term_id = excluded.current_term_id,
       updated_at = clock_timestamp();

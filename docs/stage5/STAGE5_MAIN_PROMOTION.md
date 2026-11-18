@@ -81,3 +81,8 @@ Main has `courses.semester` but no `term_id`, `academic_terms` or `citylink_sett
 **Apply order on Main:** term model → `20261102131343_stage5_groups` → `20261102140927_stage5_course_roster_rpc` → `20261114163512_..._authority_and_succession` → `20261117043100_..._invite_candidates` → `20261117205600_..._course_detail_group_views`.
 
 **Open decision for the lead:** keep `list_course_classmates` exactly as-is for parity (then tighten before Stage 6 launch), or tighten it now. Tightening now changes the client contract and needs a client update.
+
+## Revision 2026-11-18 (b): real semester string and roster decision
+
+- **Current term corrected to `2026-Fall`.** The lead ran `select distinct semester from public.courses` on Main; the only value is `2026-Fall`. The term-model migration now uses that exact string, so the backfill and the current-term check match Main's data.
+- **Roster decision A recorded.** The lead chose to keep `list_course_classmates` exactly as-is for parity during Main promotion. Removing `student_id` and `status` becomes a follow-up migration **before Stage 6 launch**, together with the matching client update. No client change in this release.
