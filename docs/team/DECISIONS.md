@@ -314,3 +314,16 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Authorization:** apply `20261118050000_stage6_chat_recruitment.sql` to the disposable Test project (ref `wkzclgmhrtecnpexfesr`) only, after Role 6 re-checks the exact file. Conditions: forward-only, one migration, no reset/TRUNCATE, no Main access, stop on error, verification queries after apply; Test data writes or accounts need separate approval.
 - **Role 6 items:** 2 (group-row locks and open-status guards) and 3 (clear creator_id on abandonment) applied; 4 verified (private schema not exposed by PostgREST).
 - **Files:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`, `docs/stage6/STAGE6_TEST_MIGRATION.md`.
+
+## 2026-11-18 — Course people page, private chat, group naming and display names
+
+**Approver:** Adam. **Roles affected:** Roy (groups, naming, management panel), lead (course page, chat entry, display-name gate), Jeffery (recruitment subject and member lists), Eunice (QA).
+
+- Non-members never see an "Open chat" link. Chat remains private: active members read and send, former members read history only.
+- The course page lists existing groups, recruitment posts and coursemates with no group. It never shows the viewer's own group.
+- My Groups hosts the viewer's group, its management panel and the private chat button. Chat stays a separate chat-room page.
+- One active group per student per course (already enforced in the database).
+- Group names are required at creation and at most 50 characters; only the current group leader may rename. Existing unnamed groups prompt their leader to name them.
+- Display names are required before using CityLink, at most 50 characters, editable again without limit for now. Existing accounts on "New CityLink member" are prompted once.
+- Joining a group happens only through recruitment posts. Posts require a subject and body, and show the group's members with links to their profiles.
+- Database changes needed for these rules are drafted in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`; they need Role 6 review and a separate Test authorization before application. No database change has been made.
