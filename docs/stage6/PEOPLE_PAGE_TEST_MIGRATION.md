@@ -112,13 +112,13 @@ Adam asked for the no-group panel to expose one action, “Find your groupmate�
 - `AuthenticatedMyGroup.tsx`: the no-group panel now has one primary **Find your groupmate** link to `/my-courses/:courseId/groups`. The duplicate classmate-list card and the old inline first-invite form were removed from that panel. The old form called the removed two-argument RPC, so keeping it would have produced a runtime error.
 - `GroupWorkspacePage.tsx`: the verified `AuthenticatedCoursePeers` list is embedded at the top of the people page. The old ungrouped-only section and its duplicate RPC request were removed. Groups and recruitment posts remain below the coursemate list.
 - `AuthenticatedCoursePeers.tsx`: added an `embedded` mode that renders the existing coursemate list without repeating the course heading, description and roster notice. Full-page rendering at `/courses/:courseId/classmates` is unchanged.
-- Grouped coursemates now show an **In a group** badge instead of their stale profile status (“Looking for a group”). The card still shows the group name, active member count and status, plus the approved View portfolio link and request action.
+- Grouped coursemates now show an **In a group** badge instead of their stale profile status (“Looking for a group”). The card shows the group name, active member count and status, plus the approved View portfolio and Group details links.
 - `MyCourses.tsx`: the course-card link now reads **Find your groupmate**.
 - Test-only QA cleanup: the two profiles still named “New CityLink member” were identified as the labelled Bob and Cara QA accounts and renamed **Bob QA** and **Cara QA** through a direct Test `profiles` update. No real student data, Main access or secret was involved.
 
 ### Data and permissions
 
-No schema, RPC, RLS or Main change. The embedded list uses the existing field-limited `list_course_classmates`/group-summary responses and the existing people-page profile route. Group cards show private chat only to active members; the embedded list’s request action still calls Roy’s existing `request_to_join_group` path.
+No schema, RPC, RLS or Main change. The embedded list uses the existing field-limited `list_course_classmates`/group-summary responses and the existing people-page profile route. Group cards show private chat only to active members; grouped people cards link to Group details, and joining is only through recruitment posts using Roy’s existing `request_to_join_group` path.
 
 ### Checks and browser results
 
@@ -145,3 +145,15 @@ The embedded roster did not load the full-page `.course-detail-page` selectors, 
 ### Joining only through recruitment posts (same day)
 
 The people/coursemate cards no longer show “Request to join” for a grouped student. A grouped card now links to the group’s member/details page, and the user’s own group shows a disabled “Your group” label. Joining remains available from the recruitment post’s “Apply to join” action, which calls Roy’s existing `request_to_join_group` service. This removes the duplicate direct-join path from the roster; no API or permission change was made.
+
+### Final public release receipt (2026-11-18)
+
+The approved people-page layout and recruitment-post-only join rule are now on the public demo.
+
+- Source PRs merged into GitHub main: #24 (embedded coursemate list and single Find your groupmate action), #25 (embedded card spacing), #26 (current-leader wording), #27 (remove direct people-card joining), #28 (join-request copy points to recruitment posts).
+- Source `origin/main`: `dd80fc9c15ab098707429b1745faa02dd990ff3f`.
+- Manus Webdev main (Auto Publish): `9894c34e0e51828bf86f5a79f8f725822bf676cf`.
+- Live bundle checked: `index-VN34B96y.js`; live page copy and buttons verified on `https://clinkdemo-z7jrfxui.manus.space`.
+- Checks on the final source and synced demo: `pnpm check` passed, `pnpm test` passed 99/99, `pnpm build` / `pnpm build:static` passed, `git diff --check` passed.
+- Live verification: grouped coursemates show **Group details** or **Your group**; no direct **Request to join** appears on people cards; the page says join requests come only from recruitment posts; group cards link to member lists; My Group shows the current-leader rule and the single **Find your groupmate** action.
+- Boundaries: no database, RPC, RLS or Main change in this release. Test-only QA accounts and records remain labelled QA data.
