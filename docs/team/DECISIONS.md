@@ -227,3 +227,14 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **References:** [PR #5](https://github.com/minstrel1014/CityLink/pull/5) and [PR #2](https://github.com/minstrel1014/CityLink/pull/2).
 
 **Lead clarification (2026-11-17, option A).** The CityLink project lead (Adam) resolved the conflict between this section’s earlier `cancelled` wording and the 2026-11-17 edge-case decision: abandoned-group pending join requests **expire**, not cancel. Pending invitations also expire. This correction applies to documentation and to Jeffery’s still-unreviewed PR #5 SQL proposal; it authorizes no database change.
+
+## 2026-11-18 — Stage 6 merge order: PR #5 waits for the shell PR
+
+- **Decision (approved by the project lead, Adam, 2026-11-18):** PR #5 (Jeffery's Stage 6 group chat and recruitment posts) is **not merged yet**. A separate "shell" PR is being built by the repair task and will merge first, because it touches the same areas — `App.tsx` routes and the shared navigation/header — as PR #5.
+- **After the shell PR merges:** Jeffery **merges the latest `main` into `feature/jeffery-group-chat-recruitment`**. He does **not** rebase and does **not** force-push. He resolves conflicts by keeping both sides (the shell's navigation and the Stage 6 routes), re-runs `corepack pnpm check`, `corepack pnpm test` and `corepack pnpm build`, pushes the feature branch, and asks for a fresh review.
+- **Then, in order:** re-review PR #5 and merge it with lead approval → Role 6 reviews the corrected migration draft (abandoned-group join requests now `expired`, recorded in `reviewed_at`; no `expired_at` column exists) → the lead separately approves applying it to the Test project → only after it is applied and tested, sync `main` to the Webdev demo and publish.
+- **Why no rebase:** a rebase rewrites the branch's commits and requires a force-push. The team rules forbid force-push without lead approval, so merging `main` into the feature branch is the safe way to update it.
+- **Roles affected:** Jeffery (PR #5), the repair-task owner (shell PR), the Project/Integration Lead, Role 6 (migration review), and Eunice (QA and demo checks).
+- **Data/API implications:** none. No database change is authorized by this decision. PR #5's SQL stays a proposal under `docs/stage6/`.
+- **Documentation note:** PR #5 also edits this file. When Jeffery merges `main` into his branch, he keeps both entries rather than replacing either one.
+- **Unresolved:** the shell PR number and merge time are not known yet; the exact conflict scope will be confirmed when it lands.
