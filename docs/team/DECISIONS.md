@@ -263,3 +263,11 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Result:** `profiles` 2 rows, `courses` 10 rows, `enrolments` 4 rows, `invitations` 0 rows. Files stored at `/home/ubuntu/backups/main_20261118/` with `data.sql`, per-table JSON, README and SHA256 checksums; all checksums verified.
 - **Scope limits:** `auth.users`, storage objects and schema DDL are not included; the schema is recorded in `supabase/schema.sql` and `supabase/migrations/`.
 - **Handling:** contains real profile rows; restricted permissions, not committed, to be deleted from the sandbox after download.
+
+## 2026-11-18 — Authorization to apply Stage 5 migrations to Main
+
+- **Decision (Adam, project lead, 2026-11-18):** written authorization to apply the approved migration files to Supabase Main ref `pijslbchvstkoweslymr`, under the conditions quoted in the lead's message: verified backup first; only files merged to `main` through approved PRs; one migration at a time through the migration tool with verification after each; no reset/delete, TRUNCATE, unlisted drops, Auth/secret changes, or Test access; stop on failure; report each version, time, result and verification; authorization expires on delivery of the report.
+- **Preconditions met:** logical Main backup completed 2026-11-18 (profiles 2, courses 10, enrolments 4, invitations 0; checksums verified; `/home/ubuntu/backups/main_20261118/`).
+- **Required before execution:** PR #10 merged to `main` so only merged files are executed.
+- **Roles affected:** Project/Integration Lead, Role 6, Eunice (verification), Roy and Jeffery (downstream features).
+- **Data/API implications:** applies six migrations in order (term model, groups, roster RPC, authority, invite candidates, course detail). The term-model migration writes course data.
