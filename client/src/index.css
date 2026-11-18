@@ -4273,3 +4273,55 @@ h4 {
     align-items: stretch;
   }
 }
+
+.display-name-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(31, 39, 30, 0.55);
+}
+.display-name-gate-card {
+  width: min(100%, 440px);
+  padding: 28px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(20, 30, 20, 0.28);
+}
+.display-name-gate-card h1 {
+  margin: 6px 0 10px;
+}
+.display-name-gate-card label {
+  display: block;
+  margin: 18px 0 6px;
+  font-weight: 600;
+}
+.display-name-gate-card input {
+  width: 100%;
+}
+.display-name-gate-card button {
+  margin-top: 16px;
+  width: 100%;
+}
+.display-name-count {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.8rem;
+  color: #5d685c;
+  text-align: right;
+}
+.display-name-gate-card [role="alert"] {
+  color: #a02d20;
+  font-size: 0.9rem;
+}
+.stage6-person-card {
+  text-decoration: none;
+  color: inherit;
+}
+.stage6-post-group {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: #5d685c;
+}

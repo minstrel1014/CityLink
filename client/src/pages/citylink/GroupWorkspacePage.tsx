@@ -9,6 +9,7 @@ import {
   createGroupRecruitmentPost,
   editGroupRecruitmentPost,
   getStage6ErrorMessage,
+  listCourseUngroupedClassmates,
   listCurrentTermCourseGroups,
   listGroupRecruitmentPosts,
   MAX_RECRUITMENT_POST_LENGTH,
@@ -16,6 +17,7 @@ import {
   type CourseGroupSummary,
   type GroupRecruitmentPost,
   type RecruitmentPostCursor,
+  type UngroupedCoursemate,
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
@@ -31,6 +33,7 @@ type Snapshot = {
   posts: GroupRecruitmentPost[];
   postsHasMore: boolean;
   postsCursor: RecruitmentPostCursor | null;
+  ungrouped: UngroupedCoursemate[];
   userId: string;
   generation: number;
 };
@@ -51,6 +54,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [postSubject, setPostSubject] = useState("");
   const loadGeneration = useRef(0);
 
   useEffect(() => {
@@ -84,8 +88,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     void Promise.all([
       listCurrentTermCourseGroups(userId, courseId),
       listGroupRecruitmentPosts(userId, courseId),
+      listCourseUngroupedClassmates(userId, courseId),
     ])
-      .then(([groupsPage, postsPage]) => {
+      .then(([groupsPage, postsPage, ungrouped]) => {
         if (!isCurrent()) return;
         setSnapshot({
           groups: groupsPage.items,
@@ -94,6 +99,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
           posts: postsPage.items,
           postsHasMore: postsPage.hasMore,
           postsCursor: postsPage.nextCursor,
+          ungrouped,
           userId,
           generation,
         });
@@ -231,12 +237,18 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     group: CourseGroupSummary
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim()) return;
+    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
     setBusyAction(`create:${group.groupId}`);
     setFeedback("");
     try {
-      await createGroupRecruitmentPost(userId, group.groupId, draft);
+      await createGroupRecruitmentPost(
+        userId,
+        group.groupId,
+        postSubject,
+        draft
+      );
       setDraft("");
+      setPostSubject("");
       setCreatingGroupId(null);
       setFeedback("Recruitment post created.");
       await reload();
@@ -252,13 +264,14 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     post: GroupRecruitmentPost
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim()) return;
+    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
     setBusyAction(`edit:${post.id}`);
     setFeedback("");
     try {
-      await editGroupRecruitmentPost(userId, post.id, draft);
+      await editGroupRecruitmentPost(userId, post.id, postSubject, draft);
       setEditingPostId(null);
       setDraft("");
+      setPostSubject("");
       setFeedback("Recruitment post updated.");
       await reload();
     } catch (editError) {
@@ -295,9 +308,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
         description="Browse current-term groups and recruitment posts. The server rechecks your eligibility for every request."
       />
       <div className="stage6-notice" role="note">
-        These screens use the proposed authenticated Supabase APIs only. No
-        fictional group or student records are substituted. Apply to join calls
-        Roy’s existing request service; it never adds you directly to a group.
+        These screens use the authenticated Supabase APIs. No fictional group or
+        student records are substituted. Apply to join calls Roy’s existing
+        request service; it never adds you directly to a group.
       </div>
       {feedback && (
         <p className="stage6-feedback" role="status" aria-live="polite">
@@ -382,6 +395,20 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                           className="stage6-post-form"
                           onSubmit={event => void createPost(event, group)}
                         >
+                          <label htmlFor={`new-post-subject-${group.groupId}`}>
+                            Subject
+                          </label>
+                          <input
+                            id={`new-post-subject-${group.groupId}`}
+                            value={postSubject}
+                            maxLength={120}
+                            onChange={event =>
+                              setPostSubject(event.target.value)
+                            }
+                            placeholder="e.g. Looking for a frontend teammate"
+                            required
+                            disabled={busyAction !== null}
+                          />
                           <label htmlFor={`new-post-${group.groupId}`}>
                             Recruitment post
                           </label>
@@ -415,6 +442,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                             onClick={() => {
                               setCreatingGroupId(null);
                               setDraft("");
+                              setPostSubject("");
                             }}
                           >
                             Cancel
@@ -450,6 +478,51 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
 
           <section
             className="stage6-section"
+            aria-labelledby="stage6-people-heading"
+          >
+            <div className="stage6-section-heading">
+              <div>
+                <p className="eyebrow">PEOPLE</p>
+                <h2 id="stage6-people-heading">Coursemates without a group</h2>
+              </div>
+              <span className="stage6-count">
+                {ownSnapshot?.ungrouped.length ?? 0}
+              </span>
+            </div>
+            {!ownSnapshot?.ungrouped.length ? (
+              <Stage6Status
+                kind="empty"
+                title="Everyone has a group"
+                message="No current-term coursemates without a group are visible to you."
+              />
+            ) : (
+              <div className="stage6-group-grid">
+                {ownSnapshot.ungrouped.map(person => (
+                  <Link
+                    className="stage6-group-card stage6-person-card"
+                    key={person.profileId}
+                    href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(person.profileId)}`}
+                  >
+                    <h3>{person.displayName}</h3>
+                    <p className="stage6-group-caption">
+                      {person.major ?? "Major not set"} · Year {person.year}
+                    </p>
+                    {person.skills.length > 0 && (
+                      <p className="stage6-group-caption">
+                        {person.skills.join(", ")}
+                      </p>
+                    )}
+                    <span className="text-link">
+                      View profile <ArrowRight size={14} />
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section
+            className="stage6-section"
             aria-labelledby="stage6-posts-heading"
           >
             <div className="stage6-section-heading">
@@ -476,7 +549,10 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         <span className={`stage6-post-status ${post.status}`}>
                           {post.status === "open" ? "Open" : "Closed"}
                         </span>
-                        <h3>{post.groupName ?? "Group details unavailable"}</h3>
+                        <h3>{post.subject}</h3>
+                        <p className="stage6-post-group">
+                          {post.groupName ?? "Group details unavailable"}
+                        </p>
                         <p>
                           Posted by {post.authorName} ·{" "}
                           {new Date(post.createdAt).toLocaleDateString()}
@@ -512,6 +588,17 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         className="stage6-post-form"
                         onSubmit={event => void savePost(event, post)}
                       >
+                        <label htmlFor={`edit-post-subject-${post.id}`}>
+                          Subject
+                        </label>
+                        <input
+                          id={`edit-post-subject-${post.id}`}
+                          value={postSubject}
+                          maxLength={120}
+                          onChange={event => setPostSubject(event.target.value)}
+                          required
+                          disabled={busyAction !== null}
+                        />
                         <label htmlFor={`edit-post-${post.id}`}>
                           Edit recruitment post
                         </label>
@@ -531,7 +618,11 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                           <button
                             className="primary"
                             type="submit"
-                            disabled={!draft.trim() || busyAction !== null}
+                            disabled={
+                              !draft.trim() ||
+                              !postSubject.trim() ||
+                              busyAction !== null
+                            }
                           >
                             {busyAction === `edit:${post.id}`
                               ? "Saving…"
@@ -544,6 +635,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                           onClick={() => {
                             setEditingPostId(null);
                             setDraft("");
+                            setPostSubject("");
                           }}
                         >
                           Cancel
@@ -559,6 +651,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                               onClick={() => {
                                 setEditingPostId(post.id);
                                 setDraft(post.body);
+                                setPostSubject(post.subject);
                               }}
                             >
                               Edit post

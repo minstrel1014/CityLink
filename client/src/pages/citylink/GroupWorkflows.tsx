@@ -14,6 +14,7 @@ import {
   getGroupWorkflowErrorMessage,
   listCourseGroupPeers,
   loadGroupWorkflowSnapshot,
+  renameStudyGroup,
   requestToJoinGroup,
   respondToGroupInvitation,
   reviewGroupJoinRequest,
@@ -87,6 +88,9 @@ export default function GroupWorkflows() {
   const [peerLoading, setPeerLoading] = useState(false);
   const [peerError, setPeerError] = useState("");
   const [firstInviteeId, setFirstInviteeId] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [renameName, setRenameName] = useState("");
+  const [renameGroupId, setRenameGroupId] = useState("");
   const [existingGroupId, setExistingGroupId] = useState("");
   const [inviteeId, setInviteeId] = useState("");
   const [busyAction, setBusyAction] = useState("");
@@ -221,6 +225,11 @@ export default function GroupWorkflows() {
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
   );
+  const ledGroups = groupsInCourse.filter(
+    group =>
+      group.creator_id === userId &&
+      (activeMembershipGroupIds.has(group.id) || group.status === "forming")
+  );
   const leaderGroupIds = new Set(
     (ownData?.groups.groups ?? [])
       .filter(
@@ -246,6 +255,9 @@ export default function GroupWorkflows() {
     try {
       await action();
       setFeedback({ tone: "success", message: success });
+      setNewGroupName("");
+      setRenameName("");
+      setRenameGroupId("");
       setRetryToken(value => value + 1);
     } catch (error) {
       setFeedback({
@@ -260,9 +272,18 @@ export default function GroupWorkflows() {
   function createGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!userId || !selectedCourseId || !firstInviteeId) return;
+    const name = newGroupName.trim();
+    if (!name || name.length > 50) {
+      setFeedback({
+        tone: "error",
+        message: "Enter a group name between 1 and 50 characters.",
+      });
+      return;
+    }
     void runAction(
       "create",
-      () => createGroupAndInvite(userId, selectedCourseId, firstInviteeId),
+      () =>
+        createGroupAndInvite(userId, selectedCourseId, firstInviteeId, name),
       "Your group is created and the first invitation has been sent."
     );
   }
@@ -323,8 +344,9 @@ export default function GroupWorkflows() {
         />
         <div className="group-workflows-intro" role="note">
           Group size is not limited. Invitations and join requests follow the
-          rule “first pending action wins.” Only the original group creator is
-          approved to review requests; server-side enforcement is under review.
+          rule “first pending action wins.” Only the current group leader
+          reviews join requests; the server enforces this after leader
+          succession.
         </div>
 
         <div className="group-workflows-toolbar">
@@ -406,6 +428,19 @@ export default function GroupWorkflows() {
                 is established by the RPC; the first inviter is its leader.
               </p>
               <form className="group-workflow-form" onSubmit={createGroup}>
+                <label htmlFor="new-group-name">Group name</label>
+                <input
+                  id="new-group-name"
+                  value={newGroupName}
+                  maxLength={50}
+                  onChange={event => setNewGroupName(event.target.value)}
+                  placeholder="e.g. Business Strategy Team"
+                  required
+                  disabled={busyAction !== ""}
+                />
+                <span className="group-workflow-peek">
+                  {newGroupName.trim().length}/50 characters
+                </span>
                 <label htmlFor="first-group-invitee">
                   Choose the first person to invite
                 </label>
@@ -446,7 +481,12 @@ export default function GroupWorkflows() {
                   )}
                 <button
                   className="primary"
-                  disabled={!firstInviteeId || busyAction !== "" || peerLoading}
+                  disabled={
+                    !newGroupName.trim() ||
+                    !firstInviteeId ||
+                    busyAction !== "" ||
+                    peerLoading
+                  }
                 >
                   <Users size={16} />
                   {busyAction === "create"
@@ -455,6 +495,102 @@ export default function GroupWorkflows() {
                 </button>
               </form>
             </section>
+
+            {ledGroups.length > 0 && (
+              <section className="group-workflow-panel wide">
+                <h2>Your group management</h2>
+                <p>
+                  Only the current group leader can rename a group. Names must
+                  be 1–50 characters.
+                </p>
+                <div className="group-workflow-list">
+                  {ledGroups.map(group => (
+                    <article
+                      className="group-workflow-item"
+                      key={`manage-${group.id}`}
+                    >
+                      <div className="group-workflow-item-top">
+                        <div>
+                          <h3>{group.name || "Study group"}</h3>
+                          <p>
+                            {prettyStatus(group.status)} · You are the leader
+                          </p>
+                        </div>
+                        <Link
+                          className="secondary"
+                          href={`/groups/${encodeURIComponent(group.id)}/members`}
+                        >
+                          View members
+                        </Link>
+                      </div>
+                      {renameGroupId === group.id ? (
+                        <form
+                          className="group-workflow-form"
+                          onSubmit={event => {
+                            event.preventDefault();
+                            const name = renameName.trim();
+                            if (!name || name.length > 50) {
+                              setFeedback({
+                                tone: "error",
+                                message:
+                                  "Enter a group name between 1 and 50 characters.",
+                              });
+                              return;
+                            }
+                            void runAction(
+                              `rename-${group.id}`,
+                              () => renameStudyGroup(userId, group.id, name),
+                              "Your group name was updated."
+                            );
+                          }}
+                        >
+                          <label htmlFor={`rename-${group.id}`}>
+                            New group name
+                          </label>
+                          <input
+                            id={`rename-${group.id}`}
+                            value={renameName}
+                            maxLength={50}
+                            onChange={event =>
+                              setRenameName(event.target.value)
+                            }
+                            required
+                          />
+                          <div className="group-workflow-actions">
+                            <button
+                              className="primary"
+                              disabled={busyAction !== "" || !renameName.trim()}
+                            >
+                              {busyAction === `rename-${group.id}`
+                                ? "Saving…"
+                                : "Save name"}
+                            </button>
+                            <button
+                              className="secondary"
+                              type="button"
+                              onClick={() => setRenameGroupId("")}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button
+                          className="secondary"
+                          type="button"
+                          onClick={() => {
+                            setRenameGroupId(group.id);
+                            setRenameName(group.name);
+                          }}
+                        >
+                          Rename group
+                        </button>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section className="group-workflow-panel">
               <h2>Invite someone to your group</h2>
@@ -797,8 +933,8 @@ export default function GroupWorkflows() {
               <h2>Join requests</h2>
               <p>
                 Requests shown depend on current server access rules. Only the
-                original group creator is approved to review requests;
-                server-side enforcement is under review.
+                current group leader may review requests; the server enforces
+                this after leader succession.
               </p>
               <div className="group-workflow-list">
                 {joinRequests.length ? (

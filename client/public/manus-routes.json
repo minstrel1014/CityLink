@@ -1,17 +1,41 @@
 {
   "routes": [
-    { "path": "/", "title": "Sign-in and demo entry" },
-    { "path": "/demo", "title": "Fictional dashboard" },
-    { "path": "/demo/courses", "title": "Fictional course directory" },
-    { "path": "/demo/invitations", "title": "Fictional invitations" },
-    { "path": "/demo/messages", "title": "Fictional messages" },
-    { "path": "/demo/me", "title": "Fictional profile" },
-    { "path": "/demo/about", "title": "About the fictional demo" },
+    {
+      "path": "/",
+      "title": "Sign-in and demo entry"
+    },
+    {
+      "path": "/demo",
+      "title": "Fictional dashboard"
+    },
+    {
+      "path": "/demo/courses",
+      "title": "Fictional course directory"
+    },
+    {
+      "path": "/demo/invitations",
+      "title": "Fictional invitations"
+    },
+    {
+      "path": "/demo/messages",
+      "title": "Fictional messages"
+    },
+    {
+      "path": "/demo/me",
+      "title": "Fictional profile"
+    },
+    {
+      "path": "/demo/about",
+      "title": "About the fictional demo"
+    },
     {
       "path": "/demo/students/:studentId/:courseId",
       "title": "Fictional student profile"
     },
-    { "path": "/dashboard", "title": "Signed-in Test dashboard" },
+    {
+      "path": "/dashboard",
+      "title": "Signed-in Test dashboard"
+    },
     {
       "path": "/courses",
       "title": "Fictional directory or signed-in Test catalogue"
@@ -20,7 +44,10 @@
       "path": "/demo/courses/:courseId",
       "title": "Fictional course classmates"
     },
-    { "path": "/courses/:courseId", "title": "Authenticated My Group" },
+    {
+      "path": "/courses/:courseId",
+      "title": "Authenticated My Group"
+    },
     {
       "path": "/courses/:courseId/classmates",
       "title": "Authenticated coursemate list"
@@ -37,17 +64,34 @@
       "path": "/invitations",
       "title": "Fictional invitations when signed out; read-only Test list when signed in"
     },
-    { "path": "/me", "title": "My profile" },
-    { "path": "/my-courses", "title": "Legacy redirect to /dashboard" },
-    { "path": "/my-groups", "title": "Authenticated group workflows" },
-    { "path": "/my-courses", "title": "Legacy redirect to /dashboard" },
+    {
+      "path": "/me",
+      "title": "My profile"
+    },
+    {
+      "path": "/my-courses",
+      "title": "Legacy redirect to /dashboard"
+    },
+    {
+      "path": "/my-groups",
+      "title": "Authenticated group workflows"
+    },
     {
       "path": "/my-courses/:courseId/groups",
       "title": "Study groups and recruitment"
     },
-    { "path": "/my-groups", "title": "Authenticated group workflows" },
-    { "path": "/group-chat", "title": "Group chat — placeholder" },
-    { "path": "/groups/:groupId/chat", "title": "Authenticated group chat" },
+    {
+      "path": "/group-chat",
+      "title": "Private group chat picker"
+    },
+    {
+      "path": "/my-courses/:courseId/people/:profileId",
+      "title": "Current-term coursemate profile"
+    },
+    {
+      "path": "/groups/:groupId/chat",
+      "title": "Authenticated group chat"
+    },
     {
       "path": "/groups/:groupId/members",
       "title": "Current-term group members"
@@ -60,6 +104,9 @@
       "path": "/messages",
       "title": "Fictional messages when signed out; group-chat list when signed in"
     },
-    { "path": "/about", "title": "Demo status and Supabase Test workflows" }
+    {
+      "path": "/about",
+      "title": "Demo status and Supabase Test workflows"
+    }
   ]
 }

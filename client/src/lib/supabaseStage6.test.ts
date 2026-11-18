@@ -277,6 +277,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
           group_name: "Design team",
           active_member_count: 3,
           author_name: "A Student",
+          subject: "Looking for a teammate",
           body: "Looking for a designer.",
           post_status: "open",
           created_at: "2026-11-17T09:00:00.000Z",
@@ -331,11 +332,20 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
 
     supabaseMocks.rpc.mockResolvedValueOnce({ data: "post-2", error: null });
     await expect(
-      createGroupRecruitmentPost(userId, groupId, "  Need a researcher.  ")
+      createGroupRecruitmentPost(
+        userId,
+        groupId,
+        "  Research teammate  ",
+        "  Need a researcher.  "
+      )
     ).resolves.toBe("post-2");
     expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
       "create_group_recruitment_post",
-      { p_group_id: groupId, p_body: "Need a researcher." }
+      {
+        p_group_id: groupId,
+        p_subject: "Research teammate",
+        p_body: "Need a researcher.",
+      }
     );
   });
 
@@ -348,6 +358,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
           group_name: null,
           active_member_count: null,
           author_name: "A Student",
+          subject: "Looking for a teammate",
           body: "Still looking for a teammate.",
           post_status: "closed",
           created_at: "2026-11-17T09:00:00.000Z",
@@ -409,6 +420,7 @@ describe("unnamed Stage 5 groups", () => {
         group_name: "",
         active_member_count: 3,
         author_name: "A student",
+        subject: "Looking for a teammate",
         body: "Looking for teammates",
         post_status: "open",
         created_at: "2026-11-18T00:00:00Z",

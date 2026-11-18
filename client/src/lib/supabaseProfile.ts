@@ -1,4 +1,5 @@
 import type { GroupStatus } from "@/data/sampleData";
+import { supabaseClient } from "@/lib/supabaseClient";
 
 export const OWN_PROFILE_COLUMNS =
   "id,student_id,display_name,major,year,bio,skills,status";
@@ -15,6 +16,7 @@ export interface OwnProfile {
 }
 
 export interface ProfileEditDraft {
+  displayName: string;
   major: string;
   year: number;
   bio: string;
@@ -56,6 +58,7 @@ export type OwnProfileResult =
 
 const groupStatuses = new Set<GroupStatus>(["open", "considering", "full"]);
 export const MAX_PROFILE_BIO_LENGTH = 2_000;
+export const MAX_DISPLAY_NAME_LENGTH = 50;
 export const MAX_PROFILE_SKILL_COUNT = 10;
 export const MAX_PROFILE_SKILL_LENGTH = 40;
 
@@ -166,4 +169,26 @@ export function getProfileInitials(displayName: string) {
     .map(part => part[0]?.toUpperCase() ?? "")
     .join("");
   return initials || "CL";
+}
+
+export async function updateOwnDisplayName(
+  userId: string,
+  displayName: string
+) {
+  if (!supabaseClient) throw new Error("Supabase is not configured.");
+  const value = displayName.trim();
+  if (!value || value.length > MAX_DISPLAY_NAME_LENGTH) {
+    throw new Error(`Names must be 1-${MAX_DISPLAY_NAME_LENGTH} characters.`);
+  }
+  const { data: userData, error: userError } =
+    await supabaseClient.auth.getUser();
+  if (userError || userData.user?.id !== userId) {
+    throw new Error("Your sign-in could not be verified.");
+  }
+  const { data, error } = await supabaseClient.rpc("update_own_display_name", {
+    p_display_name: value,
+  });
+  if (error) throw error;
+  if (data !== value) throw new Error("Your name was not confirmed.");
+  return value;
 }

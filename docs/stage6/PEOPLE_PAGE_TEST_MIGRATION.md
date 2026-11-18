@@ -40,3 +40,16 @@ No RPC was invoked as a signed-in Test user in this step. Runtime behaviour — 
 1. Client work on the same branch: name gate and profile edit through `update_own_display_name`; group creation form with name; leader rename panel; people page; subject fields; member lists on posts.
 2. `pnpm check`, `pnpm test`, `pnpm build`, then live QA with the QA accounts.
 3. Sync the demo after review. Main only under a new written authorization from Adam.
+
+## Client implementation (same branch)
+
+- `DisplayNameGate` blocks every signed-in page until a real display name is saved through `update_own_display_name`; the profile page can edit the name (1–50 characters).
+- Group creation now requires a 1–50 character name in My Groups; the two quick-invite screens ask for a name before calling the new three-argument RPC.
+- Leaders get a rename panel in My Groups; `rename_study_group` is limited to 1–50 characters in the client.
+- The course people page lists groups, recruitment posts and current-term coursemates without a group; ungrouped profiles open through `get_current_term_coursemate_profile`.
+- Recruitment posts now require a 1–120 character subject; create, edit and list use the new RPC signatures.
+- `pnpm check` passed; `pnpm test` passed 98/98; `pnpm build` passed; `git diff --check` passed.
+
+## Still not verified
+
+Live signed-in QA for the name gate, 50/51 boundaries, leader rename, one-member member list, ungrouped list and subject flows. Main has not received this migration; it still needs a fresh written authorization.

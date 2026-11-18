@@ -25,7 +25,9 @@ import {
   isAuthenticatedProfileOwner,
   isCurrentProfileOperation,
   MAX_PROFILE_BIO_LENGTH,
+  MAX_DISPLAY_NAME_LENGTH,
   OWN_PROFILE_COLUMNS,
+  updateOwnDisplayName,
   type OwnProfile,
   type OwnProfileResult,
   type ProfileEditDraft,
@@ -97,6 +99,7 @@ function ProfileFrame({
 
 function makeDraft(profile: OwnProfile): ProfileEditDraft {
   return {
+    displayName: profile.displayName,
     major: profile.major ?? "",
     year: profile.year,
     bio: profile.bio,
@@ -322,6 +325,9 @@ export default function AuthenticatedProfile({
         return;
       }
 
+      if (draft.displayName.trim() !== (profile?.displayName ?? "")) {
+        await updateOwnDisplayName(saveUserId, draft.displayName);
+      }
       const { data, error } = await supabaseClient
         .from("profiles")
         .update(payload)
@@ -503,12 +509,22 @@ export default function AuthenticatedProfile({
           <div className="info-banner">
             <ShieldCheck size={18} />
             <span>
-              Only major, year, bio, skills, and group-forming status are
-              editable. Supabase RLS checks that this is your own profile.
+              Display name, major, year, bio, skills, and group-forming status
+              are editable. The server checks that this is your own profile.
             </span>
           </div>
           {editing ? (
             <form onSubmit={saveProfile} className="profile-form">
+              <label htmlFor="auth-display-name">Display name</label>
+              <input
+                id="auth-display-name"
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
+                value={draft.displayName}
+                onChange={event =>
+                  setDraft({ ...draft, displayName: event.target.value })
+                }
+                required
+              />
               <label htmlFor="auth-bio">Bio</label>
               <textarea
                 id="auth-bio"

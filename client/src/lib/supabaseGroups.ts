@@ -457,7 +457,8 @@ export interface CreatedGroupAndInvitation {
 export async function createGroupAndInvite(
   userId: string,
   courseId: string,
-  recipientId: string
+  recipientId: string,
+  name: string
 ): Promise<CreatedGroupAndInvitation> {
   const rows = await callGroupRpc<CreatedGroupAndInvitation[]>(
     userId,
@@ -465,6 +466,7 @@ export async function createGroupAndInvite(
     {
       p_course_id: courseId,
       p_recipient_id: recipientId,
+      p_name: name.trim(),
     }
   );
   const created = rows?.[0];
@@ -510,9 +512,9 @@ export function renameStudyGroup(
   name: string
 ) {
   const normalizedName = name.trim();
-  if (!normalizedName || normalizedName.length > 120) {
+  if (!normalizedName || normalizedName.length > 50) {
     return Promise.reject(
-      new Error("Group names must contain between 1 and 120 characters.")
+      new Error("Group names must contain between 1 and 50 characters.")
     );
   }
   return callGroupRpc<void>(userId, "rename_study_group", {

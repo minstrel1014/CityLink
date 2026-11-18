@@ -54,6 +54,24 @@ export interface CurrentTermGroupMember {
   cursorMembershipId?: string;
 }
 
+export interface UngroupedCoursemate {
+  profileId: string;
+  displayName: string;
+  year: number;
+  major: string | null;
+  skills: string[];
+  hasMore: boolean;
+}
+
+export interface CoursemateProfile {
+  profileId: string;
+  displayName: string;
+  major: string | null;
+  year: number;
+  bio: string;
+  skills: string[];
+}
+
 export interface GroupMemberCursor {
   joinedAt: string;
   membershipId: string;
@@ -65,6 +83,7 @@ export interface GroupRecruitmentPost {
   groupName: string | null;
   activeMemberCount: number | null;
   authorName: string;
+  subject: string;
   body: string;
   status: "open" | "closed";
   createdAt: string;
@@ -89,7 +108,9 @@ type RpcName =
   | "list_group_recruitment_posts"
   | "create_group_recruitment_post"
   | "edit_group_recruitment_post"
-  | "close_group_recruitment_post";
+  | "close_group_recruitment_post"
+  | "list_course_ungrouped_classmates"
+  | "get_current_term_coursemate_profile";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -350,6 +371,7 @@ export function mapGroupRecruitmentPosts(
       "group_name",
       "active_member_count",
       "author_name",
+      "subject",
       "body",
       "post_status",
       "created_at",
@@ -400,6 +422,7 @@ export function mapGroupRecruitmentPosts(
       groupName,
       activeMemberCount: parsedCount,
       authorName: requiredString(row, "author_name"),
+      subject: requiredString(row, "subject"),
       body: requiredString(row, "body"),
       status: status as GroupRecruitmentPost["status"],
       createdAt,
@@ -524,9 +547,14 @@ export async function listGroupRecruitmentPosts(
 export async function createGroupRecruitmentPost(
   userId: string,
   groupId: string,
+  subject: string,
   body: string
 ) {
+  const title = subject.trim();
   const text = body.trim();
+  if (!title || title.length > 120) {
+    throw new Error("Subjects must be 1–120 characters.");
+  }
   if (!text || text.length > MAX_RECRUITMENT_POST_LENGTH) {
     throw new Error(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
@@ -534,6 +562,7 @@ export async function createGroupRecruitmentPost(
   }
   const id = await callRpc<unknown>(userId, "create_group_recruitment_post", {
     p_group_id: groupId,
+    p_subject: title,
     p_body: text,
   });
   if (typeof id !== "string" || !id.trim()) {
@@ -545,9 +574,14 @@ export async function createGroupRecruitmentPost(
 export async function editGroupRecruitmentPost(
   userId: string,
   postId: string,
+  subject: string,
   body: string
 ) {
+  const title = subject.trim();
   const text = body.trim();
+  if (!title || title.length > 120) {
+    throw new Error("Subjects must be 1–120 characters.");
+  }
   if (!text || text.length > MAX_RECRUITMENT_POST_LENGTH) {
     throw new Error(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
@@ -555,6 +589,7 @@ export async function editGroupRecruitmentPost(
   }
   await callRpc(userId, "edit_group_recruitment_post", {
     p_post_id: postId,
+    p_subject: title,
     p_body: text,
   });
 }
@@ -594,4 +629,93 @@ export function getStage6ErrorMessage(error: unknown) {
     return "Your sign-in could not be verified. Sign in again before using this feature.";
   }
   return "CityLink could not complete this group operation. No change is confirmed. Check your connection and retry.";
+}
+
+function mapCoursemateProfileRows(value: unknown) {
+  return parseRows(value, "coursemate profile").map(row => {
+    allowOnlyKeys(row, [
+      "profile_id",
+      "display_name",
+      "major",
+      "year",
+      "bio",
+      "skills",
+    ]);
+    const major = nullableString(row, "major");
+    const year = Number(row.year);
+    if (!Number.isInteger(year) || year < 1 || year > 12)
+      throw new Error("The profile contains an invalid study year.");
+    if (
+      typeof row.bio !== "string" ||
+      !Array.isArray(row.skills) ||
+      !row.skills.every(skill => typeof skill === "string")
+    )
+      throw new Error("The profile contains invalid details.");
+    return {
+      profileId: requiredString(row, "profile_id"),
+      displayName: requiredString(row, "display_name"),
+      major,
+      year,
+      bio: row.bio,
+      skills: row.skills as string[],
+    };
+  });
+}
+
+export async function listCourseUngroupedClassmates(
+  userId: string,
+  courseId: string
+): Promise<UngroupedCoursemate[]> {
+  const rows = parseRows(
+    await callRpc(userId, "list_course_ungrouped_classmates", {
+      p_course_id: courseId,
+      p_after_display_name: null,
+      p_after_profile_id: null,
+      p_limit: 100,
+    }),
+    "ungrouped coursemate list"
+  );
+  return rows.map(row => {
+    allowOnlyKeys(row, [
+      "profile_id",
+      "display_name",
+      "year",
+      "major",
+      "skills",
+      "has_more",
+    ]);
+    const major = nullableString(row, "major");
+    const year = Number(row.year);
+    if (!Number.isInteger(year) || year < 1 || year > 12)
+      throw new Error("The coursemate list contains an invalid study year.");
+    if (
+      !Array.isArray(row.skills) ||
+      !row.skills.every(skill => typeof skill === "string")
+    )
+      throw new Error("The coursemate list contains invalid skills.");
+    return {
+      profileId: requiredString(row, "profile_id"),
+      displayName: requiredString(row, "display_name"),
+      year,
+      major,
+      skills: row.skills as string[],
+      hasMore: requiredBoolean(row, "has_more"),
+    };
+  });
+}
+
+export async function getCurrentTermCoursemateProfile(
+  userId: string,
+  courseId: string,
+  profileId: string
+): Promise<CoursemateProfile> {
+  const profiles = mapCoursemateProfileRows(
+    await callRpc(userId, "get_current_term_coursemate_profile", {
+      p_course_id: courseId,
+      p_profile_id: profileId,
+    })
+  );
+  if (profiles.length !== 1 || profiles[0].profileId !== profileId)
+    throw new Error("This coursemate profile is no longer available.");
+  return profiles[0];
 }

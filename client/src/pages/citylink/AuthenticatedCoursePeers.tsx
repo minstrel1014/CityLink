@@ -319,7 +319,16 @@ export default function AuthenticatedCoursePeers({
     setFeedback(null);
     try {
       if (inviteGroups.length === 0) {
-        await createGroupAndInvite(userId, courseId, peer.profile_id);
+        const groupName = window
+          .prompt("Name your new group (1-50 characters):", "Study group")
+          ?.trim();
+        if (!groupName || groupName.length > 50) return;
+        await createGroupAndInvite(
+          userId,
+          courseId,
+          peer.profile_id,
+          groupName
+        );
         setFeedback({
           tone: "success",
           message:

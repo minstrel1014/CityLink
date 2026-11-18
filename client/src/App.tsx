@@ -19,6 +19,7 @@ import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetai
 import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
 import GroupChatPicker from "@/pages/citylink/GroupChatPicker";
 import GroupWorkspacePage from "@/pages/citylink/GroupWorkspacePage";
+import CoursemateProfilePage from "@/pages/citylink/CoursemateProfilePage";
 import GroupChatPage from "@/pages/citylink/GroupChatPage";
 import {
   GroupMemberProfilePage,
@@ -39,6 +40,7 @@ import {
   About,
 } from "@/pages/citylink/Workspace";
 import AppShell from "@/components/citylink/AppShell";
+import DisplayNameGate from "@/components/citylink/DisplayNameGate";
 import { workspaceSessionMode } from "@/lib/workspaceRouteRules";
 
 function ScrollToTop() {
@@ -95,205 +97,215 @@ export default function App() {
           <AppProvider>
             <Toaster position="top-center" richColors closeButton />
             <ScrollToTop />
-            <Switch>
-              <Route path="/" component={Welcome} />
-              <Route path="/demo" component={Dashboard} />
-              <Route path="/demo/courses" component={Courses} />
-              <Route path="/demo/invitations" component={Invitations} />
-              <Route path="/demo/messages" component={Messages} />
-              <Route path="/demo/me" component={DemoMyProfile} />
-              <Route path="/demo/about" component={About} />
-              <Route path="/demo/students/:studentId/:courseId">
-                {params => (
-                  <StudentProfile
-                    studentId={params.studentId}
-                    courseId={params.courseId}
-                  />
-                )}
-              </Route>
-              <Route path="/dashboard">
-                {() => (
-                  <WorkspacePage
-                    title="Dashboard"
-                    renderAuthenticated={() => (
-                      <MyCourses key="dashboard" view="dashboard" embedded />
-                    )}
-                    signedOut={<Welcome />}
-                  />
-                )}
-              </Route>
-              <Route path="/courses">
-                {() => (
-                  <WorkspacePage
-                    title="Courses"
-                    renderAuthenticated={() => (
-                      <MyCourses key="directory" view="directory" embedded />
-                    )}
-                    signedOut={<Courses />}
-                  />
-                )}
-              </Route>
-              <Route path="/demo/courses/:courseId">
-                {params => <Classmates courseId={params.courseId} />}
-              </Route>
-              <Route path="/courses/:courseId/students/:studentId">
-                {params => (
-                  <WorkspacePage
-                    title="Course profile"
-                    renderAuthenticated={() => (
-                      <StudentPortfolio
-                        key={`${params.courseId}:${params.studentId}`}
-                        courseId={params.courseId}
-                        studentId={params.studentId}
-                      />
-                    )}
-                    signedOut={
-                      <StudentPortfolio
-                        key={`${params.courseId}:${params.studentId}`}
-                        courseId={params.courseId}
-                        studentId={params.studentId}
-                      />
-                    }
-                  />
-                )}
-              </Route>
-              <Route path="/courses/:courseId/classmates">
-                {params => (
-                  <WorkspacePage
-                    title="Coursemates"
-                    renderAuthenticated={() => (
-                      <AuthenticatedCourseDetail
-                        key={params.courseId}
-                        courseId={params.courseId}
-                      />
-                    )}
-                    signedOut={
-                      <AuthenticatedCourseDetail
-                        key={params.courseId}
-                        courseId={params.courseId}
-                      />
-                    }
-                  />
-                )}
-              </Route>
-              <Route path="/courses/:courseId">
-                {params => (
-                  <WorkspacePage
-                    title="My group"
-                    renderAuthenticated={() => (
-                      <AuthenticatedMyGroup
-                        key={params.courseId}
-                        courseId={params.courseId}
-                      />
-                    )}
-                    signedOut={
-                      <AuthenticatedMyGroup
-                        key={params.courseId}
-                        courseId={params.courseId}
-                      />
-                    }
-                  />
-                )}
-              </Route>
-              <Route path="/students/:studentId/:courseId">
-                {params => (
-                  <WorkspacePage
-                    title="Course profile"
-                    renderAuthenticated={() => (
-                      <StudentPortfolio
-                        key={`${params.courseId}:${params.studentId}`}
-                        courseId={params.courseId}
-                        studentId={params.studentId}
-                      />
-                    )}
-                    signedOut={
-                      <StudentProfile
-                        studentId={params.studentId}
-                        courseId={params.courseId}
-                      />
-                    }
-                  />
-                )}
-              </Route>
-              <Route path="/invitations">
-                {() => (
-                  <WorkspacePage
-                    title="Invitations"
-                    renderAuthenticated={() => <AuthenticatedInvitations />}
-                    signedOut={<Invitations />}
-                  />
-                )}
-              </Route>
-              <Route path="/me">
-                {() => (
-                  <WorkspacePage
-                    title="My profile"
-                    renderAuthenticated={session => (
-                      <AuthenticatedProfile userId={session.user!.id} />
-                    )}
-                    signedOut={<MyProfile />}
-                  />
-                )}
-              </Route>
-              <Route path="/my-courses/:courseId/groups">
-                {params => <GroupWorkspacePage courseId={params.courseId} />}
-              </Route>
-              <Route path="/groups/:groupId/chat">
-                {params => <GroupChatPage groupId={params.groupId} />}
-              </Route>
-              <Route path="/groups/:groupId/members/:profileId">
-                {params => (
-                  <GroupMemberProfilePage
-                    groupId={params.groupId}
-                    profileId={params.profileId}
-                  />
-                )}
-              </Route>
-              <Route path="/groups/:groupId/members">
-                {params => <GroupMembersPage groupId={params.groupId} />}
-              </Route>
-              <Route path="/my-courses">
-                <Redirect to="/dashboard" replace />
-              </Route>
-              <Route path="/my-groups">
-                {() => (
-                  <WorkspacePage
-                    title="My groups"
-                    renderAuthenticated={() => <GroupWorkflows />}
-                    signedOut={<GroupWorkflows />}
-                  />
-                )}
-              </Route>
-              <Route path="/group-chat">
-                {() => (
-                  <WorkspacePage
-                    title="Group chat"
-                    renderAuthenticated={() => <GroupChatPicker />}
-                    signedOut={<GroupChatPicker />}
-                  />
-                )}
-              </Route>
-              <Route path="/messages">
-                {() => (
-                  <WorkspacePage
-                    title="Messages"
-                    renderAuthenticated={() => <AuthenticatedMessages />}
-                    signedOut={<Messages />}
-                  />
-                )}
-              </Route>
-              <Route path="/about">
-                {() => (
-                  <WorkspacePage
-                    title="About this demo"
-                    renderAuthenticated={() => <AuthenticatedAbout />}
-                    signedOut={<About />}
-                  />
-                )}
-              </Route>
-              <Route path="/404" component={NotFound} />
-              <Route component={NotFound} />
-            </Switch>
+            <DisplayNameGate>
+              <Switch>
+                <Route path="/" component={Welcome} />
+                <Route path="/demo" component={Dashboard} />
+                <Route path="/demo/courses" component={Courses} />
+                <Route path="/demo/invitations" component={Invitations} />
+                <Route path="/demo/messages" component={Messages} />
+                <Route path="/demo/me" component={DemoMyProfile} />
+                <Route path="/demo/about" component={About} />
+                <Route path="/demo/students/:studentId/:courseId">
+                  {params => (
+                    <StudentProfile
+                      studentId={params.studentId}
+                      courseId={params.courseId}
+                    />
+                  )}
+                </Route>
+                <Route path="/dashboard">
+                  {() => (
+                    <WorkspacePage
+                      title="Dashboard"
+                      renderAuthenticated={() => (
+                        <MyCourses key="dashboard" view="dashboard" embedded />
+                      )}
+                      signedOut={<Welcome />}
+                    />
+                  )}
+                </Route>
+                <Route path="/courses">
+                  {() => (
+                    <WorkspacePage
+                      title="Courses"
+                      renderAuthenticated={() => (
+                        <MyCourses key="directory" view="directory" embedded />
+                      )}
+                      signedOut={<Courses />}
+                    />
+                  )}
+                </Route>
+                <Route path="/demo/courses/:courseId">
+                  {params => <Classmates courseId={params.courseId} />}
+                </Route>
+                <Route path="/courses/:courseId/students/:studentId">
+                  {params => (
+                    <WorkspacePage
+                      title="Course profile"
+                      renderAuthenticated={() => (
+                        <StudentPortfolio
+                          key={`${params.courseId}:${params.studentId}`}
+                          courseId={params.courseId}
+                          studentId={params.studentId}
+                        />
+                      )}
+                      signedOut={
+                        <StudentPortfolio
+                          key={`${params.courseId}:${params.studentId}`}
+                          courseId={params.courseId}
+                          studentId={params.studentId}
+                        />
+                      }
+                    />
+                  )}
+                </Route>
+                <Route path="/courses/:courseId/classmates">
+                  {params => (
+                    <WorkspacePage
+                      title="Coursemates"
+                      renderAuthenticated={() => (
+                        <AuthenticatedCourseDetail
+                          key={params.courseId}
+                          courseId={params.courseId}
+                        />
+                      )}
+                      signedOut={
+                        <AuthenticatedCourseDetail
+                          key={params.courseId}
+                          courseId={params.courseId}
+                        />
+                      }
+                    />
+                  )}
+                </Route>
+                <Route path="/courses/:courseId">
+                  {params => (
+                    <WorkspacePage
+                      title="My group"
+                      renderAuthenticated={() => (
+                        <AuthenticatedMyGroup
+                          key={params.courseId}
+                          courseId={params.courseId}
+                        />
+                      )}
+                      signedOut={
+                        <AuthenticatedMyGroup
+                          key={params.courseId}
+                          courseId={params.courseId}
+                        />
+                      }
+                    />
+                  )}
+                </Route>
+                <Route path="/students/:studentId/:courseId">
+                  {params => (
+                    <WorkspacePage
+                      title="Course profile"
+                      renderAuthenticated={() => (
+                        <StudentPortfolio
+                          key={`${params.courseId}:${params.studentId}`}
+                          courseId={params.courseId}
+                          studentId={params.studentId}
+                        />
+                      )}
+                      signedOut={
+                        <StudentProfile
+                          studentId={params.studentId}
+                          courseId={params.courseId}
+                        />
+                      }
+                    />
+                  )}
+                </Route>
+                <Route path="/invitations">
+                  {() => (
+                    <WorkspacePage
+                      title="Invitations"
+                      renderAuthenticated={() => <AuthenticatedInvitations />}
+                      signedOut={<Invitations />}
+                    />
+                  )}
+                </Route>
+                <Route path="/me">
+                  {() => (
+                    <WorkspacePage
+                      title="My profile"
+                      renderAuthenticated={session => (
+                        <AuthenticatedProfile userId={session.user!.id} />
+                      )}
+                      signedOut={<MyProfile />}
+                    />
+                  )}
+                </Route>
+                <Route path="/my-courses/:courseId/groups">
+                  {params => <GroupWorkspacePage courseId={params.courseId} />}
+                </Route>
+                <Route path="/my-courses/:courseId/people/:profileId">
+                  {params => (
+                    <CoursemateProfilePage
+                      courseId={params.courseId}
+                      profileId={params.profileId}
+                    />
+                  )}
+                </Route>
+                <Route path="/groups/:groupId/chat">
+                  {params => <GroupChatPage groupId={params.groupId} />}
+                </Route>
+                <Route path="/groups/:groupId/members/:profileId">
+                  {params => (
+                    <GroupMemberProfilePage
+                      groupId={params.groupId}
+                      profileId={params.profileId}
+                    />
+                  )}
+                </Route>
+                <Route path="/groups/:groupId/members">
+                  {params => <GroupMembersPage groupId={params.groupId} />}
+                </Route>
+                <Route path="/my-courses">
+                  <Redirect to="/dashboard" replace />
+                </Route>
+                <Route path="/my-groups">
+                  {() => (
+                    <WorkspacePage
+                      title="My groups"
+                      renderAuthenticated={() => <GroupWorkflows />}
+                      signedOut={<GroupWorkflows />}
+                    />
+                  )}
+                </Route>
+                <Route path="/group-chat">
+                  {() => (
+                    <WorkspacePage
+                      title="Group chat"
+                      renderAuthenticated={() => <GroupChatPicker />}
+                      signedOut={<GroupChatPicker />}
+                    />
+                  )}
+                </Route>
+                <Route path="/messages">
+                  {() => (
+                    <WorkspacePage
+                      title="Messages"
+                      renderAuthenticated={() => <AuthenticatedMessages />}
+                      signedOut={<Messages />}
+                    />
+                  )}
+                </Route>
+                <Route path="/about">
+                  {() => (
+                    <WorkspacePage
+                      title="About this demo"
+                      renderAuthenticated={() => <AuthenticatedAbout />}
+                      signedOut={<About />}
+                    />
+                  )}
+                </Route>
+                <Route path="/404" component={NotFound} />
+                <Route component={NotFound} />
+              </Switch>
+            </DisplayNameGate>
           </AppProvider>
         </TooltipProvider>
       </SupabaseSessionProvider>
