@@ -271,3 +271,10 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Required before execution:** PR #10 merged to `main` so only merged files are executed.
 - **Roles affected:** Project/Integration Lead, Role 6, Eunice (verification), Roy and Jeffery (downstream features).
 - **Data/API implications:** applies six migrations in order (term model, groups, roster RPC, authority, invite candidates, course detail). The term-model migration writes course data.
+
+## 2026-11-18 — Continuation of Main migration and amended Main-access rule
+
+- **Decision (Adam, project owner, 2026-11-18):** continue applying the approved migrations and finish files 4–6 so Main reaches the consistent six-file state.
+- **Amended standing rule:** only **Adam, the project owner**, may authorize or perform changes to Supabase Main (`pijslbchvstkoweslymr`). Other contributors and tasks must not touch Main; the integration lead task acts only under Adam's explicit written authorization, recorded here.
+- **Reviewer authority:** option B (the current group leader, including after succession) remains the operative rule. The project instruction text is to be updated by Adam to match; PR #9 stays unmerged until that update.
+- **Stop notice:** the repair task's safety stop (2026-11-18) was acknowledged; no undo/reset was performed, and the lead confirmed continuation.
