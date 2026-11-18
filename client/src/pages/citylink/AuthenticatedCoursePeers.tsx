@@ -16,7 +16,6 @@ import {
   type CourseDirectorySnapshot,
 } from "@/lib/supabaseCourses";
 import {
-  cancelGroupJoinRequest,
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
   listCourseGroupInviteCandidates,
@@ -24,7 +23,6 @@ import {
   listCourseGroupSummaries,
   loadGroupWorkflowSnapshot,
   loadOwnCourseProfile,
-  requestToJoinGroup,
   sendGroupInvitation,
   type CourseGroupSummary,
   type GroupCoursePeer,
@@ -33,7 +31,6 @@ import {
 } from "@/lib/supabaseGroups";
 import {
   getCourseInviteGroups,
-  getJoinActionState,
   getPeerInvitationState,
   isCoursePeerInviteable,
   splitCoursePeersByGroup,
@@ -359,48 +356,6 @@ export default function AuthenticatedCoursePeers({
     }
   }
 
-  async function submitJoinRequest(summary: CourseGroupSummary) {
-    if (!userId || busyPeerId || groupSummaryError || myCourseGroup) return;
-    setBusyPeerId(summary.profile_id);
-    setFeedback(null);
-    try {
-      await requestToJoinGroup(userId, summary.group_id);
-      setFeedback({
-        tone: "success",
-        message: "Your request to join the group was sent.",
-      });
-      setRetryToken(value => value + 1);
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
-    } finally {
-      setBusyPeerId("");
-    }
-  }
-
-  async function cancelJoinRequest(requestId: string, profileId: string) {
-    if (!userId || busyPeerId) return;
-    setBusyPeerId(profileId);
-    setFeedback(null);
-    try {
-      await cancelGroupJoinRequest(userId, requestId);
-      setFeedback({
-        tone: "success",
-        message: "Your pending join request was cancelled.",
-      });
-      setRetryToken(value => value + 1);
-    } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
-    } finally {
-      setBusyPeerId("");
-    }
-  }
-
   function renderPeerCard(peer: GroupCoursePeer) {
     const summary = summaryByProfile.get(peer.profile_id);
     const invitationState =
@@ -410,26 +365,6 @@ export default function AuthenticatedCoursePeers({
             ...ownData.groups.outgoingInvitations,
           ])
         : null;
-    const joinState =
-      summary && ownData && userId
-        ? getJoinActionState({
-            userHasGroup: Boolean(myCourseGroup),
-            userStatus: ownData.ownProfile.status,
-            group: summary,
-            userId,
-            invitations: ownData.groups.incomingInvitations,
-            joinRequests: ownData.groups.joinRequests,
-          })
-        : null;
-    const ownPendingRequest =
-      summary && ownData && userId
-        ? ownData.groups.joinRequests.find(
-            request =>
-              request.group_id === summary.group_id &&
-              request.requester_id === userId &&
-              request.status === "pending"
-          )
-        : undefined;
     const isChoosing = choosingPeerId === peer.profile_id;
     const inviteable = Boolean(
       !summary &&
@@ -497,67 +432,22 @@ export default function AuthenticatedCoursePeers({
         </div>
         <div className="classmate-actions course-detail-actions">
           {summary ? (
-            joinState === "invitation-pending" ? (
-              <Link href="/my-groups" className="invite-status compact">
-                Invitation received
-              </Link>
-            ) : joinState === "request-pending" && ownPendingRequest ? (
-              <button
-                type="button"
-                className="secondary invite-compact"
-                disabled={Boolean(busyPeerId)}
-                onClick={() =>
-                  void cancelJoinRequest(ownPendingRequest.id, peer.profile_id)
-                }
-              >
-                {busyPeerId === peer.profile_id
-                  ? "Cancelling…"
-                  : "Cancel request"}
-              </button>
-            ) : joinState === "request-available" ? (
-              <button
-                type="button"
-                className="primary invite-compact"
-                disabled={Boolean(busyPeerId)}
-                onClick={() => void submitJoinRequest(summary)}
-              >
-                {busyPeerId === peer.profile_id
-                  ? "Sending…"
-                  : "Request to join"}
-              </button>
-            ) : joinState === "forming-group" ? (
+            summary.group_id === myCourseGroup?.id ? (
               <button
                 type="button"
                 className="invite-disabled compact"
                 disabled
-                title="Join requests are only allowed for active groups"
+                title="This is already your group"
               >
-                Request to join · group forming
-              </button>
-            ) : joinState === "already-grouped" ? (
-              <button
-                type="button"
-                className="invite-disabled compact"
-                disabled
-                title={
-                  summary.group_id === myCourseGroup?.id
-                    ? "This is already your group"
-                    : "You already belong to a group for this course"
-                }
-              >
-                {summary.group_id === myCourseGroup?.id
-                  ? "Your group"
-                  : "Already in a group"}
+                Your group
               </button>
             ) : (
-              <button
-                type="button"
-                className="invite-disabled compact"
-                disabled
-                title="Your profile is not currently eligible to request membership"
+              <Link
+                href={`/groups/${encodeURIComponent(summary.group_id)}/members`}
+                className="secondary invite-compact"
               >
-                Request unavailable
-              </button>
+                Group details
+              </Link>
             )
           ) : invitationState === "sent" ? (
             <Link href="/my-groups" className="invite-status compact">
