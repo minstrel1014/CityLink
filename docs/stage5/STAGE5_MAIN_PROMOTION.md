@@ -1,88 +1,57 @@
-# Stage 5 → Main promotion handoff (reconstructed migrations)
+# Stage 5 → Main promotion handoff (term model + reconstructed migrations)
 
 **Prepared:** 2026-11-18 by the project/integration lead task for the CityLink lead (Adam).
-**Status:** proposal only. Nothing in this PR has been applied to Test or Main. No SQL was executed.
+**Status:** SQL approved by Role 6 at `e4f77db` from the database/security side; this document was corrected on 2026-11-18 to match. **Nothing has been applied to Main and no SQL was executed.** Main changes still need a verified backup and the lead's separate approval.
 
 ## Why this exists
 
-The Test project (`CityLink-Stage5-Test`, ref `wkzclgmhrtecnpexfesr`) records five Stage 5 migrations:
+Test (`CityLink-Stage5-Test`, ref `wkzclgmhrtecnpexfesr`) records five Stage 5 migrations, but two were applied directly in the dashboard and never saved. Main is also missing the earlier **term model** that Test already has (`courses.term_id`, `academic_terms`, `citylink_settings`). The complete Main recipe is therefore **six files**:
 
-| Order | Test version                            | Repo file                                                                                  |
-| ----- | --------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 1     | `20261102_stage5_groups`                | **reconstructed here** — `supabase/migrations/20261102131343_stage5_groups.sql`            |
-| 2     | `20261102_stage5_course_roster_rpc`     | **reconstructed here** — `supabase/migrations/20261102140927_stage5_course_roster_rpc.sql` |
-| 3     | `stage5_group_authority_and_succession` | already in the repo                                                                        |
-| 4     | `stage5_course_group_invite_candidates` | already in the repo                                                                        |
-| 5     | `stage5_course_detail_group_views`      | already in the repo                                                                        |
+| Order | Source              | Repo file                                                                                     |
+| ----- | ------------------- | --------------------------------------------------------------------------------------------- |
+| 1     | new — term model    | `supabase/migrations/20261102090000_stage5_term_model.sql`                                    |
+| 2     | reconstructed       | `supabase/migrations/20261102131343_stage5_groups.sql`                                        |
+| 3     | reconstructed       | `supabase/migrations/20261102140927_stage5_course_roster_rpc.sql`                             |
+| 4     | already in the repo | `supabase/migrations/20261114163512_20261114162301_stage5_group_authority_and_succession.sql` |
+| 5     | already in the repo | `supabase/migrations/20261117043100_stage5_course_group_invite_candidates.sql`                |
+| 6     | already in the repo | `supabase/migrations/20261117205600_stage5_course_detail_group_views.sql`                     |
 
-Files 1 and 2 were applied directly in the Supabase dashboard in early November and were never saved, so the checked-in recipe was incomplete and could not be applied to Main. They were rebuilt on 2026-11-18 by reading Test's catalog only: `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_policies`, `pg_trigger`, `pg_class` (RLS flags), `information_schema.role_table_grants`, and `pg_get_functiondef`. No application rows were read, no function was invoked, and no database object was changed.
+Files 2 and 3 were rebuilt on 2026-11-18 from Test's catalog only: `information_schema.columns`, `pg_constraint`, `pg_indexes`, `pg_policies`, `pg_trigger`, `pg_class` (RLS flags), `information_schema.role_table_grants`, and `pg_get_functiondef`. No application rows were read, no function was invoked, and no database object was changed.
 
-## What the reconstructed files contain
+## What each file contains
 
-File 1 (`20261102131343_stage5_groups.sql`):
+**File 1 — term model (`20261102090000`).** Creates `academic_terms` and `citylink_settings` exactly as on Test, creates one term per distinct `courses.semester`, backfills `courses.term_id`, inserts the lead-approved current term **`2026-Fall`** (Main's only semester string), and aborts if any course has no term or no course is linked to `2026-Fall`. Then adds the `term_id` foreign key, `courses_id_term_id_uidx`, `courses_term_id_idx`, RLS and the two SELECT policies. It writes course data.
 
-- the four tables `study_groups`, `group_memberships`, `group_invitations`, `group_join_requests`, with the exact columns, defaults, checks, foreign keys and the composite unique key used by the later files;
-- all indexes, including the partial unique indexes that enforce one pending invitation/request per student and one active membership per student per course/term;
-- RLS enabled on all four tables and the four SELECT policies, including the current-leader-only join-request policy;
-- SELECT-only grants to `authenticated` (no direct writes; writes go through the RPCs);
-- 11 private helper functions (`is_enrolled`, `both_enrolled_in_course`, `is_current_term`, `lock_current_term`, `lock_course_profile`, `lock_course_profiles`, `is_active_group_member`, `can_view_group`, `maybe_abandon_empty_forming_group`, `recipient_can_receive_invitation`, `shares_course_with`);
-- 5 public functions that the later files do not define (`enforce_invitation_integrity`, `create_group_and_invite`, `respond_to_group_invitation`, `cancel_group_invitation`, `cancel_group_join_request`);
-- EXECUTE grants: `authenticated` only, revoked from `public` and `anon`.
+**File 2 — groups baseline (`20261102131343`).** The four tables `study_groups`, `group_memberships`, `group_invitations`, `group_join_requests` with their columns, defaults, checks, foreign keys and composite unique key; all indexes (including the partial unique ones); RLS plus four SELECT policies. The join-request policy here is the **original 2026-11-02** policy `"requester and members read join requests"`; the later authority migration (file 4) drops it and creates the current-leader-only policy. Table grants are SELECT-only for `authenticated`. The file also defines 11 private helpers and 5 public functions (`enforce_invitation_integrity`, `create_group_and_invite`, `respond_to_group_invitation`, `cancel_group_invitation`, `cancel_group_join_request`). `authenticated` gets EXECUTE on only the six helpers Test allows; the locking helpers and `maybe_abandon_empty_forming_group` stay `postgres`-only. `enforce_invitation_integrity` has no trigger on Test or Main; it is kept for parity and documented as unused.
 
-File 2 (`20261102140927_stage5_course_roster_rpc.sql`):
+**File 3 — roster RPC (`20261102140927`).** `public.list_course_classmates(p_course_id uuid)` exactly as on Test, with `authenticated`-only EXECUTE. Per the lead's decision A, it keeps `student_id` and `status` for this release; tightening is a follow-up before Stage 6 launch.
 
-- `public.list_course_classmates(p_course_id uuid)` exactly as it exists on Test, with `authenticated`-only EXECUTE.
-
-The two membership triggers (`group_memberships_leadership_after_update` / `_after_delete`) are **not** in file 1 because the already-checked-in authority migration creates them. They run after file 1.
+**Files 4–6.** Already checked in and unchanged. File 4 also creates the two membership triggers, which is why they are not in file 2.
 
 ## How to apply (after approval)
 
-1. Role 6 reviews both files and confirms they match Test's catalog.
-2. Read-only schema comparison of Main vs Test: confirm `profiles`, `courses`, `enrolments`, `academic_terms`, `citylink_settings` exist, and that `courses(id, term_id)` is unique (the composite foreign keys depend on it).
-3. Back up Main.
-4. Apply the five files in version order.
-5. Verify: four tables, indexes, RLS, policies, function list, and one signed-in smoke test.
+1. Role 6 database/security approval — **done** at `e4f77db`.
+2. Read-only Main vs Test comparison — **done 2026-11-18**: Main has only `profiles`, `courses`, `enrolments`, `invitations`; it lacks the term model and all group objects.
+3. **Back up Main.** The Free plan has no automated backups, so export with the Supabase CLI or `pg_dump` and keep the files encrypted.
+4. Apply the six files in order, one at a time, verifying after each and stopping at the first error.
+5. Verify: four group tables, all indexes, RLS and policies, function list, and one signed-in smoke test.
 
 ## Known risks and open decisions
 
-- **Roster privacy:** `list_course_classmates` returns `student_id` and `status`. Role 6 flagged this against the later current-term field allowlist. Decide before step 4 whether to tighten it or accept it as-is with a follow-up.
-- **Dependency check:** if Main lacks `courses(id, term_id)` uniqueness or `citylink_settings`, file 1 will fail. The schema comparison in step 2 must happen first.
-- **Fidelity:** the reconstruction reproduces the **current** catalog state, not the original 2026-11-02 text. Because the later three migrations replace the functions they own, applying all five files in order produces the same final schema as Test.
-- **No SQL execution in this task:** syntax was checked statically (balanced `$function$` blocks, statement counts). Role 6 must confirm before any application.
+- **Roster privacy (decided A):** `list_course_classmates` keeps `student_id` and `status` during this release. A follow-up migration before Stage 6 launch removes them together with the client update; the interim exposure is documented in `docs/team/DECISIONS.md`.
+- **Term string dependency:** the term model aborts if no course is linked to `2026-Fall`, so a mismatch fails loudly instead of misconfiguring current-term checks.
+- **Fidelity:** file 2 reproduces the **2026-11-02 baseline**, not today's Test state; files 4–6 bring it to the current Test state. Applying all six in order produces the same final schema as Test.
+- **No SQL executed:** Role 6 parsed the files statically (80, 5 and 25 statements) with no syntax errors. Execution still requires the backup and the lead's separate approval.
 
 ## Owner ledger
 
 - Human owner: Adam (project lead).
 - Prepared by: project/integration lead task (Manus).
 - Reviewers: Role 6 (database security), Eunice (verification).
-- Manus never accesses Main. Applying to Main is the lead's action.
+- Manus accesses Main only under a written, recorded authorization. Applying the migrations needs a new, explicit authorization after the backup.
 
-## Revision 2026-11-18 (after Role 6 review of PR #10)
+## Revision history
 
-Role 6 confirmed the tables, indexes, RLS policies, grants and all 16 function bodies match Test, and raised three items. All three are fixed on this branch:
-
-1. **Duplicate policy name (blocker).** File 1 now creates the original 2026-11-02 policy `"requester and members read join requests"`. The later authority migration drops that name and creates the current-leader-only policy, so a fresh Main apply runs in order.
-2. **Missing unique index (blocker).** File 1 now creates `courses_id_term_id_uidx` on `courses (id, term_id)`, which the composite foreign keys require. It is safe because `id` is already the primary key.
-3. **Over-granted helpers (permission fix).** `authenticated` now receives EXECUTE on only the six helpers Test allows (`is_enrolled`, `both_enrolled_in_course`, `is_active_group_member`, `can_view_group`, `recipient_can_receive_invitation`, `shares_course_with`). The locking helpers and `maybe_abandon_empty_forming_group` are `postgres`-only.
-
-Role 6 also noted that `enforce_invitation_integrity` has no trigger on Test or Main. It is kept for parity and documented as unused; attaching a trigger is a separate decision.
-
-### New: term-model prerequisite (`20261102090000_stage5_term_model.sql`)
-
-Main has `courses.semester` but no `term_id`, `academic_terms` or `citylink_settings`, so the five Stage 5 files cannot run there. This new file runs first and:
-
-- creates `academic_terms` and `citylink_settings` exactly as on Test;
-- creates one academic term per distinct `semester` string and backfills `courses.term_id`;
-- inserts the lead-approved current term **`2026 sem A`** and sets it in `citylink_settings`;
-- aborts with a clear error if any course has no term, or if no course is linked to `2026 sem A`;
-- adds the `courses.term_id` foreign key, `courses_id_term_id_uidx` and `courses_term_id_idx`;
-- enables RLS and adds the two SELECT policies and SELECT-only grants.
-
-**Apply order on Main:** term model → `20261102131343_stage5_groups` → `20261102140927_stage5_course_roster_rpc` → `20261114163512_..._authority_and_succession` → `20261117043100_..._invite_candidates` → `20261117205600_..._course_detail_group_views`.
-
-**Open decision for the lead:** keep `list_course_classmates` exactly as-is for parity (then tighten before Stage 6 launch), or tighten it now. Tightening now changes the client contract and needs a client update.
-
-## Revision 2026-11-18 (b): real semester string and roster decision
-
-- **Current term corrected to `2026-Fall`.** The lead ran `select distinct semester from public.courses` on Main; the only value is `2026-Fall`. The term-model migration now uses that exact string, so the backfill and the current-term check match Main's data.
-- **Roster decision A recorded.** The lead chose to keep `list_course_classmates` exactly as-is for parity during Main promotion. Removing `student_id` and `status` becomes a follow-up migration **before Stage 6 launch**, together with the matching client update. No client change in this release.
+- **2026-11-18 (a):** Role 6 review — fixed duplicate policy name, added `courses_id_term_id_uidx`, limited helper grants to the six Test allows; added the term model.
+- **2026-11-18 (b):** current term corrected to `2026-Fall`; lead chose option A for the roster RPC.
+- **2026-11-18 (c):** documentation corrections after Role 6 re-review at `e4f77db` — six-file runbook, original policy name, baseline fidelity wording, decision A recorded, `2026-Fall` everywhere.
