@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Redirect, Route, Switch, useLocation } from "wouter";
+import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -28,10 +28,12 @@ import {
 import {
   Invitations,
   MyProfile,
+  DemoMyProfile,
   Messages,
   About,
 } from "@/pages/citylink/Workspace";
 import AppShell from "@/components/citylink/AppShell";
+import { workspaceSessionMode } from "@/lib/workspaceRouteRules";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -51,14 +53,29 @@ function WorkspacePage({
   signedOut: ReactNode;
 }) {
   const session = useSupabaseSession();
-  if (session.status === "loading") {
+  const mode = workspaceSessionMode(session.status, session.user?.id);
+  if (mode === "loading") {
     return (
       <div className="workspace-route-loading" role="status" aria-busy="true">
         Restoring your CityLink sign-in…
       </div>
     );
   }
-  if (session.status === "ready" && session.user) {
+  if (mode === "error") {
+    return (
+      <main className="workspace-route-loading">
+        <div role="alert">
+          <h1>Your sign-in is unavailable</h1>
+          <p>
+            We could not restore your account session. Return to sign-in and try
+            again.
+          </p>
+          <Link href="/">Return to sign-in</Link>
+        </div>
+      </main>
+    );
+  }
+  if (mode === "authenticated") {
     return <AppShell title={title}>{renderAuthenticated(session)}</AppShell>;
   }
   return signedOut;
@@ -75,12 +92,25 @@ export default function App() {
             <Switch>
               <Route path="/" component={Welcome} />
               <Route path="/demo" component={Dashboard} />
+              <Route path="/demo/courses" component={Courses} />
+              <Route path="/demo/invitations" component={Invitations} />
+              <Route path="/demo/messages" component={Messages} />
+              <Route path="/demo/me" component={DemoMyProfile} />
+              <Route path="/demo/about" component={About} />
+              <Route path="/demo/students/:studentId/:courseId">
+                {params => (
+                  <StudentProfile
+                    studentId={params.studentId}
+                    courseId={params.courseId}
+                  />
+                )}
+              </Route>
               <Route path="/dashboard">
                 {() => (
                   <WorkspacePage
                     title="Dashboard"
                     renderAuthenticated={() => (
-                      <MyCourses view="dashboard" embedded />
+                      <MyCourses key="dashboard" view="dashboard" embedded />
                     )}
                     signedOut={<Welcome />}
                   />
@@ -91,7 +121,7 @@ export default function App() {
                   <WorkspacePage
                     title="Courses"
                     renderAuthenticated={() => (
-                      <MyCourses view="directory" embedded />
+                      <MyCourses key="directory" view="directory" embedded />
                     )}
                     signedOut={<Courses />}
                   />
@@ -200,7 +230,7 @@ export default function App() {
                 )}
               </Route>
               <Route path="/my-courses">
-                <Redirect to="/dashboard" />
+                <Redirect to="/dashboard" replace />
               </Route>
               <Route path="/my-groups">
                 {() => (

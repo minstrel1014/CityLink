@@ -323,9 +323,8 @@ export default function GroupWorkflows() {
         />
         <div className="group-workflows-intro" role="note">
           Group size is not limited. Invitations and join requests follow the
-          rule “first pending action wins.” For your privacy, Supabase shows
-          other students’ join requests only to the current active group leader;
-          requesters can see and cancel their own request.
+          rule “first pending action wins.” Only the original group creator is
+          approved to review requests; server-side enforcement is under review.
         </div>
 
         <div className="group-workflows-toolbar">
@@ -797,9 +796,9 @@ export default function GroupWorkflows() {
             <section className="group-workflow-panel wide">
               <h2>Join requests</h2>
               <p>
-                Supabase RLS lets you see your own requests and lets only the
-                original group creator (`creator_id`) see other students’
-                requests for their group.
+                Requests shown depend on current server access rules. Only the
+                original group creator is approved to review requests;
+                server-side enforcement is under review.
               </p>
               <div className="group-workflow-list">
                 {joinRequests.length ? (
@@ -915,8 +914,7 @@ export default function GroupWorkflows() {
                     <strong>
                       No join requests are visible to this account.
                     </strong>
-                    Only the requester and original group creator can read a
-                    request.
+                    Requests appear according to current server access rules.
                   </div>
                 )}
               </div>

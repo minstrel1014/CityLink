@@ -11,6 +11,27 @@ export function initialCourseScope(view: WorkspaceView): CourseDirectoryScope {
   return view === "dashboard" ? "mine" : "catalogue";
 }
 
+export function courseDetailPath(courseId: string): string {
+  return `/courses/${encodeURIComponent(courseId)}`;
+}
+
+export function currentTermCourses<T extends { id: string }>(
+  courses: T[],
+  currentTermCounts: ReadonlyMap<string, number>
+): T[] {
+  return courses.filter(course => currentTermCounts.has(course.id));
+}
+
+export function workspaceSessionMode(
+  status: "unconfigured" | "loading" | "ready" | "error",
+  userId: string | null | undefined
+): "loading" | "error" | "authenticated" | "signed-out" {
+  if (status === "loading") return "loading";
+  if (status === "error") return "error";
+  if (status === "ready" && userId) return "authenticated";
+  return "signed-out";
+}
+
 export function shouldRedirectToDashboard({
   sessionReady,
   userId,

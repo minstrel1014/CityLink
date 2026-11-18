@@ -2,6 +2,15 @@
   "routes": [
     { "path": "/", "title": "Sign-in and demo entry" },
     { "path": "/demo", "title": "Fictional dashboard" },
+    { "path": "/demo/courses", "title": "Fictional course directory" },
+    { "path": "/demo/invitations", "title": "Fictional invitations" },
+    { "path": "/demo/messages", "title": "Fictional messages" },
+    { "path": "/demo/me", "title": "Fictional profile" },
+    { "path": "/demo/about", "title": "About the fictional demo" },
+    {
+      "path": "/demo/students/:studentId/:courseId",
+      "title": "Fictional student profile"
+    },
     { "path": "/dashboard", "title": "Signed-in Test dashboard" },
     {
       "path": "/courses",

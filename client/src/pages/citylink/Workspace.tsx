@@ -104,7 +104,7 @@ export function Invitations() {
           return (
             <article className="invitation-card" key={i.id}>
               <div className="invitation-person-row">
-                <Link href={`/students/${person.id}/${course.id}`}>
+                <Link href={`/demo/students/${person.id}/${course.id}`}>
                   <Avatar student={person} />
                   <div>
                     <h3>
@@ -188,7 +188,7 @@ export function Invitations() {
               : "Browse your course, find a classmate, and send your first group invitation."
           }
         >
-          <Link href="/courses" className="primary">
+          <Link href="/demo/courses" className="primary">
             Browse courses <ArrowRight size={17} />
           </Link>
         </EmptyState>
@@ -210,7 +210,7 @@ export function MyProfile() {
   return <DemoMyProfile />;
 }
 
-function DemoMyProfile() {
+export function DemoMyProfile() {
   const { me, courses, enrolments, saveProfile } = useCityLink();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(me);
@@ -385,7 +385,7 @@ function DemoMyProfile() {
                 <h2>Studied courses</h2>
                 <div className="studied-course-list">
                   {mine.map(c => (
-                    <Link key={c.id} href={`/courses/${c.id}`}>
+                    <Link key={c.id} href={`/demo/courses/${c.id}`}>
                       <CourseIcon course={c} size={18} />
                       <div>
                         <strong>{c.title}</strong>
@@ -421,10 +421,10 @@ export function Messages() {
           Course-based chat is a planned next step. It is not implemented in
           this demo, and no messages can be sent or received.
         </p>
-        <Link href="/invitations" className="primary">
+        <Link href="/demo/invitations" className="primary">
           Check your invitations <ArrowRight size={17} />
         </Link>
-        <Link href="/courses" className="text-link">
+        <Link href="/demo/courses" className="text-link">
           Find a classmate instead <ArrowUpRight size={16} />
         </Link>
       </section>

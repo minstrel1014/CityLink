@@ -161,9 +161,10 @@ export function AuthenticatedInvitations() {
         <GroupWorkflowLink />
       </PageHeading>
       <p className="group-workflows-intro" role="note">
-        This view is read-only. Join-request visibility follows the approved
-        rule: the requester and the original group creator can see a request.
-        Use My Groups to respond if you are the original creator.
+        This view is read-only. It shows your pending requests and requests for
+        groups where you are recorded as creator. Only the original group
+        creator is approved to review requests; server-side enforcement is under
+        review.
       </p>
       {loading && <WorkspaceLoading label="invitations" />}
       {!loading && error && <WorkspaceError message={error} onRetry={retry} />}

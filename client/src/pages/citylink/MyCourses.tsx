@@ -20,7 +20,11 @@ import {
   listCourseGroupPeers,
   type GroupCoursePeer,
 } from "@/lib/supabaseGroups";
-import { initialCourseScope } from "@/lib/workspaceRouteRules";
+import {
+  courseDetailPath,
+  currentTermCourses,
+  initialCourseScope,
+} from "@/lib/workspaceRouteRules";
 import {
   addOwnCourseEnrolment,
   COURSE_ENROLMENT_WRITES_ENABLED,
@@ -183,7 +187,7 @@ export default function MyCourses({
       } else {
         setEnrollmentCounts(new Map());
         setCountsError(
-          "Live Test enrollment counts could not be loaded. The course catalogue remains available."
+          "The current term could not be verified. The course list is hidden until verification succeeds."
         );
       }
       setCountsLoading(false);
@@ -198,7 +202,10 @@ export default function MyCourses({
   }, [retryToken, session.status, userId]);
 
   const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
-  const courses = ownSnapshot?.courses ?? [];
+  const courses = useMemo(
+    () => currentTermCourses(ownSnapshot?.courses ?? [], enrollmentCounts),
+    [ownSnapshot, enrollmentCounts]
+  );
   useEffect(() => {
     if (
       view !== "dashboard" ||
@@ -211,7 +218,9 @@ export default function MyCourses({
     }
 
     let active = true;
-    const enrolledCourseIds = [...ownSnapshot.enrolledCourseIds];
+    const enrolledCourseIds = ownSnapshot.enrolledCourseIds.filter(id =>
+      enrollmentCounts.has(id)
+    );
     setCoursePeerSnapshot({ userId, peersByCourse: new Map() });
     void Promise.all(
       enrolledCourseIds.map(async courseId => {
@@ -230,11 +239,16 @@ export default function MyCourses({
     return () => {
       active = false;
     };
-  }, [view, session.status, userId, ownSnapshot]);
+  }, [view, session.status, userId, ownSnapshot, enrollmentCounts]);
 
   const enrolledIds = useMemo(
-    () => new Set(ownSnapshot?.enrolledCourseIds ?? []),
-    [ownSnapshot]
+    () =>
+      new Set(
+        (ownSnapshot?.enrolledCourseIds ?? []).filter(id =>
+          enrollmentCounts.has(id)
+        )
+      ),
+    [ownSnapshot, enrollmentCounts]
   );
   const departments = useMemo(
     () => [...new Set(courses.map(course => course.department))].sort(),
@@ -290,7 +304,7 @@ export default function MyCourses({
         if (!isCurrent()) return;
         setEnrollmentCounts(new Map());
         setCountsError(
-          "Live Test enrollment counts could not be refreshed. The course change was saved, but counts may be temporarily unavailable."
+          "The course change was saved, but the current term could not be verified. The course list is hidden until verification succeeds."
         );
       }
       setNotice({
@@ -465,9 +479,16 @@ export default function MyCourses({
           </p>
         )}
         {countsError && (
-          <p className="course-directory-feedback info" role="status">
-            {countsError} Refresh the page to try again.
-          </p>
+          <div className="course-directory-feedback info" role="alert">
+            <p>{countsError}</p>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setRetryToken(value => value + 1)}
+            >
+              <RefreshCw size={16} /> Try again
+            </button>
+          </div>
         )}
 
         {loadState === "loading" && (
@@ -490,10 +511,10 @@ export default function MyCourses({
             </button>
           </EmptyState>
         )}
-        {loadState === "ready" && courses.length === 0 && (
+        {loadState === "ready" && !countsError && courses.length === 0 && (
           <EmptyState
-            title="The Supabase catalogue is empty"
-            description="No course rows were returned from public.courses. This page does not seed or create courses; an authorized project owner must populate the approved fictional course catalogue."
+            title="No current-term courses found"
+            description="No accessible current-term course rows were returned. This page does not create courses."
           />
         )}
         {loadState === "ready" &&
@@ -530,7 +551,7 @@ export default function MyCourses({
                 <article className="authenticated-course-card" key={course.id}>
                   <Link
                     className="authenticated-course-name-link"
-                    href={`/courses/${course.id}/classmates`}
+                    href={courseDetailPath(course.id)}
                     aria-label={`View course details for ${course.code}: ${course.title}`}
                   >
                     <div className="authenticated-course-card-top">
@@ -587,7 +608,7 @@ export default function MyCourses({
                     <div className="authenticated-course-card-actions">
                       <Link
                         className="course-detail-link"
-                        href={`/courses/${course.id}`}
+                        href={courseDetailPath(course.id)}
                       >
                         My group
                       </Link>

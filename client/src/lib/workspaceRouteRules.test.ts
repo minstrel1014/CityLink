@@ -2,9 +2,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   activeMemberGroups,
+  courseDetailPath,
+  currentTermCourses,
   initialCourseScope,
   shouldRedirectToDashboard,
   visiblePendingJoinRequests,
+  workspaceSessionMode,
 } from "./workspaceRouteRules";
 import type {
   GroupJoinRequestRow,
@@ -23,6 +26,12 @@ describe("CityLink workspace routing and display rules", () => {
     const paths = new Set(manifest.routes.map(route => route.path));
     for (const path of [
       "/demo",
+      "/demo/courses",
+      "/demo/invitations",
+      "/demo/messages",
+      "/demo/me",
+      "/demo/about",
+      "/demo/students/:studentId/:courseId",
       "/dashboard",
       "/courses",
       "/demo/courses/:courseId",
@@ -47,6 +56,33 @@ describe("CityLink workspace routing and display rules", () => {
   it("makes My courses the default dashboard view and All courses the directory view", () => {
     expect(initialCourseScope("dashboard")).toBe("mine");
     expect(initialCourseScope("directory")).toBe("catalogue");
+  });
+
+  it("opens course details on the My Group first view", () => {
+    expect(courseDetailPath("course-123")).toBe("/courses/course-123");
+    expect(courseDetailPath("course/123")).toBe("/courses/course%2F123");
+  });
+
+  it("keeps only courses returned by the current-term service, including zero counts", () => {
+    const courses = [{ id: "current" }, { id: "zero" }, { id: "old" }];
+    expect(
+      currentTermCourses(
+        courses,
+        new Map([
+          ["current", 2],
+          ["zero", 0],
+        ])
+      )
+    ).toEqual([{ id: "current" }, { id: "zero" }]);
+    expect(currentTermCourses(courses, new Map())).toEqual([]);
+  });
+
+  it("distinguishes a session restoration error from signed-out demo access", () => {
+    expect(workspaceSessionMode("error", null)).toBe("error");
+    expect(workspaceSessionMode("loading", null)).toBe("loading");
+    expect(workspaceSessionMode("ready", "user-1")).toBe("authenticated");
+    expect(workspaceSessionMode("ready", null)).toBe("signed-out");
+    expect(workspaceSessionMode("unconfigured", null)).toBe("signed-out");
   });
 
   it("sends a restored signed-in user to the dashboard", () => {
