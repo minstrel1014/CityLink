@@ -14,9 +14,9 @@
 -- groups. Archived/abandoned recruitment posts remain readable, but are closed
 -- and have no Apply/edit/close interaction. Manually closed posts are also
 -- read-only, including for an author who remains an active member; no reopen RPC.
--- If no active group member remains, the group is abandoned, pending join
--- requests are cancelled, and pending invitations retain the existing expired
--- behavior. Pagination: posts 20, course groups 25, member list 50; max 100.
+-- If no active group member remains, the group is abandoned and its pending
+-- join requests and invitations expire. Pagination: posts 20, course groups 25,
+-- member list 50; max 100.
 
 BEGIN;
 
@@ -697,9 +697,11 @@ AS $function$
       )
     RETURNING g.id
   )
+  -- `group_join_requests` exposes reviewed_at/cancelled_at, not expired_at;
+  -- expired is a terminal review outcome, so record reviewed_at.
   UPDATE public.group_join_requests AS r
-  SET status = 'cancelled',
-      cancelled_at = clock_timestamp(),
+  SET status = 'expired',
+      reviewed_at = clock_timestamp(),
       updated_at = clock_timestamp()
   FROM abandoned AS a
   WHERE r.group_id = a.id AND r.status = 'pending';
@@ -746,8 +748,8 @@ BEGIN
       WHERE group_id = p_group_id AND status = 'pending';
 
       UPDATE public.group_join_requests
-      SET status = 'cancelled',
-          cancelled_at = clock_timestamp(),
+      SET status = 'expired',
+          reviewed_at = clock_timestamp(),
           updated_at = clock_timestamp()
       WHERE group_id = p_group_id AND status = 'pending';
     ELSIF v_creator_id IS NOT NULL
@@ -788,8 +790,8 @@ BEGIN
     WHERE group_id = p_group_id AND status = 'pending';
 
     UPDATE public.group_join_requests
-    SET status = 'cancelled',
-        cancelled_at = clock_timestamp(),
+    SET status = 'expired',
+        reviewed_at = clock_timestamp(),
         updated_at = clock_timestamp()
     WHERE group_id = p_group_id AND status = 'pending';
 
@@ -944,9 +946,8 @@ COMMIT;
 --    no Apply/edit/close action. Verify trigger and RPC behavior.
 -- 6. Membership end: preserve current-leader succession (earliest joined_at,
 --    then created_at/id). If no active member remains, abandon the group, expire
---    pending invitations as before, and mark pending join requests cancelled.
---    This replaces the existing Test behavior that marked those requests expired;
---    coordinate this function change with Roy.
+--    pending invitations and join requests as before. This matches the existing
+--    Test behavior; coordinate lifecycle function integration with Roy.
 -- 7. Pagination API: posts default 20, course groups 25, member list 50, hard
 --    maximum 100. Cursors are keyset-based; has_more is returned. Page size is
 --    not a group-capacity limit. No maximum group size is added.
@@ -956,7 +957,7 @@ COMMIT;
 --    denied for anon/authenticated; authenticated RPC access/denials for active
 --    member, former member, outsider, pending invitee/requester, course peer,
 --    author, former author, archived and abandoned group; pagination/cursor
---    edges; Apply flags; group >=2-active threshold; last-member cancellation;
+--    edges; Apply flags; group >=2-active threshold; last-member expiry;
 --    no unauthenticated access. Test data/scenarios require separate approval.
 -- 10. Separate Test advisory: private.citylink_schema_migrations has RLS disabled.
 --     Role privilege checks in this inspection showed no table privileges for

@@ -14,7 +14,7 @@ Approved by the CityLink project lead on 2026-11-15:
 - Only the current group leader may review join requests. The current leader is the active student named by `study_groups.creator_id`.
 - For the same student and group, a pending invitation and pending join request must not coexist. Keep the first action; reject the later opposite action with an understandable error.
 - When a leader leaves or is removed, transfer `creator_id` to the earliest-joined remaining active member. Resolve equal `joined_at` values by `created_at ASC`, then membership `id ASC`.
-- When no active member remains, dismiss the group: set `status='abandoned'`, set `creator_id=NULL`, and expire pending invitations and join requests in the same transaction. This is the currently applied Stage 5 behavior; the later 2026-11-17 PR #5 decision changes pending join requests to `cancelled` only when a reviewed forward migration is applied.
+- When no active member remains, dismiss the group: set `status='abandoned'`, set `creator_id=NULL`, and expire pending invitations and join requests in the same transaction. This is the currently applied Stage 5 behavior and the lead’s Option A correction; PR #5’s proposal must match it (`expired`, not `cancelled`).
 - The existing profile-deletion history trigger must keep anonymization behavior while applying succession/dismissal. Membership updates/deletes also need database-level handling; no new client leave/remove RPC is introduced just for this.
 
 The shared record is `docs/team/DECISIONS.md`.
@@ -24,9 +24,9 @@ The shared record is `docs/team/DECISIONS.md`.
 The team has accepted Jeffery’s PR #5 approach for the join-request integration points. This is a forward contract only; it does not change the applied Stage 5 migration or Test data yet.
 
 - Succession is reaffirmed: the active `study_groups.creator_id` holder reviews join requests; if that leader leaves or is unavailable, the earliest remaining active member becomes leader and inherits review authority.
-- When a group is abandoned, pending join requests will become `cancelled` with `cancelled_at`, while pending invitations continue to expire. The currently applied Stage 5 migration still records `expired` for pending join requests; a reviewed forward migration is required before Test behavior changes.
+- When a group is abandoned, pending join requests and pending invitations expire. This is the lead’s Option A correction; the currently applied Stage 5 migration already records `expired` for pending join requests, so no forward migration is required for this rule.
 - PR #5 must integrate with Role 5’s existing RPCs and keep using `requestToJoinGroup` / `request_to_join_group`; no duplicate join service and no direct `group_memberships` insert. First-pending-action-wins remains authoritative.
-- Open implementation checks: confirm `private.maybe_abandon_empty_forming_group` is invoked or wire it; decide whether `reviewed_at`/`reviewed_by` are set on abandonment; verify trigger ordering, grants, and RLS with Role 6. No migration is prepared or applied by this note.
+- Open implementation checks: confirm `private.maybe_abandon_empty_forming_group` is invoked or wire it; confirm the proposal sets `reviewed_at` (with `reviewed_by` null) when abandonment expires requests; verify trigger ordering, grants, and RLS with Role 6. No migration is prepared or applied by this note.
 
 ## Test-only preflight and result
 
