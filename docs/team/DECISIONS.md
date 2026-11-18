@@ -307,3 +307,10 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 **Lead clarification (2026-11-17, option A).** The CityLink project lead (Adam) resolved the conflict between this section’s earlier `cancelled` wording and the 2026-11-17 edge-case decision: abandoned-group pending join requests **expire**, not cancel. Pending invitations also expire. This correction applies to documentation and to Jeffery’s still-unreviewed PR #5 SQL proposal; it authorizes no database change.
 
 **Implementation note (2026-11-18).** PR #5’s proposal SQL now sets abandoned-group join requests to `expired` and records `reviewed_at`; the verified Test schema exposes `reviewed_at`/`cancelled_at`, not `expired_at`, so no new column is invented. `reviewed_by` remains null for this system transition. This is a proposal-only correction; no migration was applied.
+
+## 2026-11-18 — Stage 6 Test migration authorization (option B for item 1)
+
+- **Decision (Adam, project lead, 2026-11-18):** item 1 of Role 6 review resolved as **option B** — recruitment posts may expose one-member active groups; no SQL change.
+- **Authorization:** apply `20261118050000_stage6_chat_recruitment.sql` to the disposable Test project (ref `wkzclgmhrtecnpexfesr`) only, after Role 6 re-checks the exact file. Conditions: forward-only, one migration, no reset/TRUNCATE, no Main access, stop on error, verification queries after apply; Test data writes or accounts need separate approval.
+- **Role 6 items:** 2 (group-row locks and open-status guards) and 3 (clear creator_id on abandonment) applied; 4 verified (private schema not exposed by PostgREST).
+- **Files:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`, `docs/stage6/STAGE6_TEST_MIGRATION.md`.
