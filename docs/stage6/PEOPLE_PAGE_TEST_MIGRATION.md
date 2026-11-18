@@ -102,3 +102,38 @@ All accounts and rows below are labelled QA data on the disposable Test project 
 - Live asset confirmed as `index-a8syhxIG.js`.
 - Live checks passed: My Groups shows **Open private chat** and **View members**; a non-member sees no Open chat on another group; the people page lists four recruitment posts and the ungrouped coursemate actions; Ava's profile uses the new card layout; the saved chat message is visible after refresh.
 - Main still does not have the people-page migration `20261118083000_stage6_people_page_naming.sql`; a separately authorized Main promotion is required before these screens can use Main.
+
+## People-page layout update (2026-11-18, branch `feature/people-page-coursemate-layout`)
+
+Adam asked for the no-group panel to expose one action, “Find your groupmate”, and for the people page to use the same coursemate-list design that shows “In a group” and “Looking for a group” cards.
+
+### What changed
+
+- `AuthenticatedMyGroup.tsx`: the no-group panel now has one primary **Find your groupmate** link to `/my-courses/:courseId/groups`. The duplicate classmate-list card and the old inline first-invite form were removed from that panel. The old form called the removed two-argument RPC, so keeping it would have produced a runtime error.
+- `GroupWorkspacePage.tsx`: the verified `AuthenticatedCoursePeers` list is embedded at the top of the people page. The old ungrouped-only section and its duplicate RPC request were removed. Groups and recruitment posts remain below the coursemate list.
+- `AuthenticatedCoursePeers.tsx`: added an `embedded` mode that renders the existing coursemate list without repeating the course heading, description and roster notice. Full-page rendering at `/courses/:courseId/classmates` is unchanged.
+- Grouped coursemates now show an **In a group** badge instead of their stale profile status (“Looking for a group”). The card still shows the group name, active member count and status, plus the approved View portfolio link and request action.
+- `MyCourses.tsx`: the course-card link now reads **Find your groupmate**.
+- Test-only QA cleanup: the two profiles still named “New CityLink member” were identified as the labelled Bob and Cara QA accounts and renamed **Bob QA** and **Cara QA** through a direct Test `profiles` update. No real student data, Main access or secret was involved.
+
+### Data and permissions
+
+No schema, RPC, RLS or Main change. The embedded list uses the existing field-limited `list_course_classmates`/group-summary responses and the existing people-page profile route. Group cards show private chat only to active members; the embedded list’s request action still calls Roy’s existing `request_to_join_group` path.
+
+### Checks and browser results
+
+- `pnpm check` passed.
+- `pnpm test` passed **99/99** across 13 test files.
+- `pnpm build` passed (Vite production build).
+- `git diff --check` passed.
+- Signed-in desktop browser QA at 127.0.0.1:3010 against Test:
+  - My Group with no group shows exactly one **Find your groupmate** button.
+  - The people page shows 18 coursemates: 6 **In a group** and 12 **Looking for a group**, with group name/size and request/invite actions.
+  - Grouped cards show **In a group**, not the old “Looking for a group” badge.
+  - The full `/courses/:courseId/classmates` page still renders its course heading and list.
+  - The page keeps the shared sidebar; mobile bottom navigation uses the existing `AppShell` responsive CSS. A fresh 375px visual pass of this exact page is still recommended.
+
+### Still open
+
+- This branch is not merged or published yet.
+- Live QA after publication and a separate Main promotion authorization remain required.

@@ -6,9 +6,7 @@ import {
   MessageCircle,
   RefreshCw,
   Save,
-  Send,
   Users,
-  X,
 } from "lucide-react";
 import { Link } from "wouter";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
@@ -20,16 +18,11 @@ import {
 } from "@/lib/supabaseCourses";
 import {
   cancelGroupInvitation,
-  createGroupAndInvite,
   getGroupWorkflowErrorMessage,
   listActiveGroupMembers,
-  listCourseGroupInviteCandidates,
-  listCourseGroupPeers,
-  listCourseGroupSummaries,
   loadGroupWorkflowSnapshot,
   loadOwnCourseProfile,
   renameStudyGroup,
-  type GroupCoursePeer,
   type GroupMembershipRow,
   type GroupWorkflowSnapshot,
   type OwnCourseProfile,
@@ -38,7 +31,6 @@ import {
 import {
   getInvitationHistoryLabel,
   getOwnCourseGroup,
-  isCoursePeerInviteable,
 } from "@/lib/courseDetailActions";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
@@ -150,9 +142,7 @@ export default function AuthenticatedMyGroup({
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
   const userIdRef = useRef(userId);
-  const courseIdRef = useRef(courseId);
   userIdRef.current = userId;
-  courseIdRef.current = courseId;
 
   const [data, setData] = useState<MyGroupData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -161,25 +151,10 @@ export default function AuthenticatedMyGroup({
   const [retryToken, setRetryToken] = useState(0);
   const [groupName, setGroupName] = useState("");
   const [busyAction, setBusyAction] = useState("");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [eligiblePeers, setEligiblePeers] = useState<GroupCoursePeer[]>([]);
-  const [inviteeId, setInviteeId] = useState("");
-  const [inviteOptionsLoading, setInviteOptionsLoading] = useState(false);
-  const [inviteOptionsError, setInviteOptionsError] = useState("");
   const requestGeneration = useRef(0);
-  const inviteOptionsGeneration = useRef(0);
 
   useEffect(() => {
-    inviteOptionsGeneration.current += 1;
     setNotice(null);
-    setCreateOpen(false);
-    setEligiblePeers([]);
-    setInviteeId("");
-    setInviteOptionsError("");
-    setInviteOptionsLoading(false);
-    return () => {
-      inviteOptionsGeneration.current += 1;
-    };
   }, [courseId, userId]);
 
   useEffect(() => {
@@ -264,76 +239,6 @@ export default function AuthenticatedMyGroup({
       }
     };
   }, [courseId, retryToken, session.status, userId]);
-
-  async function openCreateGroup() {
-    if (!userId || !data?.enrolled) return;
-    const requestedUserId = userId;
-    const requestedCourseId = courseId;
-    const generation = ++inviteOptionsGeneration.current;
-    const isCurrent = () =>
-      inviteOptionsGeneration.current === generation &&
-      userIdRef.current === requestedUserId &&
-      courseIdRef.current === requestedCourseId;
-    setCreateOpen(true);
-    setInviteOptionsLoading(true);
-    setInviteOptionsError("");
-    setInviteeId("");
-    try {
-      const [peers, eligibleIds, summaries] = await Promise.all([
-        listCourseGroupPeers(requestedUserId, requestedCourseId),
-        listCourseGroupInviteCandidates(requestedUserId, requestedCourseId),
-        listCourseGroupSummaries(requestedUserId, requestedCourseId),
-      ]);
-      if (!isCurrent()) return;
-      const alreadyGrouped = new Set(summaries.map(item => item.profile_id));
-      const allowed = new Set(eligibleIds);
-      setEligiblePeers(
-        peers.filter(
-          peer =>
-            peer.profile_id !== userId &&
-            allowed.has(peer.profile_id) &&
-            !alreadyGrouped.has(peer.profile_id) &&
-            isCoursePeerInviteable(peer.status)
-        )
-      );
-    } catch (error) {
-      if (!isCurrent()) return;
-      setEligiblePeers([]);
-      setInviteOptionsError(getGroupWorkflowErrorMessage(error));
-    } finally {
-      if (isCurrent()) setInviteOptionsLoading(false);
-    }
-  }
-
-  async function createFirstInvite() {
-    if (!userId || !inviteeId || busyAction) return;
-    setBusyAction("create");
-    setNotice(null);
-    try {
-      const groupName = window
-        .prompt("Name your new group (1-50 characters):", "Study group")
-        ?.trim();
-      if (!groupName || groupName.length > 50) {
-        setBusyAction("");
-        return;
-      }
-      await createGroupAndInvite(userId, courseId, inviteeId, groupName);
-      setNotice({
-        tone: "success",
-        message:
-          "Your group was established and the first invitation was sent. You are its leader; the group becomes active when the invitee accepts.",
-      });
-      setCreateOpen(false);
-      setRetryToken(value => value + 1);
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
-    } finally {
-      setBusyAction("");
-    }
-  }
 
   async function saveGroupName() {
     if (!userId || !data?.group || !data.profile) return;
@@ -506,10 +411,10 @@ export default function AuthenticatedMyGroup({
           </p>
         </div>
         <Link
-          href={`/courses/${courseId}/classmates`}
+          href={`/my-courses/${encodeURIComponent(courseId)}/groups`}
           className="secondary my-group-classmates-link"
         >
-          Open the full classmate list <ArrowRight size={16} />
+          Find your groupmate <ArrowRight size={16} />
         </Link>
       </GroupCard>
     ) : null;
@@ -699,104 +604,21 @@ export default function AuthenticatedMyGroup({
                   </span>
                   <h2>You do not have a group for this course yet</h2>
                   <p>
-                    Create a group by sending the first invitation, or browse
-                    active groups and request to join one.
+                    Browse your coursemates, see who is looking for a group, and
+                    choose whether to invite someone or request to join an
+                    existing group.
                   </p>
                   <div className="authenticated-courses-state-actions">
-                    <button
-                      type="button"
-                      className="primary"
-                      onClick={() => void openCreateGroup()}
-                    >
-                      <Send size={16} /> Create a group
-                    </button>
                     <Link
-                      href={`/courses/${courseId}/classmates`}
-                      className="secondary"
+                      href={`/my-courses/${encodeURIComponent(courseId)}/groups`}
+                      className="primary"
                     >
-                      Request to join <ArrowRight size={16} />
+                      <Users size={16} /> Find your groupmate{" "}
+                      <ArrowRight size={16} />
                     </Link>
                   </div>
-                  {createOpen && (
-                    <div
-                      className="first-invite-picker"
-                      aria-labelledby="first-invite-heading"
-                    >
-                      <h3 id="first-invite-heading">
-                        Choose the first coursemate to invite
-                      </h3>
-                      {inviteOptionsLoading && (
-                        <p role="status">
-                          Checking current invitation eligibility…
-                        </p>
-                      )}
-                      {inviteOptionsError && (
-                        <p
-                          className="course-directory-feedback error"
-                          role="alert"
-                        >
-                          {inviteOptionsError}
-                        </p>
-                      )}
-                      {!inviteOptionsLoading &&
-                        !inviteOptionsError &&
-                        eligiblePeers.length === 0 && (
-                          <p>
-                            No coursemates are currently eligible for an
-                            invitation. You can still browse the full classmate
-                            list.
-                          </p>
-                        )}
-                      {eligiblePeers.length > 0 && (
-                        <>
-                          <label htmlFor="first-invitee">First invitee</label>
-                          <select
-                            id="first-invitee"
-                            value={inviteeId}
-                            onChange={event => setInviteeId(event.target.value)}
-                          >
-                            <option value="">Select a coursemate</option>
-                            {eligiblePeers.map(peer => (
-                              <option
-                                key={peer.profile_id}
-                                value={peer.profile_id}
-                              >
-                                {peer.display_name}
-                                {peer.major ? ` · ${peer.major}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="primary"
-                            disabled={!inviteeId || busyAction !== ""}
-                            onClick={() => void createFirstInvite()}
-                          >
-                            <Send size={15} />{" "}
-                            {busyAction === "create"
-                              ? "Creating…"
-                              : "Create group and invite"}
-                          </button>
-                        </>
-                      )}
-                      <Link
-                        href={`/courses/${courseId}/classmates`}
-                        className="text-link"
-                      >
-                        Open all coursemates <ArrowRight size={14} />
-                      </Link>
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => setCreateOpen(false)}
-                      >
-                        <X size={14} /> Close
-                      </button>
-                    </div>
-                  )}
                 </section>
                 {invitationHistoryCard}
-                {classmateListCard}
               </div>
             )}
           </>
