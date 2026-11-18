@@ -94,3 +94,11 @@ All accounts and rows below are labelled QA data on the disposable Test project 
 - Main does not have the people-page migration yet. Main promotion needs a new written authorization.
 - The QA accounts and rows are Test-only and must not be copied to Main.
 - Recruitment post apply deliberately creates a pending request; it does not add a member.
+
+## Public release (2026-11-18)
+
+- Source PR #22 merged into GitHub `main` at `0df367fc40db6311233cf265813d16eef4b8911f`.
+- WebDev `main` synced to `889b8806561c13a04836e1fbb0170d149968d4ea`; Auto Publish deployed it to https://clinkdemo-z7jrfxui.manus.space.
+- Live asset confirmed as `index-a8syhxIG.js`.
+- Live checks passed: My Groups shows **Open private chat** and **View members**; a non-member sees no Open chat on another group; the people page lists four recruitment posts and the ungrouped coursemate actions; Ava's profile uses the new card layout; the saved chat message is visible after refresh.
+- Main still does not have the people-page migration `20261118083000_stage6_people_page_naming.sql`; a separately authorized Main promotion is required before these screens can use Main.
