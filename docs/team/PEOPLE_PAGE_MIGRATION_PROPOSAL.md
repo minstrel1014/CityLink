@@ -133,7 +133,7 @@ The short window where the old client calls the removed two-argument `create_gro
 - Coursemate profile RPC refuses a student outside the course and returns no `student_id`/`status`.
 - Post creation without subject → rejected; with subject → stored and listed; edit keeps subject; existing posts show the backfilled subject.
 
-## Remaining decisions for Adam
+## Decisions confirmed by Adam (2026-11-18)
 
-1. Confirm the legacy subject label `'Recruitment post'`.
-2. Confirm that existing unnamed groups may stay unvalidated until their leaders rename them (recommended), rather than blocking the migration on them.
+1. The legacy subject label is `'Recruitment post'`.
+2. Existing unnamed groups stay unvalidated until their leaders rename them; `study_groups_name_length_chk` remains `NOT VALID` and every new insert or update is still enforced.

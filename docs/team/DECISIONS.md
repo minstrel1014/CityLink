@@ -349,3 +349,12 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 **Remaining risks:** runtime RPC behavior on Main was not exercised (no Main test accounts or data writes authorized); the Stage 5 profile-history trigger gap noted earlier is still open; Main contains a pre-existing `rename_study_group(uuid, text)` function not created by the six Stage 5 migrations, which the people-page proposal must account for before approval.
 
 This authorization is complete and ends with this report.
+
+## 2026-11-18 — People-page proposal follow-ups confirmed
+
+**Approver:** Adam.
+
+1. Legacy recruitment posts are backfilled with the subject `'Recruitment post'`.
+2. Existing unnamed study groups stay unvalidated until their leader renames them; `study_groups_name_length_chk` is `NOT VALID`, while new inserts and updates are enforced.
+
+These confirmations resolve the two open items in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`. Role 6 re-review of the revised proposal is still required before the migration file is written or any Test change is made.
