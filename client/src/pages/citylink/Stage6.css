@@ -503,3 +503,46 @@
     margin-left: 54px;
   }
 }
+
+.stage6-person-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+.stage6-person-main {
+  display: grid;
+  gap: 6px;
+}
+.stage6-person-actions {
+  display: grid;
+  gap: 8px;
+  align-items: stretch;
+}
+.stage6-person-actions select {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #dfe5d6;
+  border-radius: 9px;
+  background: #fff;
+  color: #34412f;
+  font: inherit;
+  font-size: 13px;
+}
+.stage6-invite-button {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+}
+.stage6-profile-back {
+  margin-bottom: 18px;
+}
+@media (max-width: 640px) {
+  .stage6-person-actions {
+    gap: 6px;
+  }
+  .stage6-invite-button {
+    min-height: 42px;
+  }
+}

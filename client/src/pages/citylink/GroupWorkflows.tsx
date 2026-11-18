@@ -24,6 +24,7 @@ import {
 } from "@/lib/supabaseGroups";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { PageHeading } from "@/components/citylink/Shared";
+import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import "./GroupWorkflows.css";
 
 type Feedback = { tone: "success" | "error"; message: string };
@@ -94,6 +95,16 @@ export default function GroupWorkflows() {
   const [existingGroupId, setExistingGroupId] = useState("");
   const [inviteeId, setInviteeId] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  const [prefill] = useState(() => {
+    if (typeof window === "undefined") {
+      return { courseId: "", inviteeId: "" };
+    }
+    const params = new URLSearchParams(window.location.search);
+    return {
+      courseId: params.get("courseId") ?? "",
+      inviteeId: params.get("invitee") ?? "",
+    };
+  });
   const requestGeneration = useRef(0);
 
   useEffect(() => {
@@ -125,11 +136,18 @@ export default function GroupWorkflows() {
         if (!isCurrent()) return;
         setData({ userId, courses, groups });
         setLoading(false);
-        setSelectedCourseId(previous =>
-          previous && courses.enrolledCourseIds.includes(previous)
-            ? previous
-            : (courses.enrolledCourseIds[0] ?? "")
-        );
+        setSelectedCourseId(previous => {
+          if (previous && courses.enrolledCourseIds.includes(previous)) {
+            return previous;
+          }
+          if (
+            prefill.courseId &&
+            courses.enrolledCourseIds.includes(prefill.courseId)
+          ) {
+            return prefill.courseId;
+          }
+          return courses.enrolledCourseIds[0] ?? "";
+        });
       })
       .catch(error => {
         if (!isCurrent()) return;
@@ -166,7 +184,12 @@ export default function GroupWorkflows() {
       .then(result => {
         if (!active) return;
         setPeers(result);
-        setFirstInviteeId("");
+        setFirstInviteeId(
+          selectedCourseId === prefill.courseId &&
+            result.some(peer => peer.profile_id === prefill.inviteeId)
+            ? prefill.inviteeId
+            : ""
+        );
         setInviteeId("");
         setPeerLoading(false);
       })
@@ -179,7 +202,7 @@ export default function GroupWorkflows() {
     return () => {
       active = false;
     };
-  }, [selectedCourseId, userId]);
+  }, [prefill.courseId, prefill.inviteeId, selectedCourseId, userId]);
 
   const ownData = data?.userId === userId ? data : null;
   const enrolledCourses = useMemo(() => {
@@ -225,10 +248,8 @@ export default function GroupWorkflows() {
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
   );
-  const ledGroups = groupsInCourse.filter(
-    group =>
-      group.creator_id === userId &&
-      (activeMembershipGroupIds.has(group.id) || group.status === "forming")
+  const myGroups = groupsInCourse.filter(group =>
+    activeMembershipGroupIds.has(group.id)
   );
   const leaderGroupIds = new Set(
     (ownData?.groups.groups ?? [])
@@ -349,6 +370,20 @@ export default function GroupWorkflows() {
           succession.
         </div>
 
+        {prefill.inviteeId &&
+          selectedCourseId === prefill.courseId &&
+          peers.some(peer => peer.profile_id === prefill.inviteeId) && (
+            <div className="group-workflows-intro" role="note">
+              Starting a new group with{" "}
+              <strong>
+                {
+                  peers.find(peer => peer.profile_id === prefill.inviteeId)
+                    ?.display_name
+                }
+              </strong>{" "}
+              selected as the first invitee from the people list.
+            </div>
+          )}
         <div className="group-workflows-toolbar">
           <label htmlFor="group-course-filter">
             Choose one of your enrolled courses
@@ -496,98 +531,117 @@ export default function GroupWorkflows() {
               </form>
             </section>
 
-            {ledGroups.length > 0 && (
+            {myGroups.length > 0 && (
               <section className="group-workflow-panel wide">
-                <h2>Your group management</h2>
+                <h2>Your group</h2>
                 <p>
-                  Only the current group leader can rename a group. Names must
-                  be 1–50 characters.
+                  Open your private group chat or review the member list. Only
+                  the current group leader can rename a group; names must be
+                  1–50 characters.
                 </p>
                 <div className="group-workflow-list">
-                  {ledGroups.map(group => (
-                    <article
-                      className="group-workflow-item"
-                      key={`manage-${group.id}`}
-                    >
-                      <div className="group-workflow-item-top">
-                        <div>
-                          <h3>{group.name || "Study group"}</h3>
-                          <p>
-                            {prettyStatus(group.status)} · You are the leader
-                          </p>
-                        </div>
-                        <Link
-                          className="secondary"
-                          href={`/groups/${encodeURIComponent(group.id)}/members`}
-                        >
-                          View members
-                        </Link>
-                      </div>
-                      {renameGroupId === group.id ? (
-                        <form
-                          className="group-workflow-form"
-                          onSubmit={event => {
-                            event.preventDefault();
-                            const name = renameName.trim();
-                            if (!name || name.length > 50) {
-                              setFeedback({
-                                tone: "error",
-                                message:
-                                  "Enter a group name between 1 and 50 characters.",
-                              });
-                              return;
-                            }
-                            void runAction(
-                              `rename-${group.id}`,
-                              () => renameStudyGroup(userId, group.id, name),
-                              "Your group name was updated."
-                            );
-                          }}
-                        >
-                          <label htmlFor={`rename-${group.id}`}>
-                            New group name
-                          </label>
-                          <input
-                            id={`rename-${group.id}`}
-                            value={renameName}
-                            maxLength={50}
-                            onChange={event =>
-                              setRenameName(event.target.value)
-                            }
-                            required
-                          />
+                  {myGroups.map(group => {
+                    const isLeader = group.creator_id === userId;
+                    return (
+                      <article
+                        className="group-workflow-item"
+                        key={`manage-${group.id}`}
+                      >
+                        <div className="group-workflow-item-top">
+                          <div>
+                            <h3>{group.name || "Study group"}</h3>
+                            <p>
+                              {prettyStatus(group.status)} ·{" "}
+                              {isLeader
+                                ? "You are the leader"
+                                : "You are a member"}
+                            </p>
+                          </div>
                           <div className="group-workflow-actions">
-                            <button
-                              className="primary"
-                              disabled={busyAction !== "" || !renameName.trim()}
+                            <GroupChatLink
+                              groupId={group.id}
+                              className="secondary"
                             >
-                              {busyAction === `rename-${group.id}`
-                                ? "Saving…"
-                                : "Save name"}
-                            </button>
+                              Open private chat
+                            </GroupChatLink>
+                            <Link
+                              className="secondary"
+                              href={`/groups/${encodeURIComponent(group.id)}/members`}
+                            >
+                              View members
+                            </Link>
+                          </div>
+                        </div>
+                        {isLeader &&
+                          (renameGroupId === group.id ? (
+                            <form
+                              className="group-workflow-form"
+                              onSubmit={event => {
+                                event.preventDefault();
+                                const name = renameName.trim();
+                                if (!name || name.length > 50) {
+                                  setFeedback({
+                                    tone: "error",
+                                    message:
+                                      "Enter a group name between 1 and 50 characters.",
+                                  });
+                                  return;
+                                }
+                                void runAction(
+                                  `rename-${group.id}`,
+                                  () =>
+                                    renameStudyGroup(userId, group.id, name),
+                                  "Your group name was updated."
+                                );
+                              }}
+                            >
+                              <label htmlFor={`rename-${group.id}`}>
+                                New group name
+                              </label>
+                              <input
+                                id={`rename-${group.id}`}
+                                value={renameName}
+                                maxLength={50}
+                                onChange={event =>
+                                  setRenameName(event.target.value)
+                                }
+                                required
+                              />
+                              <div className="group-workflow-actions">
+                                <button
+                                  className="primary"
+                                  disabled={
+                                    busyAction !== "" || !renameName.trim()
+                                  }
+                                >
+                                  {busyAction === `rename-${group.id}`
+                                    ? "Saving…"
+                                    : "Save name"}
+                                </button>
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  onClick={() => setRenameGroupId("")}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </form>
+                          ) : (
                             <button
                               className="secondary"
                               type="button"
-                              onClick={() => setRenameGroupId("")}
+                              onClick={() => {
+                                setRenameGroupId(group.id);
+                                setRenameName(group.name);
+                              }}
                             >
-                              Cancel
+                              Rename group
                             </button>
-                          </div>
-                        </form>
-                      ) : (
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => {
-                            setRenameGroupId(group.id);
-                            setRenameName(group.name);
-                          }}
-                        >
-                          Rename group
-                        </button>
-                      )}
-                    </article>
-                  ))}
+                          ))}
+                      </article>
+                    );
+                  })}
                 </div>
               </section>
             )}

@@ -22,7 +22,10 @@ import {
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
+  loadGroupWorkflowSnapshot,
   requestToJoinGroup,
+  sendGroupInvitation,
+  type StudyGroupRow,
 } from "@/lib/supabaseGroups";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
@@ -37,6 +40,8 @@ type Snapshot = {
   ungrouped: UngroupedCoursemate[];
   ungroupedHasMore: boolean;
   ungroupedCursor: UngroupedCoursemateCursor | null;
+  ownGroups: StudyGroupRow[];
+  activeGroupIds: string[];
   userId: string;
   generation: number;
 };
@@ -55,6 +60,10 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [groupsPageBusy, setGroupsPageBusy] = useState(false);
   const [postsPageBusy, setPostsPageBusy] = useState(false);
   const [ungroupedPageBusy, setUngroupedPageBusy] = useState(false);
+  const [personGroupChoice, setPersonGroupChoice] = useState<
+    Record<string, string>
+  >({});
+  const [invitingPersonId, setInvitingPersonId] = useState<string | null>(null);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -93,8 +102,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       listCurrentTermCourseGroups(userId, courseId),
       listGroupRecruitmentPosts(userId, courseId),
       listCourseUngroupedClassmates(userId, courseId),
+      loadGroupWorkflowSnapshot(userId),
     ])
-      .then(([groupsPage, postsPage, ungroupedPage]) => {
+      .then(([groupsPage, postsPage, ungroupedPage, ownSnapshot]) => {
         if (!isCurrent()) return;
         setSnapshot({
           groups: groupsPage.items,
@@ -106,6 +116,10 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
           ungrouped: ungroupedPage.items,
           ungroupedHasMore: ungroupedPage.hasMore,
           ungroupedCursor: ungroupedPage.nextCursor,
+          ownGroups: ownSnapshot.groups,
+          activeGroupIds: ownSnapshot.memberships
+            .filter(membership => membership.membership_status === "active")
+            .map(membership => membership.group_id),
           userId,
           generation,
         });
@@ -354,6 +368,34 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   }
 
   const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
+  const inviteableGroups = ownSnapshot
+    ? ownSnapshot.ownGroups.filter(
+        group =>
+          group.course_id === courseId &&
+          (group.status === "forming" || group.status === "active") &&
+          ownSnapshot.activeGroupIds.includes(group.id)
+      )
+    : [];
+
+  async function invitePerson(person: UngroupedCoursemate) {
+    if (!userId || !ownSnapshot || invitingPersonId) return;
+    const groupId =
+      personGroupChoice[person.profileId] ?? inviteableGroups[0]?.id;
+    if (!groupId) return;
+    setInvitingPersonId(person.profileId);
+    setFeedback("");
+    try {
+      await sendGroupInvitation(userId, groupId, person.profileId);
+      setFeedback(
+        `Invitation sent to ${person.displayName}. They will appear in My Groups until they respond.`
+      );
+      await reload();
+    } catch (inviteError) {
+      setFeedback(getGroupWorkflowErrorMessage(inviteError));
+    } finally {
+      setInvitingPersonId(null);
+    }
+  }
 
   return (
     <Stage6Layout title="Study groups and recruitment">
@@ -431,12 +473,14 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                       server when opened.
                     </p>
                     <div className="stage6-card-actions">
-                      <GroupChatLink
-                        groupId={group.groupId}
-                        className="secondary"
-                      >
-                        Open chat <ArrowRight size={15} />
-                      </GroupChatLink>
+                      {group.canCreatePost && (
+                        <GroupChatLink
+                          groupId={group.groupId}
+                          className="secondary"
+                        >
+                          Open chat <ArrowRight size={15} />
+                        </GroupChatLink>
+                      )}
                       <Link
                         className="secondary"
                         href={`/groups/${encodeURIComponent(group.groupId)}/members`}
@@ -553,24 +597,72 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
             ) : (
               <div className="stage6-group-grid">
                 {ownSnapshot.ungrouped.map(person => (
-                  <Link
+                  <article
                     className="stage6-group-card stage6-person-card"
                     key={person.profileId}
-                    href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(person.profileId)}`}
                   >
-                    <h3>{person.displayName}</h3>
-                    <p className="stage6-group-caption">
-                      {person.major ?? "Major not set"} · Year {person.year}
-                    </p>
-                    {person.skills.length > 0 && (
+                    <div className="stage6-person-main">
+                      <h3>{person.displayName}</h3>
                       <p className="stage6-group-caption">
-                        {person.skills.join(", ")}
+                        {person.major ?? "Major not set"} · Year {person.year}
                       </p>
-                    )}
-                    <span className="text-link">
-                      View profile <ArrowRight size={14} />
-                    </span>
-                  </Link>
+                      {person.skills.length > 0 && (
+                        <p className="stage6-group-caption">
+                          {person.skills.join(", ")}
+                        </p>
+                      )}
+                      <Link
+                        className="text-link"
+                        href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(person.profileId)}`}
+                      >
+                        View profile <ArrowRight size={14} />
+                      </Link>
+                    </div>
+                    <div className="stage6-person-actions">
+                      {inviteableGroups.length > 0 ? (
+                        <>
+                          {inviteableGroups.length > 1 && (
+                            <select
+                              aria-label={`Choose a group for ${person.displayName}`}
+                              value={
+                                personGroupChoice[person.profileId] ??
+                                inviteableGroups[0].id
+                              }
+                              onChange={event =>
+                                setPersonGroupChoice(previous => ({
+                                  ...previous,
+                                  [person.profileId]: event.target.value,
+                                }))
+                              }
+                            >
+                              {inviteableGroups.map(group => (
+                                <option value={group.id} key={group.id}>
+                                  {group.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          <button
+                            className="secondary stage6-invite-button"
+                            type="button"
+                            disabled={invitingPersonId !== null}
+                            onClick={() => void invitePerson(person)}
+                          >
+                            {invitingPersonId === person.profileId
+                              ? "Sending…"
+                              : "Invite to my group"}
+                          </button>
+                        </>
+                      ) : (
+                        <Link
+                          className="secondary stage6-invite-button"
+                          href={`/my-groups?courseId=${encodeURIComponent(courseId)}&invitee=${encodeURIComponent(person.profileId)}`}
+                        >
+                          Create a group
+                        </Link>
+                      )}
+                    </div>
+                  </article>
                 ))}
               </div>
             )}
