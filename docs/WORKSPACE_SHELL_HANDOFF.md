@@ -8,6 +8,8 @@
 | Additional assignment | Detailed CityLink demo review/revision and feature-connection work; this does not replace Adam’s lead task. |
 | Feature branch        | `feature/adam-ux-shell`                                                                                     |
 | Baseline              | GitHub `minstrel1014/CityLink` `main`, starting commit `c93e6c2`                                            |
+| Commit                | `fd26cd56deac8a9a1e52bd6ebf38c7397cad9a8e`                                                                  |
+| Pull request          | [PR #9](https://github.com/minstrel1014/CityLink/pull/9), open and unmerged; GitHub reports mergeable       |
 
 ## Purpose and user-facing behavior
 
@@ -62,4 +64,4 @@ The browser session for an actual signed-in/mobile smoke test is not available i
 
 The current RPC’s broader join-request review permission remains an unresolved backend security mismatch; do not treat the client-side button/display gate as a replacement for server authorization. The live meaning and lifecycle of `study_groups.creator_id` must also be checked against the original-creator-only decision before a future permission migration, because earlier succession documentation described a leader transfer.
 
-Next, finish the final check run, commit meaningful changes locally on `feature/adam-ux-shell`, push only that feature branch, verify the remote branch, and open a pull request for review. Do not push to or merge into `main` without the lead’s approval. After the shell PR merges, the separate Jeffery/PR #5 coordination sequence above applies.
+The feature is committed as `fd26cd56deac8a9a1e52bd6ebf38c7397cad9a8e` on `feature/adam-ux-shell`, and the pushed branch was verified to match that commit. [PR #9](https://github.com/minstrel1014/CityLink/pull/9) is open against `main` and was verified as mergeable; it has not been merged. The next step is human review of PR #9. Do not push directly to or merge into `main` without lead approval. After the shell PR merges, the separate Jeffery/PR #5 coordination sequence above applies.
