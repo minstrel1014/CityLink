@@ -35,6 +35,8 @@ Recorded in `docs/team/DECISIONS.md`.
 
 No table grants are given to `anon` or `authenticated`; browser access is only through the granted RPCs.
 
+Lock order for chat/post writes: membership row first, then group row. This matches the membership-end trigger path, which locks the membership row and then the group row, and avoids a lock inversion.
+
 ## Verification plan after apply
 
 1. Migration recorded in `supabase_migrations.schema_migrations` as `20261118050000`.

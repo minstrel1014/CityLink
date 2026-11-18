@@ -455,22 +455,24 @@ BEGIN
   IF v_body IS NULL OR char_length(v_body) < 1 OR char_length(v_body) > 4000 THEN
     RAISE EXCEPTION 'message must contain 1 to 4000 characters';
   END IF;
-  PERFORM 1
-  FROM public.study_groups AS g
-  WHERE g.id = p_group_id
-    AND g.status <> 'abandoned'
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'group is not available for messages';
-  END IF;
+  -- Lock order: membership row, then group row, matching the membership-end
+  -- trigger (group_memberships -> reconcile_group_leader_after_membership_end).
   PERFORM 1
   FROM public.group_memberships AS m
   WHERE m.group_id = p_group_id
     AND m.profile_id = (SELECT auth.uid())
     AND m.membership_status = 'active'
   FOR UPDATE;
-  IF NOT FOUND OR NOT private.can_send_group_chat(p_group_id) THEN
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'only active group members may send messages';
+  END IF;
+  PERFORM 1
+  FROM public.study_groups AS g
+  WHERE g.id = p_group_id
+    AND g.status <> 'abandoned'
+  FOR UPDATE;
+  IF NOT FOUND OR NOT private.can_send_group_chat(p_group_id) THEN
+    RAISE EXCEPTION 'group is not available for messages';
   END IF;
   SELECT p.display_name INTO v_sender_name
   FROM public.profiles AS p WHERE p.id = (SELECT auth.uid());
@@ -613,17 +615,22 @@ BEGIN
   IF v_body IS NULL OR char_length(v_body) < 1 OR char_length(v_body) > 2000 THEN
     RAISE EXCEPTION 'post must contain 1 to 2000 characters';
   END IF;
-  SELECT g.course_id, g.term_id, g.status
-    INTO v_course_id, v_term_id, v_group_status
-  FROM public.study_groups AS g WHERE g.id = p_group_id
-  FOR UPDATE;
+  -- Lock order: membership row, then group row, matching the membership-end
+  -- trigger (group_memberships -> reconcile_group_leader_after_membership_end).
   PERFORM 1
   FROM public.group_memberships AS m
   WHERE m.group_id = p_group_id
     AND m.profile_id = (SELECT auth.uid())
     AND m.membership_status = 'active'
   FOR UPDATE;
-  IF NOT FOUND OR v_course_id IS NULL OR v_group_status <> 'active'
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'only an active member of an active current-term group may post';
+  END IF;
+  SELECT g.course_id, g.term_id, g.status
+    INTO v_course_id, v_term_id, v_group_status
+  FROM public.study_groups AS g WHERE g.id = p_group_id
+  FOR UPDATE;
+  IF v_course_id IS NULL OR v_group_status <> 'active'
      OR NOT private.is_current_term(v_term_id)
      OR NOT private.is_enrolled((SELECT auth.uid()), v_course_id)
      OR NOT private.is_active_group_member(p_group_id, (SELECT auth.uid())) THEN
