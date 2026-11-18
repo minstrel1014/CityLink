@@ -391,11 +391,7 @@ export default function AuthenticatedCoursePeers({
             )}
             <Link
               className="classmate-portfolio-link"
-              href={
-                embedded
-                  ? `/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`
-                  : `/courses/${courseId}/students/${peer.profile_id}`
-              }
+              href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`}
             >
               View portfolio
             </Link>
