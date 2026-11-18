@@ -38,7 +38,7 @@ export function Classmates({ courseId }: { courseId: string }) {
   );
   return (
     <Shell title={course.code}>
-      <Link href="/courses" className="back-link">
+      <Link href="/demo/courses" className="back-link">
         <ArrowLeft size={17} /> Back to courses
       </Link>
       <div className="course-page-heading">
@@ -108,7 +108,7 @@ export function Classmates({ courseId }: { courseId: string }) {
         {people.map(s => (
           <article className="classmate-card" key={s.id}>
             <Link
-              href={`/students/${s.id}/${course.id}`}
+              href={`/demo/students/${s.id}/${course.id}`}
               className="classmate-person"
             >
               <Avatar student={s} />
@@ -133,7 +133,7 @@ export function Classmates({ courseId }: { courseId: string }) {
             <div className="classmate-actions">
               <InviteButton student={s} courseId={course.id} compact />
               <Link
-                href={`/students/${s.id}/${course.id}`}
+                href={`/demo/students/${s.id}/${course.id}`}
                 className="view-profile"
               >
                 View profile <ArrowRight size={14} />
@@ -287,7 +287,7 @@ export function StudentProfile({
           {student.id !== DEMO_USER_ID ? (
             <InviteButton student={student} courseId={course.id} />
           ) : (
-            <Link href="/me" className="secondary">
+            <Link href="/demo/me" className="secondary">
               Edit my profile
             </Link>
           )}

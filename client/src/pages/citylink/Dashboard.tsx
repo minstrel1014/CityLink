@@ -56,7 +56,7 @@ export function CourseDirectory({
           </p>
         </div>
         {dashboard && (
-          <Link href="/courses" className="text-link">
+          <Link href="/demo/courses" className="text-link">
             View directory <ArrowUpRight size={16} />
           </Link>
         )}
@@ -184,7 +184,7 @@ export default function Dashboard() {
                 <br />
                 There’s a classmate for every strength.
               </p>
-              <Link href="/courses/is3100" className="primary">
+              <Link href="/demo/courses/is3100" className="primary">
                 Find a groupmate <ArrowUpRight size={18} />
               </Link>
             </div>
@@ -238,7 +238,7 @@ export default function Dashboard() {
                 </strong>
               </span>
             </div>
-            <Link href="/invitations">
+            <Link href="/demo/invitations">
               <span className="stat-icon lavender">
                 <Send size={20} />
               </span>
@@ -255,7 +255,7 @@ export default function Dashboard() {
         <aside className="profile-summary">
           <div className="summary-top">
             <span>Your student card</span>
-            <Link href="/me" aria-label="View student card">
+            <Link href="/demo/me" aria-label="View student card">
               <ArrowUpRight size={18} />
             </Link>
           </div>
@@ -270,7 +270,7 @@ export default function Dashboard() {
               <span key={s}>{s}</span>
             ))}
           </div>
-          <Link href="/me" className="summary-profile-link">
+          <Link href="/demo/me" className="summary-profile-link">
             Make a good first impression <ArrowRight size={16} />
           </Link>
         </aside>
@@ -287,7 +287,7 @@ export default function Dashboard() {
             bio, and send an invitation.
           </p>
         </div>
-        <Link href="/about">
+        <Link href="/demo/about">
           How CityLink works <ArrowUpRight size={16} />
         </Link>
       </div>
