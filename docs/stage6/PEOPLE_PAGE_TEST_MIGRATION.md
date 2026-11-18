@@ -62,3 +62,13 @@ Live signed-in QA for the name gate, 50/51 boundaries, leader rename, one-member
 - Rechecked: `pnpm check` passed; `pnpm test` 99/99 passed; `pnpm build` passed; `git diff --check` passed.
 
 Live signed-in QA of the gate states and more than 50/100 ungrouped rows remains outstanding.
+
+## Display-name gate regression tests
+
+Component tests now cover the gate’s fail-closed states in `client/src/components/citylink/DisplayNameGate.test.tsx`:
+
+- protected routes do not mount while the session is loading, on a profile read error, when the profile row is missing, or while the default name is shown;
+- a valid custom name mounts the protected routes;
+- a signed-out visitor still receives the public routes.
+
+The component-test setup adds `@testing-library/react`, `@testing-library/dom` and `jsdom`, enables `.tsx` tests, and uses automatic JSX in `vitest.config.ts`. Full results: `pnpm check` passed, 14 files / 105 tests passed, `pnpm build` succeeded.
