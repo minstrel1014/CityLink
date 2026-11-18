@@ -255,3 +255,11 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Implications:** until the follow-up, `authenticated` coursemates on Main can read `student_id` and `status` through this RPC for current-term courses. The follow-up must change the RPC, its client consumers, and its tests together; no schema change is expected.
 - **Roles affected:** Project/Integration Lead, Role 6 (migration review), Roy (client consumers), Eunice (QA), and the Stage 6 owner for the timing.
 - **Unresolved:** owner and date for the tightening follow-up; to be assigned before Stage 6 launch.
+
+## 2026-11-18 — Main backup authorization and completion
+
+- **Decision (Adam, 2026-11-18):** the lead authorized a full read-only export of the Main application data for backup before the Stage 5 promotion, since the Free plan has no automated backups.
+- **Executed:** logical export through the connected Supabase catalog/API on Main ref `pijslbchvstkoweslymr`. No rows were modified, no DDL ran, no Auth users were read.
+- **Result:** `profiles` 2 rows, `courses` 10 rows, `enrolments` 4 rows, `invitations` 0 rows. Files stored at `/home/ubuntu/backups/main_20261118/` with `data.sql`, per-table JSON, README and SHA256 checksums; all checksums verified.
+- **Scope limits:** `auth.users`, storage objects and schema DDL are not included; the schema is recorded in `supabase/schema.sql` and `supabase/migrations/`.
+- **Handling:** contains real profile rows; restricted permissions, not committed, to be deleted from the sandbox after download.
