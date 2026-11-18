@@ -62,3 +62,12 @@ Live signed-in QA for the name gate, 50/51 boundaries, leader rename, one-member
 - Rechecked: `pnpm check` passed; `pnpm test` 99/99 passed; `pnpm build` passed; `git diff --check` passed.
 
 Live signed-in QA of the gate states and more than 50/100 ungrouped rows remains outstanding.
+
+## Live signed-in QA (2026-11-18, Test QA account Alice)
+
+- Signed in on a Test-connected local preview as `citylink.qa.alice...`; the gate showed only “Confirming your display name…” while checking and did not mount the dashboard.
+- Because Alice still had the default name, the gate blocked with “Set your display name”; saving `Alice QA` succeeded and only then loaded the dashboard.
+- `People, groups & posts` listed 14 current-term coursemates without a group; opening Ava Wong rendered her current-term profile through the narrow RPC.
+- Created `Alice QA Group` with Ava Wong as the first invitee; the group appeared as forming with Alice as leader and a pending invitation.
+- The leader rename control changed the group to `Alice QA Renamed`; the success message and refreshed list confirmed it.
+- A recruitment-post subject was not exercised live because the new group was still forming and had no active member eligible to publish; the subject create/edit wiring is covered by the mocked service test.
