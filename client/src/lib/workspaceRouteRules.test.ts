@@ -127,7 +127,7 @@ describe("CityLink workspace routing and display rules", () => {
     ).toBe(false);
   });
 
-  it("shows pending join requests only to the requester or original creator", () => {
+  it("shows pending join requests only to the requester or current group leader", () => {
     const requests = [
       {
         id: "own-request",
