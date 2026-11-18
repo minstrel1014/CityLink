@@ -17,6 +17,7 @@ import {
   getGroupChatAccess,
   getStage6ErrorMessage,
   listCurrentTermCourseGroups,
+  listCourseUngroupedClassmates,
   listCurrentTermGroupMembers,
   listGroupChatMessages,
   listGroupRecruitmentPosts,
@@ -349,6 +350,65 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
     );
   });
 
+  it("pages the ungrouped coursemate list with the returned cursor", async () => {
+    supabaseMocks.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          profile_id: "profile-1",
+          display_name: "A Student",
+          year: 2,
+          major: "Business",
+          skills: ["Excel"],
+          has_more: true,
+        },
+      ],
+      error: null,
+    });
+    const first = await listCourseUngroupedClassmates(userId, "course-1");
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).toEqual({
+      displayName: "A Student",
+      profileId: "profile-1",
+    });
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "list_course_ungrouped_classmates",
+      {
+        p_course_id: "course-1",
+        p_after_display_name: null,
+        p_after_profile_id: null,
+        p_limit: 50,
+      }
+    );
+
+    supabaseMocks.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          profile_id: "profile-2",
+          display_name: "B Student",
+          year: 3,
+          major: null,
+          skills: [],
+          has_more: false,
+        },
+      ],
+      error: null,
+    });
+    const second = await listCourseUngroupedClassmates(
+      userId,
+      "course-1",
+      first.nextCursor ?? undefined
+    );
+    expect(second.hasMore).toBe(false);
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "list_course_ungrouped_classmates",
+      {
+        p_course_id: "course-1",
+        p_after_display_name: "A Student",
+        p_after_profile_id: "profile-1",
+        p_limit: 50,
+      }
+    );
+  });
   it("keeps terminal-group closed posts visible while hiding group fields and actions", async () => {
     supabaseMocks.rpc.mockResolvedValueOnce({
       data: [

@@ -18,6 +18,7 @@ import {
   type GroupRecruitmentPost,
   type RecruitmentPostCursor,
   type UngroupedCoursemate,
+  type UngroupedCoursemateCursor,
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
@@ -34,6 +35,8 @@ type Snapshot = {
   postsHasMore: boolean;
   postsCursor: RecruitmentPostCursor | null;
   ungrouped: UngroupedCoursemate[];
+  ungroupedHasMore: boolean;
+  ungroupedCursor: UngroupedCoursemateCursor | null;
   userId: string;
   generation: number;
 };
@@ -51,6 +54,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [groupsPageBusy, setGroupsPageBusy] = useState(false);
   const [postsPageBusy, setPostsPageBusy] = useState(false);
+  const [ungroupedPageBusy, setUngroupedPageBusy] = useState(false);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -90,7 +94,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       listGroupRecruitmentPosts(userId, courseId),
       listCourseUngroupedClassmates(userId, courseId),
     ])
-      .then(([groupsPage, postsPage, ungrouped]) => {
+      .then(([groupsPage, postsPage, ungroupedPage]) => {
         if (!isCurrent()) return;
         setSnapshot({
           groups: groupsPage.items,
@@ -99,7 +103,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
           posts: postsPage.items,
           postsHasMore: postsPage.hasMore,
           postsCursor: postsPage.nextCursor,
-          ungrouped,
+          ungrouped: ungroupedPage.items,
+          ungroupedHasMore: ungroupedPage.hasMore,
+          ungroupedCursor: ungroupedPage.nextCursor,
           userId,
           generation,
         });
@@ -212,6 +218,55 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       setFeedback(getStage6ErrorMessage(pageError));
     } finally {
       setPostsPageBusy(false);
+    }
+  }
+
+  async function loadMoreUngrouped() {
+    if (
+      !userId ||
+      !ownSnapshot?.ungroupedHasMore ||
+      !ownSnapshot.ungroupedCursor ||
+      ungroupedPageBusy
+    )
+      return;
+    setUngroupedPageBusy(true);
+    setFeedback("");
+    const expectedGeneration = loadGeneration.current;
+    try {
+      const page = await listCourseUngroupedClassmates(
+        userId,
+        courseId,
+        ownSnapshot.ungroupedCursor
+      );
+      if (
+        currentUserId.current !== userId ||
+        loadGeneration.current !== expectedGeneration
+      )
+        return;
+      setSnapshot(previous => {
+        if (
+          !previous ||
+          previous.userId !== userId ||
+          previous.generation !== expectedGeneration
+        )
+          return previous;
+        const known = new Set(
+          previous.ungrouped.map(person => person.profileId)
+        );
+        return {
+          ...previous,
+          ungrouped: [
+            ...previous.ungrouped,
+            ...page.items.filter(person => !known.has(person.profileId)),
+          ],
+          ungroupedHasMore: page.hasMore,
+          ungroupedCursor: page.nextCursor,
+        };
+      });
+    } catch (pageError) {
+      setFeedback(getStage6ErrorMessage(pageError));
+    } finally {
+      setUngroupedPageBusy(false);
     }
   }
 
@@ -518,6 +573,18 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                   </Link>
                 ))}
               </div>
+            )}
+            {ownSnapshot?.ungroupedHasMore && (
+              <button
+                className="secondary"
+                type="button"
+                disabled={ungroupedPageBusy}
+                onClick={() => void loadMoreUngrouped()}
+              >
+                {ungroupedPageBusy
+                  ? "Loading more people…"
+                  : "Load more people"}
+              </button>
             )}
           </section>
 

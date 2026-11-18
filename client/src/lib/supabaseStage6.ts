@@ -60,7 +60,11 @@ export interface UngroupedCoursemate {
   year: number;
   major: string | null;
   skills: string[];
-  hasMore: boolean;
+}
+
+export interface UngroupedCoursemateCursor {
+  displayName: string;
+  profileId: string;
 }
 
 export interface CoursemateProfile {
@@ -664,18 +668,20 @@ function mapCoursemateProfileRows(value: unknown) {
 
 export async function listCourseUngroupedClassmates(
   userId: string,
-  courseId: string
-): Promise<UngroupedCoursemate[]> {
+  courseId: string,
+  after?: UngroupedCoursemateCursor
+): Promise<PageResult<UngroupedCoursemate, UngroupedCoursemateCursor>> {
   const rows = parseRows(
     await callRpc(userId, "list_course_ungrouped_classmates", {
       p_course_id: courseId,
-      p_after_display_name: null,
-      p_after_profile_id: null,
-      p_limit: 100,
+      p_after_display_name: after?.displayName ?? null,
+      p_after_profile_id: after?.profileId ?? null,
+      p_limit: 50,
     }),
     "ungrouped coursemate list"
   );
-  return rows.map(row => {
+  const hasMore = pageHasMore(rows);
+  const items = rows.map(row => {
     allowOnlyKeys(row, [
       "profile_id",
       "display_name",
@@ -699,9 +705,16 @@ export async function listCourseUngroupedClassmates(
       year,
       major,
       skills: row.skills as string[],
-      hasMore: requiredBoolean(row, "has_more"),
     };
   });
+  const last = items.at(-1);
+  return {
+    items,
+    hasMore,
+    nextCursor: last
+      ? { displayName: last.displayName, profileId: last.profileId }
+      : null,
+  };
 }
 
 export async function getCurrentTermCoursemateProfile(

@@ -53,3 +53,12 @@ No RPC was invoked as a signed-in Test user in this step. Runtime behaviour — 
 ## Still not verified
 
 Live signed-in QA for the name gate, 50/51 boundaries, leader rename, one-member member list, ungrouped list and subject flows. Main has not received this migration; it still needs a fresh written authorization.
+
+## Review fixes (head a0b30a7 review)
+
+- `DisplayNameGate` now has explicit `checking`, `ready`, `needs-name` and `error` states. A profile read error, missing profile row, missing name or default name keeps the app blocked; the error state offers retry and sign-out recovery.
+- The ungrouped coursemate list now uses the RPC cursor (`p_after_display_name`, `p_after_profile_id`), 50 rows per page, with a “Load more people” action. It no longer silently stops at 100.
+- Added a regression test for the ungrouped cursor and limit.
+- Rechecked: `pnpm check` passed; `pnpm test` 99/99 passed; `pnpm build` passed; `git diff --check` passed.
+
+Live signed-in QA of the gate states and more than 50/100 ungrouped rows remains outstanding.

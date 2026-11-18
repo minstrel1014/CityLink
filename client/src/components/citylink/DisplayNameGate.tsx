@@ -7,43 +7,85 @@ import {
 } from "@/lib/supabaseProfile";
 
 const DEFAULT_NAME = "New CityLink member";
+type GateState = "checking" | "ready" | "needs-name" | "error";
 
 export default function DisplayNameGate({ children }: { children: ReactNode }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? session.user?.id : undefined;
-  const [needsName, setNeedsName] = useState(false);
+  const [state, setState] = useState<GateState>("checking");
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let active = true;
-    setNeedsName(false);
     setError("");
-    if (!userId || !supabaseClient)
+    setName("");
+    if (session.status === "loading") {
+      setState("checking");
       return () => {
         active = false;
       };
-    void supabaseClient
-      .from("profiles")
-      .select("display_name")
-      .eq("id", userId)
-      .maybeSingle()
-      .then(({ data, error: loadError }) => {
-        if (!active || loadError) return;
-        const current = data?.display_name;
-        if (
-          typeof current === "string" &&
-          (!current.trim() || current === DEFAULT_NAME)
-        ) {
-          setName("");
-          setNeedsName(true);
+    }
+    if (!userId) {
+      setState("ready");
+      return () => {
+        active = false;
+      };
+    }
+    if (!supabaseClient) {
+      setState("error");
+      setError("Supabase is not configured, so your name cannot be checked.");
+      return () => {
+        active = false;
+      };
+    }
+    setState("checking");
+    void (async () => {
+      try {
+        const { data, error: loadError } = await supabaseClient
+          .from("profiles")
+          .select("display_name")
+          .eq("id", userId)
+          .maybeSingle();
+        if (!active) return;
+        if (loadError) {
+          setState("error");
+          setError(
+            "CityLink could not confirm your stored display name. Check your connection and try again."
+          );
+          return;
         }
-      });
+        if (!data) {
+          setState("error");
+          setError(
+            "Your signed-in account has no profile row, so CityLink cannot confirm your name."
+          );
+          return;
+        }
+        const current = data.display_name;
+        if (
+          typeof current !== "string" ||
+          !current.trim() ||
+          current === DEFAULT_NAME
+        ) {
+          setState("needs-name");
+          return;
+        }
+        setState("ready");
+      } catch {
+        if (!active) return;
+        setState("error");
+        setError(
+          "CityLink could not confirm your stored display name. Check your connection and try again."
+        );
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [retryToken, session.status, userId]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -55,11 +97,15 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
       );
       return;
     }
+    if (value === DEFAULT_NAME) {
+      setError("Please choose your own display name.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
       await updateOwnDisplayName(userId, value);
-      setNeedsName(false);
+      setState("ready");
     } catch {
       setError("Your name was not saved. Check your connection and try again.");
     } finally {
@@ -67,40 +113,84 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     }
   }
 
+  async function signOut() {
+    if (!supabaseClient) return;
+    await supabaseClient.auth.signOut({ scope: "local" });
+    window.location.assign("/");
+  }
+
   return (
     <>
       {children}
-      {needsName && (
+      {state !== "ready" && (
         <div
           className="display-name-gate"
           role="dialog"
           aria-modal="true"
           aria-labelledby="display-name-title"
         >
-          <form className="display-name-gate-card" onSubmit={save}>
-            <p className="eyebrow">WELCOME TO CITYLINK</p>
-            <h1 id="display-name-title">Set your display name</h1>
-            <p>
-              Your coursemates see this name on group and recruitment pages.
-              Choose it once; you can change it later in your profile.
-            </p>
-            <label htmlFor="display-name-input">Display name</label>
-            <input
-              id="display-name-input"
-              value={name}
-              maxLength={MAX_DISPLAY_NAME_LENGTH}
-              onChange={event => setName(event.target.value)}
-              autoFocus
-              disabled={saving}
-            />
-            <span className="display-name-count">
-              {name.trim().length}/{MAX_DISPLAY_NAME_LENGTH}
-            </span>
-            {error && <p role="alert">{error}</p>}
-            <button className="primary" disabled={saving || !name.trim()}>
-              {saving ? "Saving…" : "Save and continue"}
-            </button>
-          </form>
+          {state === "checking" && (
+            <div className="display-name-gate-card" role="status">
+              <p className="eyebrow">CHECKING YOUR ACCOUNT</p>
+              <h1 id="display-name-title">Confirming your display name…</h1>
+              <p>
+                CityLink blocks group pages until your stored name is confirmed.
+              </p>
+            </div>
+          )}
+          {state === "error" && (
+            <div className="display-name-gate-card" role="alert">
+              <p className="eyebrow">NAME CHECK UNAVAILABLE</p>
+              <h1 id="display-name-title">We could not confirm your name.</h1>
+              <p>{error}</p>
+              <p>
+                Your account stays blocked until CityLink can read a valid
+                stored name. Retry the check; if it keeps failing, sign out and
+                sign in again, or ask the project owner to check your profile
+                row.
+              </p>
+              <button
+                className="primary"
+                type="button"
+                onClick={() => setRetryToken(value => value + 1)}
+              >
+                Try again
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => void signOut()}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
+          {state === "needs-name" && (
+            <form className="display-name-gate-card" onSubmit={save}>
+              <p className="eyebrow">WELCOME TO CITYLINK</p>
+              <h1 id="display-name-title">Set your display name</h1>
+              <p>
+                Your coursemates see this name on group and recruitment pages.
+                Choose it once; you can change it later in your profile.
+              </p>
+              <label htmlFor="display-name-input">Display name</label>
+              <input
+                id="display-name-input"
+                value={name}
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
+                onChange={event => setName(event.target.value)}
+                autoFocus
+                disabled={saving}
+              />
+              <span className="display-name-count">
+                {name.trim().length}/{MAX_DISPLAY_NAME_LENGTH}
+              </span>
+              {error && <p role="alert">{error}</p>}
+              <button className="primary" disabled={saving || !name.trim()}>
+                {saving ? "Saving…" : "Save and continue"}
+              </button>
+            </form>
+          )}
         </div>
       )}
     </>
