@@ -17,6 +17,11 @@ import {
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  listCourseGroupPeers,
+  type GroupCoursePeer,
+} from "@/lib/supabaseGroups";
+import { initialCourseScope } from "@/lib/workspaceRouteRules";
+import {
   addOwnCourseEnrolment,
   COURSE_ENROLMENT_WRITES_ENABLED,
   COURSE_ENROLMENT_EMPTY_MESSAGE,
@@ -31,6 +36,11 @@ import {
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 type Banner = { tone: "success" | "error" | "info"; message: string };
+type MyCoursesView = "dashboard" | "directory";
+type CoursePeerSnapshot = {
+  userId: string;
+  peersByCourse: Map<string, GroupCoursePeer[] | null>;
+};
 
 export function AccountHeader({ email }: { email?: string }) {
   return (
@@ -86,7 +96,13 @@ function GateScreen({
   );
 }
 
-export default function MyCourses() {
+export default function MyCourses({
+  view = "directory",
+  embedded = false,
+}: {
+  view?: MyCoursesView;
+  embedded?: boolean;
+}) {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
   const userIdRef = useRef(userId);
@@ -103,12 +119,16 @@ export default function MyCourses() {
   const [countsLoading, setCountsLoading] = useState(false);
   const [countsError, setCountsError] = useState("");
   const [notice, setNotice] = useState<Banner | null>(null);
-  const [scope, setScope] = useState<CourseDirectoryScope>("catalogue");
+  const [scope, setScope] = useState<CourseDirectoryScope>(
+    initialCourseScope(view)
+  );
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("");
   const [semester, setSemester] = useState("");
   const [busyCourseId, setBusyCourseId] = useState<string | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  const [coursePeerSnapshot, setCoursePeerSnapshot] =
+    useState<CoursePeerSnapshot | null>(null);
   const requestGeneration = useRef(0);
 
   useEffect(() => {
@@ -179,6 +199,39 @@ export default function MyCourses() {
 
   const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
   const courses = ownSnapshot?.courses ?? [];
+  useEffect(() => {
+    if (
+      view !== "dashboard" ||
+      session.status !== "ready" ||
+      !userId ||
+      !ownSnapshot
+    ) {
+      setCoursePeerSnapshot(null);
+      return;
+    }
+
+    let active = true;
+    const enrolledCourseIds = [...ownSnapshot.enrolledCourseIds];
+    setCoursePeerSnapshot({ userId, peersByCourse: new Map() });
+    void Promise.all(
+      enrolledCourseIds.map(async courseId => {
+        try {
+          const peers = await listCourseGroupPeers(userId, courseId);
+          return [courseId, peers] as const;
+        } catch {
+          return [courseId, null] as const;
+        }
+      })
+    ).then(results => {
+      if (!active) return;
+      setCoursePeerSnapshot({ userId, peersByCourse: new Map(results) });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [view, session.status, userId, ownSnapshot]);
+
   const enrolledIds = useMemo(
     () => new Set(ownSnapshot?.enrolledCourseIds ?? []),
     [ownSnapshot]
@@ -292,14 +345,28 @@ export default function MyCourses() {
   }
 
   return (
-    <div className="authenticated-courses-page">
-      <AccountHeader email={session.user?.email} />
-      <main className="authenticated-courses-main">
+    <div
+      className={`authenticated-courses-page${embedded ? " authenticated-courses-embedded" : ""}`}
+    >
+      {!embedded && <AccountHeader email={session.user?.email} />}
+      <main
+        className={`authenticated-courses-main${embedded ? " authenticated-courses-main-embedded" : ""}`}
+      >
         <PageHeading
           eyebrow="YOUR COURSE MAP · SUPABASE DATA"
-          title="My Courses"
-          description="Browse the course catalogue and see the courses attached to this signed-in account."
-        />
+          title={view === "dashboard" ? "Your courses" : "Courses"}
+          description={
+            view === "dashboard"
+              ? "See the courses connected to your account and find classmates looking for a group."
+              : "Browse all current-term courses and manage your own enrolments."
+          }
+        >
+          {view === "dashboard" && (
+            <Link className="secondary dashboard-groups-link" href="/my-groups">
+              My groups <ArrowRight size={16} />
+            </Link>
+          )}
+        </PageHeading>
 
         <div className="course-privacy-notice" role="note">
           <ShieldCheck size={19} />
@@ -332,19 +399,19 @@ export default function MyCourses() {
           >
             <button
               type="button"
-              className={scope === "catalogue" ? "active" : ""}
-              aria-pressed={scope === "catalogue"}
-              onClick={() => setScope("catalogue")}
-            >
-              Course catalogue <span>{courses.length}</span>
-            </button>
-            <button
-              type="button"
               className={scope === "mine" ? "active" : ""}
               aria-pressed={scope === "mine"}
               onClick={() => setScope("mine")}
             >
               My courses <span>{enrolledIds.size}</span>
+            </button>
+            <button
+              type="button"
+              className={scope === "catalogue" ? "active" : ""}
+              aria-pressed={scope === "catalogue"}
+              onClick={() => setScope("catalogue")}
+            >
+              All courses <span>{courses.length}</span>
             </button>
           </div>
           <div className="course-directory-filters">
@@ -461,18 +528,24 @@ export default function MyCourses() {
               const enrolled = enrolledIds.has(course.id);
               return (
                 <article className="authenticated-course-card" key={course.id}>
-                  <div className="authenticated-course-card-top">
-                    <CourseIcon course={course} size={21} />
-                    <div>
-                      <span className="course-code">{course.code}</span>
-                      <span
-                        className={`course-membership ${enrolled ? "enrolled" : ""}`}
-                      >
-                        {enrolled ? "In My Courses" : "Not enrolled"}
-                      </span>
+                  <Link
+                    className="authenticated-course-name-link"
+                    href={`/courses/${course.id}/classmates`}
+                    aria-label={`View course details for ${course.code}: ${course.title}`}
+                  >
+                    <div className="authenticated-course-card-top">
+                      <CourseIcon course={course} size={21} />
+                      <div>
+                        <span className="course-code">{course.code}</span>
+                        <span
+                          className={`course-membership ${enrolled ? "enrolled" : ""}`}
+                        >
+                          {enrolled ? "In My Courses" : "Not enrolled"}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  <h2>{course.title}</h2>
+                    <h2>{course.title}</h2>
+                  </Link>
                   <p className="authenticated-course-department">
                     {course.department} · {course.credits} credits
                   </p>
@@ -480,6 +553,15 @@ export default function MyCourses() {
                     {course.description ||
                       "No course description is available."}
                   </p>
+                  {view === "dashboard" && enrolled && (
+                    <CoursePeerSignals
+                      peers={
+                        coursePeerSnapshot?.userId === userId
+                          ? coursePeerSnapshot.peersByCourse.get(course.id)
+                          : undefined
+                      }
+                    />
+                  )}
                   <p
                     className="authenticated-course-enrollment-count"
                     aria-label={
@@ -537,9 +619,60 @@ export default function MyCourses() {
           </div>
         )}
       </main>
-      <footer className="authenticated-courses-footer">
-        Authenticated course data · separate from fictional CityLink demo
-      </footer>
+      {!embedded && (
+        <footer className="authenticated-courses-footer">
+          Authenticated course data · separate from fictional CityLink demo
+        </footer>
+      )}
+    </div>
+  );
+}
+
+function CoursePeerSignals({
+  peers,
+}: {
+  peers: GroupCoursePeer[] | null | undefined;
+}) {
+  const initials = (name: string) =>
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part[0]?.toLocaleUpperCase() ?? "")
+      .join("") || "?";
+  return (
+    <div className="authenticated-course-signal-row">
+      <div
+        className="authenticated-course-peer-avatars"
+        role="group"
+        aria-label={
+          peers ? `${peers.length} enrolled coursemates` : "Coursemate preview"
+        }
+      >
+        {peers?.slice(0, 3).map(peer => (
+          <span
+            className="authenticated-course-peer-avatar"
+            key={peer.profile_id}
+            title={peer.display_name}
+            aria-label={peer.display_name}
+          >
+            {initials(peer.display_name)}
+          </span>
+        ))}
+        {peers && peers.length > 3 && (
+          <span className="authenticated-course-peer-avatar extra">
+            +{peers.length - 3}
+          </span>
+        )}
+      </div>
+      <span className="authenticated-course-looking-count">
+        {peers === undefined
+          ? "Loading classmates…"
+          : peers === null
+            ? "Classmates unavailable"
+            : `${peers.filter(peer => peer.status === "open").length} looking`}
+      </span>
     </div>
   );
 }

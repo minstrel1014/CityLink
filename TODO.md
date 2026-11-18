@@ -126,3 +126,21 @@ Group-size display clarification: count active memberships plus the forming grou
 - [x] Preserve group rename, member display, invitation status/cancel, create-group, request-to-join, and full-classmate-list behavior.
 - [x] Run `corepack pnpm check` (pass), `corepack pnpm test` (9 files, 67 tests), `corepack pnpm build` (pass), Prettier, and `git diff --check`.
 - [ ] Signed-in desktop/mobile visual check with an authorized Test account remains outstanding.
+
+## Approved Phase 1 — shared shell and end-to-end experience (2026-11-18)
+
+This dated addendum supersedes older sign-in landing and “fictional course data only” statements for the signed-in routes; it preserves the signed-out `/demo` experience.
+
+- [x] **Owner ledger:** Adam is the human owner. His base role remains Project, Integration, and Release Lead; authenticated demo repair, shell integration, and smoother user journey are additional features on this existing assignment, not a replacement task. Other owners remain TBD unless their names were explicitly supplied; Jeffery’s Stage 6 chat/recruitment assignment remains separate.
+- [x] Route normal restored/successful sign-in to `/dashboard`, keep recovery-password flow in place, and make `/my-courses` redirect compatibly to Dashboard.
+- [x] Make **My courses** the first/default dashboard tab and **All courses** the second; keep `/courses` as the full Test-backed catalogue for signed-in users and preserve the fictional `/courses` fallback for signed-out users.
+- [x] Add a responsive authenticated shell with Dashboard, Courses, Invitations, Messages, and Profile navigation; preserve fictional routes and remove fictional-demo navigation from the signed-in shell.
+- [x] Use existing Test-backed read contracts for enrolled-course roster initials, open-to-group counts, invitations, pending requests, and active group destinations. Keep request visibility scoped to the requester or original group creator (`study_groups.creator_id`). No new RPC or database write is introduced.
+- [x] Reserve the sidebar Messages item and retain the existing Group Chat slot inside course detail for Stage 6. Do not implement chat pages, private-message pages, message storage, or send/receive behavior in this phase.
+- [x] Make the complete course name plate a keyboard-accessible course-detail link; retain the distinct My group action.
+- [x] Final validation: `corepack pnpm check` passed; `corepack pnpm test` passed (10 files, 73 tests); `corepack pnpm build:static` passed; Prettier on all changed source/tests/docs/manifest passed; `git diff --check` passed. The build retains the existing `/api/platform/config.js` non-module warning and the >500 kB chunk-size advisory.
+- [ ] Perform signed-in mobile/desktop smoke tests against only disposable Supabase Test after the feature code is in the authorized Preview. Do not access Main or create persistent Test rows for verification.
+- [ ] Resolve the known backend mismatch: the review RPC reportedly permits any active group member, while the approved rule is original-creator-only. Role 6 must review a precise security change and the lead must explicitly approve before any Test migration; the UI gate alone is not a backend fix.
+- [ ] After all checks pass, commit on `feature/adam-ux-shell`, push only that feature branch, verify the remote branch, and open/update a review PR. Do not push or merge directly to `main`.
+
+Validation commands and exact results, file inventory, API boundaries, assumptions, open issues, and next steps are recorded in `docs/WORKSPACE_SHELL_HANDOFF.md`; the approved product and coordination decisions are in `docs/team/DECISIONS.md`.

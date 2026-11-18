@@ -26,10 +26,16 @@ import {
 } from "lucide-react";
 import { useCityLink } from "@/data/AppContext";
 import { DEMO_USER_ID, type Course, type Student } from "@/data/sampleData";
-export function Brand({ small = false }: { small?: boolean }) {
+export function Brand({
+  small = false,
+  href = "/demo",
+}: {
+  small?: boolean;
+  href?: string;
+}) {
   return (
     <Link
-      href="/demo"
+      href={href}
       className={`brand ${small ? "small" : ""}`}
       aria-label="CityLink dashboard"
     >

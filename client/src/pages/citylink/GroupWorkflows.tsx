@@ -798,7 +798,7 @@ export default function GroupWorkflows() {
               <h2>Join requests</h2>
               <p>
                 Supabase RLS lets you see your own requests and lets only the
-                current active leader (`creator_id`) see other students’
+                original group creator (`creator_id`) see other students’
                 requests for their group.
               </p>
               <div className="group-workflow-list">
@@ -915,8 +915,8 @@ export default function GroupWorkflows() {
                     <strong>
                       No join requests are visible to this account.
                     </strong>
-                    Only the requester and current active group leader can read
-                    a request.
+                    Only the requester and original group creator can read a
+                    request.
                   </div>
                 )}
               </div>
