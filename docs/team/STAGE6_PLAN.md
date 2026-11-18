@@ -18,14 +18,14 @@
 
 ## B. Stage 5 → Main promotion (do before Stage 6 reaches Main)
 
-| Step                                                                                                                                          | Owner                            | Gate                   | Status      |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------- | ----------- |
-| B1. Rebuild the two missing Stage 5 migrations from Test (`20261102_stage5_groups`, `20261102_stage5_course_roster_rpc`) and open a review PR | Lead task (Test read-only)       | None                   | In progress |
-| B2. Role 6 reviews the complete five-file Stage 5 migration set                                                                               | Role 6                           | B1 PR                  | Waiting     |
-| B3. Read-only schema comparison of Main vs Test (confirm `profiles`, `courses`, `enrolments`, `academic_terms`, `citylink_settings` exist)    | Lead / authorized task           | B2                     | Waiting     |
-| B4. Back up Main (Supabase → Database → Backups)                                                                                              | Lead                             | B3                     | Waiting     |
-| B5. Apply the five Stage 5 migrations in order to Main                                                                                        | Lead (Manus never accesses Main) | B4 + explicit approval | Waiting     |
-| B6. Verify Main: tables, RPCs, RLS, one signed-in smoke test                                                                                  | Lead + Eunice                    | B5                     | Waiting     |
+| Step                                                                                                                                          | Owner                            | Gate                   | Status                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------- | ----------------------------------------------------------------------------- |
+| B1. Rebuild the two missing Stage 5 migrations from Test (`20261102_stage5_groups`, `20261102_stage5_course_roster_rpc`) and open a review PR | Lead task (Test read-only)       | None                   | Done — [PR #10](https://github.com/minstrel1014/CityLink/pull/10), 2026-11-18 |
+| B2. Role 6 reviews the complete five-file Stage 5 migration set                                                                               | Role 6                           | B1 PR                  | Waiting                                                                       |
+| B3. Read-only schema comparison of Main vs Test (confirm `profiles`, `courses`, `enrolments`, `academic_terms`, `citylink_settings` exist)    | Lead / authorized task           | B2                     | Waiting                                                                       |
+| B4. Back up Main (Supabase → Database → Backups)                                                                                              | Lead                             | B3                     | Waiting                                                                       |
+| B5. Apply the five Stage 5 migrations in order to Main                                                                                        | Lead (Manus never accesses Main) | B4 + explicit approval | Waiting                                                                       |
+| B6. Verify Main: tables, RPCs, RLS, one signed-in smoke test                                                                                  | Lead + Eunice                    | B5                     | Waiting                                                                       |
 
 **Known risk:** Role 6 flagged that `list_course_classmates` returns `student_id` and `status`, and the profiles policy allows any shared-course peer across terms. Decide whether to tighten before B5 or track as a follow-up.
 
