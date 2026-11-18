@@ -137,3 +137,7 @@ No schema, RPC, RLS or Main change. The embedded list uses the existing field-li
 
 - This branch is not merged or published yet.
 - Live QA after publication and a separate Main promotion authorization remain required.
+
+### Follow-up card spacing (same day)
+
+The embedded roster did not load the full-page `.course-detail-page` selectors, so the group name and member count ran together and the View portfolio link did not use the course-detail spacing. `CourseDetail.css` now applies the same group-meta grid and block-level View portfolio link to `.course-detail-embedded`. Rechecked locally: group name and “3 people · Active” are on separate lines, and View portfolio is below the major/year line. No data, API or permission change.
