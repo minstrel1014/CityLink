@@ -407,7 +407,7 @@ export default function AuthenticatedMyGroup({
           <p className="my-group-rules-note">
             Groups have no maximum size. The first invite creates a forming
             group with you as leader; active members may invite, and only the
-            original group creator may review join requests.
+            current group leader may review join requests.
           </p>
         </div>
         <Link
