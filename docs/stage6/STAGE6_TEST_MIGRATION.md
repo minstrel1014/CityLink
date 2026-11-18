@@ -2,7 +2,7 @@
 
 ## Status
 
-Prepared for Test-only application, pending Role 6 re-check of this exact file.
+Approved by Role 6 at head `771bb8c` on 2026-11-18; Test application authorized by Adam.
 
 - Migration: `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`
 - Source proposal: `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` (revision 2), merged with PR #5 as `03563bc`

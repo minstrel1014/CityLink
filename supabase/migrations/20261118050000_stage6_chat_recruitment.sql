@@ -963,7 +963,7 @@ COMMIT;
 -- 1. Test-only metadata review (2026-11-17) confirmed the existing UNIQUE
 --    study_groups(id, course_id, term_id) key, courses.term_id, and the group-to-
 --    course composite FK. Recheck these immediately before any application.
--- 2. This proposal preserves the existing broad profiles RLS: authenticated
+-- 2. This migration preserves the existing broad profiles RLS: authenticated
 --    users may read profiles sharing any course, with no current-term filter.
 --    The new member-list RPCs use that same audience via shares_course_with,
 --    while returning only display_name, major, year, bio, and skills. The group
