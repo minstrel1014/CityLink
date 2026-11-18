@@ -21,31 +21,37 @@
 .course-detail-page .classmate-group-section .classmates-section-title {
   margin-bottom: 11px;
 }
-.course-detail-page .classmate-group-meta {
+.course-detail-page .classmate-group-meta,
+.course-detail-embedded .classmate-group-meta {
   display: grid;
   gap: 3px;
   margin-top: 8px;
 }
-.course-detail-page .classmate-group-meta strong {
+.course-detail-page .classmate-group-meta strong,
+.course-detail-embedded .classmate-group-meta strong {
   color: #526148;
   font-size: 10px;
 }
-.course-detail-page .classmate-group-meta span {
+.course-detail-page .classmate-group-meta span,
+.course-detail-embedded .classmate-group-meta span {
   color: #89927f;
   font-size: 9px;
   line-height: 1.45;
 }
-.course-detail-page .classmate-group-meta.looking strong {
+.course-detail-page .classmate-group-meta.looking strong,
+.course-detail-embedded .classmate-group-meta.looking strong {
   color: #697b58;
 }
-.course-detail-page .classmate-portfolio-link {
-  display: inline-block;
+.course-detail-page .classmate-portfolio-link,
+.course-detail-embedded .classmate-portfolio-link {
+  display: block;
   margin-top: 5px;
   color: #60784c;
   font-size: 9px;
   font-weight: 700;
 }
-.course-detail-page .classmate-portfolio-link:hover {
+.course-detail-page .classmate-portfolio-link:hover,
+.course-detail-embedded .classmate-portfolio-link:hover {
   text-decoration: underline;
 }
 .student-portfolio-page .student-portfolio-card {
