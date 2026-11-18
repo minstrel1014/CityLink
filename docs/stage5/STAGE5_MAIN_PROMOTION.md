@@ -56,3 +56,28 @@ The two membership triggers (`group_memberships_leadership_after_update` / `_aft
 - Prepared by: project/integration lead task (Manus).
 - Reviewers: Role 6 (database security), Eunice (verification).
 - Manus never accesses Main. Applying to Main is the lead's action.
+
+## Revision 2026-11-18 (after Role 6 review of PR #10)
+
+Role 6 confirmed the tables, indexes, RLS policies, grants and all 16 function bodies match Test, and raised three items. All three are fixed on this branch:
+
+1. **Duplicate policy name (blocker).** File 1 now creates the original 2026-11-02 policy `"requester and members read join requests"`. The later authority migration drops that name and creates the current-leader-only policy, so a fresh Main apply runs in order.
+2. **Missing unique index (blocker).** File 1 now creates `courses_id_term_id_uidx` on `courses (id, term_id)`, which the composite foreign keys require. It is safe because `id` is already the primary key.
+3. **Over-granted helpers (permission fix).** `authenticated` now receives EXECUTE on only the six helpers Test allows (`is_enrolled`, `both_enrolled_in_course`, `is_active_group_member`, `can_view_group`, `recipient_can_receive_invitation`, `shares_course_with`). The locking helpers and `maybe_abandon_empty_forming_group` are `postgres`-only.
+
+Role 6 also noted that `enforce_invitation_integrity` has no trigger on Test or Main. It is kept for parity and documented as unused; attaching a trigger is a separate decision.
+
+### New: term-model prerequisite (`20261102090000_stage5_term_model.sql`)
+
+Main has `courses.semester` but no `term_id`, `academic_terms` or `citylink_settings`, so the five Stage 5 files cannot run there. This new file runs first and:
+
+- creates `academic_terms` and `citylink_settings` exactly as on Test;
+- creates one academic term per distinct `semester` string and backfills `courses.term_id`;
+- inserts the lead-approved current term **`2026 sem A`** and sets it in `citylink_settings`;
+- aborts with a clear error if any course has no term, or if no course is linked to `2026 sem A`;
+- adds the `courses.term_id` foreign key, `courses_id_term_id_uidx` and `courses_term_id_idx`;
+- enables RLS and adds the two SELECT policies and SELECT-only grants.
+
+**Apply order on Main:** term model → `20261102131343_stage5_groups` → `20261102140927_stage5_course_roster_rpc` → `20261114163512_..._authority_and_succession` → `20261117043100_..._invite_candidates` → `20261117205600_..._course_detail_group_views`.
+
+**Open decision for the lead:** keep `list_course_classmates` exactly as-is for parity (then tighten before Stage 6 launch), or tighten it now. Tightening now changes the client contract and needs a client update.

@@ -16,6 +16,10 @@
 -- requires Role 6 review and the lead's separate approval. Statements are
 -- idempotent so a re-run where objects already exist is a no-op.
 --
+-- Note: public.enforce_invitation_integrity is reproduced for parity but has
+-- no trigger on Test or Main; its checks are not enforced at table level.
+-- Attaching a trigger is a separate decision.
+
 -- Known dependency: the composite foreign keys require
 -- public.courses(id, term_id) to be unique on the target database. Confirm
 -- with a read-only schema comparison before applying to Main.
@@ -118,6 +122,12 @@ create index if not exists study_groups_course_term_status_idx
 create unique index if not exists study_groups_one_forming_per_creator_course_term_idx
   on public.study_groups (creator_id, course_id, term_id)
   where creator_id is not null and status = 'forming';
+
+-- Required by the composite foreign keys below. Safe because id is already
+-- the primary key, so (id, term_id) cannot contain duplicates. The term-model
+-- migration creates it too; this keeps the file self-contained.
+create unique index if not exists courses_id_term_id_uidx
+  on public.courses (id, term_id);
 
 create index if not exists group_memberships_group_status_idx
   on public.group_memberships (group_id, membership_status);
@@ -705,17 +715,15 @@ create policy "participants read group invitations"
     or private.is_active_group_member(group_id, (select auth.uid()))
   );
 
-drop policy if exists "requester and current leader read join requests" on public.group_join_requests;
-create policy "requester and current leader read join requests"
+-- This is the original 2026-11-02 policy name and body. The later
+-- authority_and_succession migration drops it and replaces it with the
+-- current-leader-only policy, so a fresh Main apply stays in order.
+drop policy if exists "requester and members read join requests" on public.group_join_requests;
+create policy "requester and members read join requests"
   on public.group_join_requests for select to authenticated
   using (
     requester_id = (select auth.uid())
-    or exists (
-      select 1 from public.study_groups g
-      where g.id = group_join_requests.group_id
-        and g.creator_id = (select auth.uid())
-        and private.is_active_group_member(g.id, (select auth.uid()))
-    )
+    or private.is_active_group_member(group_id, (select auth.uid()))
   );
 
 revoke all on table public.study_groups from anon, authenticated;
@@ -736,26 +744,23 @@ grant execute on function public.respond_to_group_invitation(uuid, boolean) to a
 grant execute on function public.cancel_group_invitation(uuid) to authenticated;
 grant execute on function public.cancel_group_join_request(uuid) to authenticated;
 
-revoke execute on function private.is_enrolled(uuid, uuid) from public, anon;
-revoke execute on function private.both_enrolled_in_course(uuid, uuid, uuid) from public, anon;
-revoke execute on function private.is_current_term(uuid) from public, anon;
-revoke execute on function private.lock_current_term(uuid) from public, anon;
-revoke execute on function private.lock_course_profile(uuid, uuid, uuid) from public, anon;
-revoke execute on function private.lock_course_profiles(uuid, uuid, uuid, uuid) from public, anon;
-revoke execute on function private.is_active_group_member(uuid, uuid) from public, anon;
-revoke execute on function private.can_view_group(uuid, uuid) from public, anon;
-revoke execute on function private.maybe_abandon_empty_forming_group(uuid) from public, anon;
-revoke execute on function private.recipient_can_receive_invitation(uuid) from public, anon;
-revoke execute on function private.shares_course_with(uuid) from public, anon;
+-- Least privilege: Test grants authenticated EXECUTE on only six helpers.
+-- The locking and abandonment helpers stay postgres-only.
+revoke execute on function private.is_enrolled(uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.both_enrolled_in_course(uuid, uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.is_current_term(uuid) from public, anon, authenticated;
+revoke execute on function private.lock_current_term(uuid) from public, anon, authenticated;
+revoke execute on function private.lock_course_profile(uuid, uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.lock_course_profiles(uuid, uuid, uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.is_active_group_member(uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.can_view_group(uuid, uuid) from public, anon, authenticated;
+revoke execute on function private.maybe_abandon_empty_forming_group(uuid) from public, anon, authenticated;
+revoke execute on function private.recipient_can_receive_invitation(uuid) from public, anon, authenticated;
+revoke execute on function private.shares_course_with(uuid) from public, anon, authenticated;
 grant execute on function private.is_enrolled(uuid, uuid) to authenticated;
 grant execute on function private.both_enrolled_in_course(uuid, uuid, uuid) to authenticated;
-grant execute on function private.is_current_term(uuid) to authenticated;
-grant execute on function private.lock_current_term(uuid) to authenticated;
-grant execute on function private.lock_course_profile(uuid, uuid, uuid) to authenticated;
-grant execute on function private.lock_course_profiles(uuid, uuid, uuid, uuid) to authenticated;
 grant execute on function private.is_active_group_member(uuid, uuid) to authenticated;
 grant execute on function private.can_view_group(uuid, uuid) to authenticated;
-grant execute on function private.maybe_abandon_empty_forming_group(uuid) to authenticated;
 grant execute on function private.recipient_can_receive_invitation(uuid) to authenticated;
 grant execute on function private.shares_course_with(uuid) to authenticated;
 
