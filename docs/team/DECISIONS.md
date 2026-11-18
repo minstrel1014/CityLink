@@ -227,3 +227,61 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **References:** [PR #5](https://github.com/minstrel1014/CityLink/pull/5) and [PR #2](https://github.com/minstrel1014/CityLink/pull/2).
 
 **Lead clarification (2026-11-17, option A).** The CityLink project lead (Adam) resolved the conflict between this section’s earlier `cancelled` wording and the 2026-11-17 edge-case decision: abandoned-group pending join requests **expire**, not cancel. Pending invitations also expire. This correction applies to documentation and to Jeffery’s still-unreviewed PR #5 SQL proposal; it authorizes no database change.
+
+## 2026-11-18 — Stage 6 merge order: PR #5 waits for the shell PR
+
+- **Decision (approved by the project lead, Adam, 2026-11-18):** PR #5 (Jeffery's Stage 6 group chat and recruitment posts) is **not merged yet**. A separate "shell" PR is being built by the repair task and will merge first, because it touches the same areas — `App.tsx` routes and the shared navigation/header — as PR #5.
+- **After the shell PR merges:** Jeffery **merges the latest `main` into `feature/jeffery-group-chat-recruitment`**. He does **not** rebase and does **not** force-push. He resolves conflicts by keeping both sides (the shell's navigation and the Stage 6 routes), re-runs `corepack pnpm check`, `corepack pnpm test` and `corepack pnpm build`, pushes the feature branch, and asks for a fresh review.
+- **Then, in order:** re-review PR #5 and merge it with lead approval → Role 6 reviews the corrected migration draft (abandoned-group join requests now `expired`, recorded in `reviewed_at`; no `expired_at` column exists) → the lead separately approves applying it to the Test project → only after it is applied and tested, sync `main` to the Webdev demo and publish.
+- **Why no rebase:** a rebase rewrites the branch's commits and requires a force-push. The team rules forbid force-push without lead approval, so merging `main` into the feature branch is the safe way to update it.
+- **Roles affected:** Jeffery (PR #5), the repair-task owner (shell PR), the Project/Integration Lead, Role 6 (migration review), and Eunice (QA and demo checks).
+- **Data/API implications:** none. No database change is authorized by this decision. PR #5's SQL stays a proposal under `docs/stage6/`.
+- **Documentation note:** PR #5 also edits this file. When Jeffery merges `main` into his branch, he keeps both entries rather than replacing either one.
+- **Unresolved:** the shell PR number and merge time are not known yet; the exact conflict scope will be confirmed when it lands.
+
+## 2026-11-18 — One-time read-only Main inspection authorization
+
+- **Decision (Adam, project lead, 2026-11-18):** the lead authorizes a **one-time, read-only catalog inspection** of Supabase Main ref `pijslbchvstkoweslymr`, limited to schema metadata: table and column names, constraints, RLS flags, policies, and function names.
+- **Explicitly excluded:** reading application rows, DDL or DML of any kind, invoking RPCs, changing settings, and any access to Auth user data.
+- **Purpose:** confirm Main already has the base objects the five Stage 5 migrations depend on (`profiles`, `courses`, `enrolments`, `academic_terms`, `citylink_settings`, `courses(id, term_id)` uniqueness) before deciding whether to promote Stage 5 to Main.
+- **Expiry:** this exception ends when the comparison is reported. The standing project rule “never access Main” remains in force for all other work, including any later migration until a separate written authorization is recorded.
+- **Roles affected:** Project/Integration Lead, Role 6 (database security), and the integration lead task performing the read-only check.
+- **Data/API implications:** none. No object or row on Main is changed by this authorization.
+
+## 2026-11-18 — Stage 5 roster RPC parity (option A) and Main's current term
+
+- **Decision (Adam, project lead, 2026-11-18):** keep `public.list_course_classmates` exactly as it exists for the Stage 5 promotion to Main. Removing `student_id` and `status` from its output is deferred to a follow-up migration **before Stage 6 launch**, together with the matching client update. Option A was chosen over tightening now.
+- **Current term:** Main's only `courses.semester` value is `2026-Fall` (confirmed by the lead's read-only query). The term-model migration uses `2026-Fall` as `academic_terms.code` and `citylink_settings.current_term_id`.
+- **Implications:** until the follow-up, `authenticated` coursemates on Main can read `student_id` and `status` through this RPC for current-term courses. The follow-up must change the RPC, its client consumers, and its tests together; no schema change is expected.
+- **Roles affected:** Project/Integration Lead, Role 6 (migration review), Roy (client consumers), Eunice (QA), and the Stage 6 owner for the timing.
+- **Unresolved:** owner and date for the tightening follow-up; to be assigned before Stage 6 launch.
+
+## 2026-11-18 — Main backup authorization and completion
+
+- **Decision (Adam, 2026-11-18):** the lead authorized a full read-only export of the Main application data for backup before the Stage 5 promotion, since the Free plan has no automated backups.
+- **Executed:** logical export through the connected Supabase catalog/API on Main ref `pijslbchvstkoweslymr`. No rows were modified, no DDL ran, no Auth users were read.
+- **Result:** `profiles` 2 rows, `courses` 10 rows, `enrolments` 4 rows, `invitations` 0 rows. Files stored at `/home/ubuntu/backups/main_20261118/` with `data.sql`, per-table JSON, README and SHA256 checksums; all checksums verified.
+- **Scope limits:** `auth.users`, storage objects and schema DDL are not included; the schema is recorded in `supabase/schema.sql` and `supabase/migrations/`.
+- **Handling:** contains real profile rows; restricted permissions, not committed, to be deleted from the sandbox after download.
+
+## 2026-11-18 — Authorization to apply Stage 5 migrations to Main
+
+- **Decision (Adam, project lead, 2026-11-18):** written authorization to apply the approved migration files to Supabase Main ref `pijslbchvstkoweslymr`, under the conditions quoted in the lead's message: verified backup first; only files merged to `main` through approved PRs; one migration at a time through the migration tool with verification after each; no reset/delete, TRUNCATE, unlisted drops, Auth/secret changes, or Test access; stop on failure; report each version, time, result and verification; authorization expires on delivery of the report.
+- **Preconditions met:** logical Main backup completed 2026-11-18 (profiles 2, courses 10, enrolments 4, invitations 0; checksums verified; `/home/ubuntu/backups/main_20261118/`).
+- **Required before execution:** PR #10 merged to `main` so only merged files are executed.
+- **Roles affected:** Project/Integration Lead, Role 6, Eunice (verification), Roy and Jeffery (downstream features).
+- **Data/API implications:** applies six migrations in order (term model, groups, roster RPC, authority, invite candidates, course detail). The term-model migration writes course data.
+
+## 2026-11-18 — Continuation of Main migration and amended Main-access rule
+
+- **Decision (Adam, project owner, 2026-11-18):** continue applying the approved migrations and finish files 4–6 so Main reaches the consistent six-file state.
+- **Amended standing rule:** only **Adam, the project owner**, may authorize or perform changes to Supabase Main (`pijslbchvstkoweslymr`). Other contributors and tasks must not touch Main; the integration lead task acts only under Adam's explicit written authorization, recorded here.
+- **Reviewer authority:** option B (the current group leader, including after succession) remains the operative rule. The project instruction text is to be updated by Adam to match; PR #9 stays unmerged until that update.
+- **Stop notice:** the repair task's safety stop (2026-11-18) was acknowledged; no undo/reset was performed, and the lead confirmed continuation.
+
+## 2026-11-18 — PR #9 status and Test evidence for option B
+
+- **Status (report only):** PR #9 is open, unmerged and mergeable at merge commit `3d668262d9907af664919dcef9f48b0dc28cea62`, which includes GitHub main `9a12229`. Typecheck passed, 76/76 tests passed, build/format/whitespace passed; signed-in desktop and simulated 375px navigation passed with no Test actions submitted. Its PR body holds security sign-off pending reconciliation of the project instruction with option B.
+- **Test evidence (read-only, 2026-11-18):** on Test, the `group_join_requests` SELECT policy is `requester and current leader read join requests`; `review_group_join_request`, `send_group_invitation` and `request_to_join_group` grant EXECUTE only to `authenticated` (no `anon`, no `public`). This matches option B (current leader, including after succession).
+- **Remaining action for Adam:** save the project-instruction replacement text supplied on 2026-11-18 so the written rule matches option B and the Main-access rule names Adam as the only person who may authorize Main changes.
+- **Main:** six migrations applied and verified; authorization expired on the 11:45 report. Follow-up B8 (missing `profiles` BEFORE DELETE trigger for `archive_deleted_profile_citylink_history`) still needs a new authorization.
