@@ -358,3 +358,7 @@ This authorization is complete and ends with this report.
 2. Existing unnamed study groups stay unvalidated until their leader renames them; `study_groups_name_length_chk` is `NOT VALID`, while new inserts and updates are enforced.
 
 These confirmations resolve the two open items in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`. Role 6 re-review of the revised proposal is still required before the migration file is written or any Test change is made.
+
+### 2026-11-18 — Clarification: empty group-name legacy marker
+
+Role 6 found that a `NOT VALID` 1–50 group-name check would still block lifecycle updates to existing unnamed groups. The revised rule is: the check allows the empty string as a documented legacy marker, so abandoning, transferring or otherwise updating an unnamed group keeps working. `create_group_and_invite` and `rename_study_group` reject empty names, so no new unnamed group can be created through the API. The constraint can then be validated once the preflight shows no long names.

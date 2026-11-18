@@ -15,12 +15,13 @@ Prepared 2026-11-18, revised the same day after Role 6's static review. **Still 
 
 Role 6 reviewed the first draft and raised four blockers. This revision adopts all four:
 
-| Blocker                                                   | Resolution in this revision                                                   |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| No authorized display-name write path                     | New `update_own_display_name` RPC; no direct column grant                     |
-| Replacing `rename_study_group` with a `text` return fails | Keep the existing `void` signature; only replace the body                     |
-| `NOT VALID` does not check existing rows                  | Read-only preflight, repair decision, then `VALIDATE CONSTRAINT` for profiles |
-| 50-character check conflicts with sign-up trigger         | Update `handle_new_user` to cap at 50 in the same migration                   |
+| Blocker                                                               | Resolution in this revision                                                            |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| No authorized display-name write path                                 | New `update_own_display_name` RPC; no direct column grant                              |
+| Replacing `rename_study_group` with a `text` return fails             | Keep the existing `void` signature; only replace the body                              |
+| `NOT VALID` does not check existing rows                              | Read-only preflight, repair decision, then `VALIDATE CONSTRAINT` for profiles          |
+| 50-character check conflicts with sign-up trigger                     | Update `handle_new_user` to cap at 50 in the same migration                            |
+| A `NOT VALID` group-name check still blocks updates to unnamed groups | The check explicitly allows the empty legacy marker, so lifecycle updates keep working |
 
 Role 6 also confirmed: same-course, current-term eligibility is sufficient for the coursemate profile RPC; `'Recruitment post'` is a safe subject backfill; a client gate alone is not a security boundary.
 
@@ -34,8 +35,8 @@ Candidate version: `20261118080000_stage6_people_page_naming.sql`.
 select count(*) filter (where display_name <> btrim(display_name)
                            or char_length(display_name) not between 1 and 50) as bad_profiles
 from public.profiles;
-select count(*) filter (where name <> btrim(name)
-                           or char_length(name) > 50) as long_group_names
+select count(*) filter (where name <> ''
+                           and (name <> btrim(name) or char_length(name) > 50)) as long_group_names
 from public.study_groups;
 ```
 
@@ -68,7 +69,10 @@ Main currently has two profiles (`New CityLink member`, 19 characters) and no gr
   - requires `creator_id = auth.uid()` and, for active groups, an active membership;
   - trims the name and changes the limit from 1–120 to **1–50** with the message `group names must contain between 1 and 50 characters`;
   - existing grants stay in place because the signature is unchanged.
-- Add `study_groups_name_length_chk`: `name = btrim(name) AND char_length(name) BETWEEN 1 AND 50`, created `NOT VALID`. Existing unnamed groups (empty string) stay readable and prompt their leader to rename; every new insert or update is enforced. Validation of this constraint is deferred until the leader prompt has run; document it as a temporary grandfathering.
+- Add `study_groups_name_length_chk`:
+  `name = '' OR (name = btrim(name) AND char_length(name) BETWEEN 1 AND 50)`,
+  created `NOT VALID` and then `VALIDATE CONSTRAINT` after the preflight confirms no long names.
+  The empty string is the documented **legacy marker** for a group created before names were required. It stays allowed so status, creator and other lifecycle updates on those rows cannot fail; `create_group_and_invite` and `rename_study_group` both reject empty names, so no new empty group can be created through the API. The leader prompt asks each legacy group to rename itself, and a later cleanup can remove the marker.
 
 ### 4. Course group list
 
@@ -127,6 +131,7 @@ The short window where the old client calls the removed two-argument `create_gro
 - Preflight returns zero invalid profiles and zero long group names.
 - Create a group without a name → rejected; with 51 characters → rejected; valid name stored.
 - Non-leader rename → rejected; leader rename → stored; abandoned group rename → rejected; existing current-term lock still applies.
+- Updating an unnamed legacy group (for example abandoning it) still succeeds while the empty marker is present.
 - Display name: 50 accepted, 51 rejected, `'New CityLink member'` rejected, whitespace trimmed; new sign-up with a 120-character metadata name stores 50.
 - Course group list hides the viewer's own group and keeps the two-member rule.
 - Ungrouped list excludes members, the viewer and other courses/terms; pagination works; only allowlisted fields returned.
@@ -136,4 +141,4 @@ The short window where the old client calls the removed two-argument `create_gro
 ## Decisions confirmed by Adam (2026-11-18)
 
 1. The legacy subject label is `'Recruitment post'`.
-2. Existing unnamed groups stay unvalidated until their leaders rename them; `study_groups_name_length_chk` remains `NOT VALID` and every new insert or update is still enforced.
+2. Existing unnamed groups keep the empty-string legacy marker. The constraint allows that marker so lifecycle updates still work, while new names must be 1–50 characters.
