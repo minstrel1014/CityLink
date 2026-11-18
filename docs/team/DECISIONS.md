@@ -335,3 +335,17 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 **Authorization text (verbatim):** "I, Adam, authorize the CityLink integration lead task to take a fresh backup of Supabase Main ref pijslbchvstkoweslymr and then apply only 20261118050000_stage6_chat_recruitment.sql to Main, one migration, forward-only. No reset, TRUNCATE, drop of existing objects, Auth/secret changes, or Test access. Stop and report on any error. Report the version, times, result and verification output; the authorization ends when the report is delivered."
 
 **Scope:** fresh Main backup, then the single Stage 6 migration already applied to Test and approved by Role 6. No other Main change. The authorization ends when the execution report is delivered.
+
+## 2026-11-18 — Stage 6 chat/recruitment migration applied to Main (report)
+
+**Authorization:** Adam, recorded above. **Execution:** integration lead task, 2026-11-18.
+
+**Backup first:** fresh Main backup written to `/home/ubuntu/backups/main_20261118_stage6/` (profiles 2, courses 10, enrolments 4, academic_terms 1, citylink_settings 1; invitations and all group tables empty; README with file hashes).
+
+**Migration:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` from GitHub main commit d667b6f, SHA-256 `861f0042392a8142b8cfe19f9d9f768a2d1ef91ce4f2e359e26b816c1db6d87f`. Applied as the recorded migration version `20261118080722` (`stage6_chat_recruitment`); start 16:07 +08:00, success, no errors. The tool records the application time as the version; the file content is the approved migration.
+
+**Verified after apply:** `group_chat_messages` and `group_recruitment_posts` exist with RLS enabled; no direct table grants for `anon`/`authenticated`; all ten Stage 6 RPCs exist with the approved signatures and `authenticated`-only EXECUTE; three recruitment-post close triggers exist; no browser-role EXECUTE on the private helpers; direct REST reads of both tables return HTTP 401.
+
+**Remaining risks:** runtime RPC behavior on Main was not exercised (no Main test accounts or data writes authorized); the Stage 5 profile-history trigger gap noted earlier is still open; Main contains a pre-existing `rename_study_group(uuid, text)` function not created by the six Stage 5 migrations, which the people-page proposal must account for before approval.
+
+This authorization is complete and ends with this report.
