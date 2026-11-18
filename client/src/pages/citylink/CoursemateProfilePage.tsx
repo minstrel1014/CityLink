@@ -1,13 +1,31 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
+import { Avatar } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import type { Student } from "@/data/sampleData";
 import {
   getCurrentTermCoursemateProfile,
   getStage6ErrorMessage,
   type CoursemateProfile,
 } from "@/lib/supabaseStage6";
+import { getProfileInitials } from "@/lib/supabaseProfile";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
+
+function displayStudent(profile: CoursemateProfile): Student {
+  return {
+    id: profile.profileId,
+    studentId: "Shared course profile",
+    name: profile.displayName,
+    major: profile.major ?? "Not set",
+    year: profile.year,
+    bio: profile.bio,
+    skills: profile.skills,
+    status: "open",
+    avatar: getProfileInitials(profile.displayName),
+    color: "sage",
+  };
+}
 
 export default function CoursemateProfilePage({
   courseId,
@@ -54,7 +72,7 @@ export default function CoursemateProfilePage({
   return (
     <Stage6Layout title="Coursemate profile">
       <Link
-        className="text-link"
+        className="text-link stage6-profile-back"
         href={`/my-courses/${encodeURIComponent(courseId)}/groups`}
       >
         <ArrowLeft size={14} /> Back to people
@@ -72,25 +90,70 @@ export default function CoursemateProfilePage({
           message={error}
         />
       ) : (
-        <section className="stage6-section">
-          <p className="eyebrow">CURRENT-TERM COURSEMATE</p>
-          <h1>{profile.displayName}</h1>
-          <p>
-            {profile.major ?? "Major not set"} · Year {profile.year}
-          </p>
-          <h2>About</h2>
-          <p className="bio-text">{profile.bio || "No bio added yet."}</p>
-          <h2>Skills</h2>
-          <div className="skill-tags large-tags">
-            {profile.skills.length ? (
-              profile.skills.map((skill, index) => (
-                <span key={`${skill}-${index}`}>{skill}</span>
-              ))
-            ) : (
-              <span>No skills added yet</span>
-            )}
+        <>
+          <div className="auth-profile-heading">
+            <div>
+              <p className="eyebrow">CURRENT-TERM COURSEMATE</p>
+              <h1>Coursemate profile</h1>
+              <p>
+                This profile is visible because you share a current-term course.
+              </p>
+            </div>
           </div>
-        </section>
+          <div className="my-profile-grid auth-profile-grid">
+            <section className="my-student-card">
+              <div className="eyebrow">AUTHENTICATED PROFILE</div>
+              <Avatar student={displayStudent(profile)} size="large" />
+              <h2>{profile.displayName}</h2>
+              <p>Shared course profile</p>
+              <span className="course-membership enrolled">
+                Current-term coursemate
+              </span>
+              <div className="my-card-facts">
+                <span>
+                  Major<strong>{profile.major || "Not set"}</strong>
+                </span>
+                <span>
+                  Year of study<strong>Year {profile.year}</strong>
+                </span>
+              </div>
+              <div className="auth-profile-separation">
+                <ShieldCheck size={16} />
+                <span>
+                  Only approved shared-course fields are shown. Email, student
+                  ID, account status and private records are never included.
+                </span>
+              </div>
+            </section>
+
+            <section className="profile-form-panel">
+              <section className="profile-section no-border">
+                <h2>About me</h2>
+                <p className="bio-text">
+                  {profile.bio || "This coursemate has not added a bio yet."}
+                </p>
+              </section>
+              <section className="profile-section">
+                <h2>My strengths</h2>
+                <div className="skill-tags large-tags">
+                  {profile.skills.length ? (
+                    profile.skills.map((skill, index) => (
+                      <span key={`${skill}-${index}`}>{skill}</span>
+                    ))
+                  ) : (
+                    <span>No skills added yet</span>
+                  )}
+                </div>
+              </section>
+              <section className="profile-section">
+                <h2>Study information</h2>
+                <p className="bio-text">
+                  {profile.major || "Major not set"} · Year {profile.year}
+                </p>
+              </section>
+            </section>
+          </div>
+        </>
       )}
     </Stage6Layout>
   );

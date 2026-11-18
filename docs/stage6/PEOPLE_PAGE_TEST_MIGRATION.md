@@ -62,3 +62,35 @@ Live signed-in QA for the name gate, 50/51 boundaries, leader rename, one-member
 - Rechecked: `pnpm check` passed; `pnpm test` 99/99 passed; `pnpm build` passed; `git diff --check` passed.
 
 Live signed-in QA of the gate states and more than 50/100 ungrouped rows remains outstanding.
+
+## Live QA data on Test (2026-11-18)
+
+All accounts and rows below are labelled QA data on the disposable Test project only. No real student records, email addresses or passwords are recorded in the repository.
+
+- `QA Marketing Team` (active, 3 members: Alice QA, Dave QA, Bob QA) — recruitment post by Alice QA and a second post by Dave QA.
+- `QA Finance Circle` (active, 3 members: Emma QA, Frank QA, Cara QA) — recruitment post by Emma QA.
+- Ava Wong received a pending group invitation from the people-card action.
+- Grace QA (no group) applied to `QA Finance Circle`; the request is pending and still needs the leader's decision.
+- One plain-text chat message was sent in `QA Marketing Team` and remained after a full page refresh.
+
+## Four UI updates tested in the browser
+
+1. **People list actions** — a member sees “Invite to my group”; a student without a group sees “Create a group”. The invite created a real pending Test invitation. The create link opened My Groups with the course and invitee preselected.
+2. **Coursemate profile** — rebuilt with the same card and panel layout as the signed-in profile: avatar, name, shared-course status, About, strengths and study information. Only the approved shared-course fields are shown.
+3. **Shared navigation** — `Stage6Layout` now wraps group chat, group members, people and coursemate profile pages in `AppShell`, so the desktop sidebar and mobile bottom navigation stay available on every page.
+4. **Private group chat** — My Groups now shows every joined group, with “Open private chat” and “View members”. Rename controls appear only for the leader. Browseable group cards show “Open chat” only to active members; non-members see only “View members”.
+
+## Verification results
+
+- `pnpm check` passed.
+- `pnpm test` passed 99/99.
+- `pnpm build` passed.
+- `git diff --check` passed.
+- Desktop browser QA passed for the display-name gate, people actions, profile page, sidebar, private chat send/refresh, recruitment post browsing and Apply to join.
+- Mobile bottom navigation is covered by the existing responsive `AppShell` CSS, but a fresh 375px visual pass of every new route is still recommended before Main promotion.
+
+## Known limits
+
+- Main does not have the people-page migration yet. Main promotion needs a new written authorization.
+- The QA accounts and rows are Test-only and must not be copied to Main.
+- Recruitment post apply deliberately creates a pending request; it does not add a member.
