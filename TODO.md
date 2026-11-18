@@ -123,6 +123,7 @@ Group-size display clarification: count active memberships plus the forming grou
 - [x] Separate the group view into four spaced cards: Group name, Current members, Invitation history, and Classmate list.
 - [x] Add an **Open Group Chat** link at the bottom of Current members; it targets the placeholder path `/group-chat`.
 - [x] Add a minimal `/group-chat` placeholder page and route manifest entry without implementing chat.
+- [x] **Superseded 2026-11-18:** Stage 6 wired the existing Open Group Chat button to the real `/groups/:groupId/chat` screen using the panel’s group ID, and removed the placeholder route/page. See `docs/stage6/CHAT_RECRUITMENT_API_PROPOSAL.md`.
 - [x] Preserve group rename, member display, invitation status/cancel, create-group, request-to-join, and full-classmate-list behavior.
 - [x] Run `corepack pnpm check` (pass), `corepack pnpm test` (9 files, 67 tests), `corepack pnpm build` (pass), Prettier, and `git diff --check`.
 - [ ] Signed-in desktop/mobile visual check with an authorized Test account remains outstanding.

@@ -18,6 +18,12 @@ import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
 import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
 import GroupChatPlaceholder from "@/pages/citylink/GroupChatPlaceholder";
+import GroupWorkspacePage from "@/pages/citylink/GroupWorkspacePage";
+import GroupChatPage from "@/pages/citylink/GroupChatPage";
+import {
+  GroupMemberProfilePage,
+  GroupMembersPage,
+} from "@/pages/citylink/GroupMembersPage";
 import StudentPortfolio from "@/pages/citylink/StudentPortfolio";
 import AuthenticatedProfile from "@/pages/citylink/AuthenticatedProfile";
 import {
@@ -228,6 +234,23 @@ export default function App() {
                     signedOut={<MyProfile />}
                   />
                 )}
+              </Route>
+              <Route path="/my-courses/:courseId/groups">
+                {params => <GroupWorkspacePage courseId={params.courseId} />}
+              </Route>
+              <Route path="/groups/:groupId/chat">
+                {params => <GroupChatPage groupId={params.groupId} />}
+              </Route>
+              <Route path="/groups/:groupId/members/:profileId">
+                {params => (
+                  <GroupMemberProfilePage
+                    groupId={params.groupId}
+                    profileId={params.profileId}
+                  />
+                )}
+              </Route>
+              <Route path="/groups/:groupId/members">
+                {params => <GroupMembersPage groupId={params.groupId} />}
               </Route>
               <Route path="/my-courses">
                 <Redirect to="/dashboard" replace />

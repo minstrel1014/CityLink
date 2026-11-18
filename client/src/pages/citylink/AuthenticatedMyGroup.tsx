@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Link } from "wouter";
+import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
@@ -630,13 +631,13 @@ export default function AuthenticatedMyGroup({
                   description="Active members in this group."
                   className="my-group-members-card"
                   footer={
-                    <Link
-                      href="/group-chat"
+                    <GroupChatLink
+                      groupId={ownData.group.id}
                       className="secondary my-group-chat-link"
                     >
                       <MessageCircle size={16} /> Open Group Chat{" "}
                       <ArrowRight size={15} />
-                    </Link>
+                    </GroupChatLink>
                   }
                 >
                   {members.length > 0 ? (

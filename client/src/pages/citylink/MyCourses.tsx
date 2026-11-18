@@ -612,6 +612,14 @@ export default function MyCourses({
                       >
                         My group
                       </Link>
+                      {enrolled && (
+                        <Link
+                          className="course-groups-link"
+                          href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
+                        >
+                          Groups &amp; posts <ArrowRight size={14} />
+                        </Link>
+                      )}
                       <button
                         type="button"
                         className={`course-enrolment-action ${enrolled ? "remove" : "add"}`}

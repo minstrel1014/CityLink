@@ -40,7 +40,22 @@
     { "path": "/me", "title": "My profile" },
     { "path": "/my-courses", "title": "Legacy redirect to /dashboard" },
     { "path": "/my-groups", "title": "Authenticated group workflows" },
+    { "path": "/my-courses", "title": "Legacy redirect to /dashboard" },
+    {
+      "path": "/my-courses/:courseId/groups",
+      "title": "Study groups and recruitment"
+    },
+    { "path": "/my-groups", "title": "Authenticated group workflows" },
     { "path": "/group-chat", "title": "Group chat — placeholder" },
+    { "path": "/groups/:groupId/chat", "title": "Authenticated group chat" },
+    {
+      "path": "/groups/:groupId/members",
+      "title": "Current-term group members"
+    },
+    {
+      "path": "/groups/:groupId/members/:profileId",
+      "title": "Current-term coursemate profile"
+    },
     {
       "path": "/messages",
       "title": "Fictional messages when signed out; group-chat list when signed in"
