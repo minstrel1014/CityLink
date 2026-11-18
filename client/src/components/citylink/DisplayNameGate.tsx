@@ -119,9 +119,14 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     window.location.assign("/");
   }
 
+  const canRenderChildren =
+    session.status === "unconfigured" ||
+    session.status === "error" ||
+    (session.status === "ready" && (!userId || state === "ready"));
+
   return (
     <>
-      {children}
+      {canRenderChildren ? children : null}
       {state !== "ready" && (
         <div
           className="display-name-gate"
