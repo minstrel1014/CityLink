@@ -5,7 +5,15 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Check, LogOut, Pencil, ShieldCheck, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  LogOut,
+  Pencil,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Avatar, Brand, Status } from "@/components/citylink/Shared";
 import type { Student } from "@/data/sampleData";
@@ -404,8 +412,8 @@ export default function AuthenticatedProfile({
           >
             Try again
           </button>
-          <Link className="secondary" href="/demo">
-            Explore fictional demo
+          <Link className="secondary" href="/dashboard">
+            Go to dashboard
           </Link>
         </div>
       </section>
@@ -432,8 +440,8 @@ export default function AuthenticatedProfile({
           >
             Try again
           </button>
-          <Link className="secondary" href="/demo">
-            Explore fictional demo
+          <Link className="secondary" href="/dashboard">
+            Go to dashboard
           </Link>
         </div>
       </section>
@@ -481,10 +489,13 @@ export default function AuthenticatedProfile({
           </div>
           <div className="auth-profile-separation">
             <ShieldCheck size={16} />
-            <span>Courses and invitations remain in the fictional demo.</span>
+            <span>
+              Your signed-in courses and group invitations are separate from the
+              fictional demo.
+            </span>
           </div>
-          <Link href="/demo" className="exit-demo">
-            Explore sample-data demo <ArrowLeft size={15} />
+          <Link href="/dashboard" className="exit-demo">
+            View your courses <ArrowRight size={15} />
           </Link>
         </section>
 

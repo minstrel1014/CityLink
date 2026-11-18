@@ -26,10 +26,16 @@ import {
 } from "lucide-react";
 import { useCityLink } from "@/data/AppContext";
 import { DEMO_USER_ID, type Course, type Student } from "@/data/sampleData";
-export function Brand({ small = false }: { small?: boolean }) {
+export function Brand({
+  small = false,
+  href = "/demo",
+}: {
+  small?: boolean;
+  href?: string;
+}) {
   return (
     <Link
-      href="/demo"
+      href={href}
       className={`brand ${small ? "small" : ""}`}
       aria-label="CityLink dashboard"
     >
@@ -120,10 +126,10 @@ export function EmptyState({
 }
 const nav = [
   { href: "/demo", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/courses", label: "Courses", icon: BookOpen },
-  { href: "/invitations", label: "Invitations", icon: Send },
-  { href: "/messages", label: "Messages", icon: MessageCircle },
-  { href: "/me", label: "My profile", icon: UserRound },
+  { href: "/demo/courses", label: "Courses", icon: BookOpen },
+  { href: "/demo/invitations", label: "Invitations", icon: Send },
+  { href: "/demo/messages", label: "Messages", icon: MessageCircle },
+  { href: "/demo/me", label: "My profile", icon: UserRound },
 ];
 export function Shell({
   children,
@@ -138,11 +144,13 @@ export function Shell({
     i => i.recipientId === DEMO_USER_ID && i.status === "pending"
   ).length;
   const active = (href: string) =>
-    href === "/courses"
+    href === "/demo/courses"
       ? location.startsWith("/courses") ||
         location.startsWith("/students") ||
-        location.startsWith("/demo/courses")
-      : location === href;
+        location.startsWith("/demo/courses") ||
+        location.startsWith("/demo/students")
+      : location === href ||
+        (href !== "/demo" && location === href.replace("/demo", ""));
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -160,10 +168,12 @@ export function Shell({
             >
               <Icon size={20} />
               <span>{label}</span>
-              {href === "/invitations" && incoming > 0 && (
+              {href === "/demo/invitations" && incoming > 0 && (
                 <b className="nav-count">{incoming}</b>
               )}
-              {href === "/messages" && <span className="soon-label">SOON</span>}
+              {href === "/demo/messages" && (
+                <span className="soon-label">SOON</span>
+              )}
             </Link>
           ))}
         </nav>
@@ -172,14 +182,14 @@ export function Shell({
             <Sparkles size={20} />
             <h4>Better, together.</h4>
             <p>Your next great group starts with a hello.</p>
-            <Link href="/courses">
+            <Link href="/demo/courses">
               Find your people <ArrowUpRight size={17} />
             </Link>
           </div>
-          <Link href="/about" className="help-link">
+          <Link href="/demo/about" className="help-link">
             <Settings2 size={18} /> About this demo <ArrowUpRight size={14} />
           </Link>
-          <Link href="/me" className="sidebar-user">
+          <Link href="/demo/me" className="sidebar-user">
             <Avatar student={me} size="small" />
             <span>
               <strong>{me.name}</strong>
@@ -200,18 +210,18 @@ export function Shell({
             <strong>{title}</strong>
           </div>
           <div className="topbar-actions">
-            <Link href="/about" className="demo-pill">
+            <Link href="/demo/about" className="demo-pill">
               <span /> Sample data demo
             </Link>
             <Link
-              href="/invitations"
+              href="/demo/invitations"
               className="icon-button notification"
               aria-label={`${incoming} pending invitations`}
             >
               <Bell size={21} />
               {incoming > 0 && <i />}
             </Link>
-            <Link href="/me" aria-label="View my profile">
+            <Link href="/demo/me" aria-label="View my profile">
               <Avatar student={me} size="small" />
             </Link>
           </div>
@@ -219,7 +229,7 @@ export function Shell({
         <main className="page-content">{children}</main>
         <footer className="desktop-footer">
           <span>Made for your next great team.</span>
-          <Link href="/about">
+          <Link href="/demo/about">
             Fictional data · No university connection <ArrowUpRight size={12} />
           </Link>
         </footer>
@@ -234,7 +244,9 @@ export function Shell({
           >
             <span>
               <Icon size={21} />
-              {href === "/invitations" && incoming > 0 && <i>{incoming}</i>}
+              {href === "/demo/invitations" && incoming > 0 && (
+                <i>{incoming}</i>
+              )}
             </span>
             <small>{label === "My profile" ? "Profile" : label}</small>
           </Link>
@@ -311,7 +323,7 @@ export function InviteButton({
     const incoming = record.recipientId === DEMO_USER_ID;
     return (
       <Link
-        href="/invitations"
+        href="/demo/invitations"
         className={`invite-status ${compact ? "compact" : ""}`}
       >
         {record.status === "accepted" ? (

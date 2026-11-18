@@ -126,3 +126,23 @@ Group-size display clarification: count active memberships plus the forming grou
 - [x] Preserve group rename, member display, invitation status/cancel, create-group, request-to-join, and full-classmate-list behavior.
 - [x] Run `corepack pnpm check` (pass), `corepack pnpm test` (9 files, 67 tests), `corepack pnpm build` (pass), Prettier, and `git diff --check`.
 - [ ] Signed-in desktop/mobile visual check with an authorized Test account remains outstanding.
+
+## Approved Phase 1 — shared shell and end-to-end experience (2026-11-18)
+
+This dated addendum supersedes older sign-in landing and “fictional course data only” statements for the signed-in routes; it preserves the signed-out `/demo` experience.
+
+- [x] **Owner ledger:** Adam is the human owner. His base role remains Project, Integration, and Release Lead; authenticated demo repair, shell integration, and smoother user journey are additional features on this existing assignment, not a replacement task. Other owners remain TBD unless their names were explicitly supplied; Jeffery’s Stage 6 chat/recruitment assignment remains separate.
+- [x] Route normal restored/successful sign-in to `/dashboard`, keep recovery-password flow in place, and make `/my-courses` redirect compatibly to Dashboard.
+- [x] Make **My courses** the first/default dashboard tab and **All courses** the second; keep `/courses` as the full Test-backed catalogue for signed-in users and preserve the fictional `/courses` fallback for signed-out users.
+- [x] Add a responsive authenticated shell with Dashboard, Courses, Invitations, Messages, and Profile navigation; preserve fictional routes and remove fictional-demo navigation from the signed-in shell.
+- [x] Use existing Test-backed read contracts for enrolled-course roster initials, open-to-group counts, invitations, pending requests, and active group destinations. The client filters requests to the requester or recorded `creator_id`; whether that identifies the original creator and whether the server enforces the approved policy remain unresolved below. No new RPC or database write is introduced.
+- [x] Reserve the sidebar Messages item and retain the existing Group Chat slot inside course detail for Stage 6. Do not implement chat pages, private-message pages, message storage, or send/receive behavior in this phase.
+- [x] Make the complete course name plate a keyboard-accessible course-detail link; retain the distinct My group action.
+- [x] Merge-readiness fixes and validation: `corepack pnpm check` passed; `corepack pnpm test` passed (10 files, 76 tests); `corepack pnpm build` passed; Prettier on changed source/tests/manifest passed; `git diff --check` passed. The build retains the existing `/api/platform/config.js` non-module warning and the >500 kB chunk-size advisory.
+- [x] On 2026-11-18, in a separate Test-only Preview of PR #9, the owner signed in and opened Invitations at desktop width. Received invitations loaded; sent and pending empty states displayed; browser console showed no output. No invitation or group actions or Test data/schema changes were submitted.
+- [x] Complete read-only desktop navigation and a simulated 375-pixel-wide check of the five signed-in shell pages; verify course name opens My Group and explicit fictional routes remain fictional when signed in. No Test actions or schema changes were submitted.
+- [ ] Perform multi-account creator-versus-non-creator permission checks and any authorized mutation tests only against disposable Test, with separate approval before persistent Test rows. A real physical-mobile-device check is still outstanding. Do not access Main.
+- [ ] Block security sign-off: project instructions say original creator only; checked-in succession reassigns `creator_id` to a successor, and the lead task reports a conflicting option-B decision. Adam must reconcile the decision and Role 6 must review actual Test authorization before any security change. The UI gate alone is not a backend fix; no Test migration is authorized here.
+- [x] Initial commit `fd26cd56deac8a9a1e52bd6ebf38c7397cad9a8e` was pushed on `feature/adam-ux-shell` and [PR #9](https://github.com/minstrel1014/CityLink/pull/9) opened against `main`; the PR remains unmerged. Check its latest head and mergeability before review; do not push or merge directly to `main`.
+
+Validation commands and exact results, file inventory, API boundaries, assumptions, open issues, and next steps are recorded in `docs/WORKSPACE_SHELL_HANDOFF.md`; the approved product and coordination decisions are in `docs/team/DECISIONS.md`.

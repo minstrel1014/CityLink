@@ -29,6 +29,7 @@ import {
   isDuplicateRegistration,
   isSupabaseRecoveryCallback,
 } from "@/lib/supabaseAuthMessages";
+import { shouldRedirectToDashboard } from "@/lib/workspaceRouteRules";
 
 type Feedback = {
   tone: "error" | "info" | "success";
@@ -101,6 +102,26 @@ export default function Welcome() {
     }
   }, [sessionState.authEvent]);
 
+  useEffect(() => {
+    if (
+      !shouldRedirectToDashboard({
+        sessionReady: sessionState.status === "ready",
+        userId: signedInUser?.id,
+        authEvent: sessionState.authEvent,
+        recoveryCallback: isSupabaseRecoveryCallback(window.location.href),
+        choosingNewPassword: dialog === "new-password",
+      })
+    )
+      return;
+    navigate("/dashboard");
+  }, [
+    dialog,
+    navigate,
+    sessionState.authEvent,
+    sessionState.status,
+    signedInUser,
+  ]);
+
   async function handleSignIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSignInFeedback(null);
@@ -141,8 +162,9 @@ export default function Welcome() {
       } else {
         setSignInFeedback({
           tone: "success",
-          text: "Signed in with Supabase Auth. CityLink's course and invitation demo remains fictional and separate.",
+          text: "Signed in with Supabase Auth. Your dashboard uses the separate Test-backed workflows; /demo remains fictional.",
         });
+        navigate("/dashboard");
       }
     } catch (error) {
       setSignInFeedback({
@@ -224,13 +246,14 @@ export default function Welcome() {
       } else {
         setRegisterFeedback({
           tone: "success",
-          text: "Your account was created and signed in. CityLink's student data remains separate from the fictional demo.",
+          text: "Your account was created and signed in. Your dashboard uses separate Test-backed workflows.",
         });
         setSignInFeedback({
           tone: "success",
-          text: "Signed in with Supabase Auth. CityLink's course and invitation demo remains fictional and separate.",
+          text: "Signed in with Supabase Auth. Your dashboard uses the separate Test-backed workflows; /demo remains fictional.",
         });
         setDialog(null);
+        navigate("/dashboard");
       }
     } catch (error) {
       setRegisterFeedback({
@@ -382,22 +405,15 @@ export default function Welcome() {
                 <AuthFeedback
                   feedback={{
                     tone: "success",
-                    text: `Signed in as ${signedInUser.email ?? "your account"}. The sample-data demo remains a separate fictional experience.`,
+                    text: `Signed in as ${signedInUser.email ?? "your account"}. Your Test-backed workspace is ready.`,
                   }}
                 />
                 <button
                   type="button"
                   className="secondary auth-profile-link"
-                  onClick={() => navigate("/me")}
+                  onClick={() => navigate("/dashboard")}
                 >
-                  Manage my profile <ArrowRight size={17} />
-                </button>
-                <button
-                  type="button"
-                  className="secondary auth-profile-link"
-                  onClick={() => navigate("/my-courses")}
-                >
-                  My Courses <ArrowRight size={17} />
+                  Continue to your dashboard <ArrowRight size={17} />
                 </button>
               </>
             )}
