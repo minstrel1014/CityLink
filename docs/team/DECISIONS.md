@@ -278,3 +278,10 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Amended standing rule:** only **Adam, the project owner**, may authorize or perform changes to Supabase Main (`pijslbchvstkoweslymr`). Other contributors and tasks must not touch Main; the integration lead task acts only under Adam's explicit written authorization, recorded here.
 - **Reviewer authority:** option B (the current group leader, including after succession) remains the operative rule. The project instruction text is to be updated by Adam to match; PR #9 stays unmerged until that update.
 - **Stop notice:** the repair task's safety stop (2026-11-18) was acknowledged; no undo/reset was performed, and the lead confirmed continuation.
+
+## 2026-11-18 — PR #9 status and Test evidence for option B
+
+- **Status (report only):** PR #9 is open, unmerged and mergeable at merge commit `3d668262d9907af664919dcef9f48b0dc28cea62`, which includes GitHub main `9a12229`. Typecheck passed, 76/76 tests passed, build/format/whitespace passed; signed-in desktop and simulated 375px navigation passed with no Test actions submitted. Its PR body holds security sign-off pending reconciliation of the project instruction with option B.
+- **Test evidence (read-only, 2026-11-18):** on Test, the `group_join_requests` SELECT policy is `requester and current leader read join requests`; `review_group_join_request`, `send_group_invitation` and `request_to_join_group` grant EXECUTE only to `authenticated` (no `anon`, no `public`). This matches option B (current leader, including after succession).
+- **Remaining action for Adam:** save the project-instruction replacement text supplied on 2026-11-18 so the written rule matches option B and the Main-access rule names Adam as the only person who may authorize Main changes.
+- **Main:** six migrations applied and verified; authorization expired on the 11:45 report. Follow-up B8 (missing `profiles` BEFORE DELETE trigger for `archive_deleted_profile_citylink_history`) still needs a new authorization.
