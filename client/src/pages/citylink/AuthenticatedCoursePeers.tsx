@@ -105,8 +105,10 @@ function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
 
 export default function AuthenticatedCoursePeers({
   courseId,
+  embedded = false,
 }: {
   courseId: string;
+  embedded?: boolean;
 }) {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
@@ -449,17 +451,29 @@ export default function AuthenticatedCoursePeers({
               {peer.major || "Major not provided"} <span>·</span> Year{" "}
               {peer.year}
             </p>
-            <small>{peer.student_id || "Student ID not provided"}</small>
+            {!embedded && (
+              <small>{peer.student_id || "Student ID not provided"}</small>
+            )}
             <Link
               className="classmate-portfolio-link"
-              href={`/courses/${courseId}/students/${peer.profile_id}`}
+              href={
+                embedded
+                  ? `/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`
+                  : `/courses/${courseId}/students/${peer.profile_id}`
+              }
             >
               View portfolio
             </Link>
           </div>
         </div>
         <div className="classmate-detail">
-          <Status status={peer.status} />
+          {summary ? (
+            <span className="status full">
+              <span /> In a group
+            </span>
+          ) : (
+            <Status status={peer.status} />
+          )}
           {summary ? (
             <div className="classmate-group-meta">
               <strong>{summary.group_name || "Study group"}</strong>
@@ -634,6 +648,25 @@ export default function AuthenticatedCoursePeers({
     );
   }
 
+  if (embedded && session.status === "loading")
+    return (
+      <div className="course-directory-state" role="status">
+        <span className="spinner" /> Checking your sign-in…
+      </div>
+    );
+  if (embedded && session.status === "error")
+    return (
+      <div className="course-directory-feedback error" role="alert">
+        Your sign-in is unavailable. Return to the sign-in page and try again.
+      </div>
+    );
+  if (embedded && !userId) return null;
+  if (embedded && !supabaseClient)
+    return (
+      <div className="course-directory-feedback error" role="alert">
+        Supabase is not configured, so coursemates cannot be loaded.
+      </div>
+    );
   if (session.status === "loading")
     return (
       <AccessScreen
@@ -664,276 +697,287 @@ export default function AuthenticatedCoursePeers({
       />
     );
 
-  return (
-    <div className="authenticated-courses-page course-detail-page">
-      <AccountHeader email={session.user?.email} />
-      <main className="authenticated-courses-main">
+  const content = (
+    <>
+      {!embedded && (
         <Link href={`/courses/${courseId}`} className="back-link">
           <ArrowLeft size={17} /> Back to My Group
         </Link>
-        {loading && (
-          <div className="course-directory-state" role="status">
-            <span className="spinner" /> Loading Test coursemates and group
-            status…
-          </div>
-        )}
-        {!loading && loadError && (
-          <EmptyState
-            title="Course data could not be loaded"
-            description={loadError}
+      )}
+      {loading && (
+        <div className="course-directory-state" role="status">
+          <span className="spinner" /> Loading Test coursemates and group
+          status…
+        </div>
+      )}
+      {!loading && loadError && (
+        <EmptyState
+          title="Course data could not be loaded"
+          description={loadError}
+        >
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => setRetryToken(value => value + 1)}
           >
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => setRetryToken(value => value + 1)}
-            >
-              <RefreshCw size={16} /> Try again
-            </button>
-          </EmptyState>
-        )}
-        {!loading && !loadError && !course && (
-          <EmptyState
-            title="Course not found"
-            description="This course ID is not in the authenticated Test catalogue."
-          >
-            <Link href="/my-courses" className="secondary">
-              Open My Courses
-            </Link>
-          </EmptyState>
-        )}
-        {!loading && !loadError && course && (
-          <>
-            <div className="course-page-heading">
-              <CourseIcon course={course} size={28} />
-              <div>
-                <p className="eyebrow">{course.code} · COURSE DETAIL</p>
-                <h1>{course.title}</h1>
-                <p>
-                  {course.department} · {course.semester}
-                </p>
-              </div>
-            </div>
-            <p className="course-description">
-              {course.description || "No course description is available."}
-            </p>
-            <div className="course-detail-list-link">
-              <Users size={17} />
-              <span>
-                Classmate group status and actions are shown below. Students see
-                only the group name, size and status—not other groups’ private
-                requests.
-              </span>
-            </div>
-            {!enrolled && (
-              <div className="course-detail-enrolment-gate" role="status">
-                <strong>You are not enrolled in this course.</strong> The
-                classmate roster and group associations are hidden until you add
-                the course.
-                <Link href="/my-courses">Browse and add courses</Link>
-              </div>
-            )}
-            {enrolled && (
-              <>
-                <div className="course-detail-invite-rule" role="note">
-                  Invite actions follow the existing server eligibility rules.
-                  Any active member may invite to a group; the creator may also
-                  send the first invitation while a group is forming. Join
-                  requests are available only for active groups. Groups have no
-                  maximum size.
-                </div>
-                {feedback && (
-                  <p
-                    className={`group-workflow-feedback ${feedback.tone}`}
-                    role={feedback.tone === "error" ? "alert" : "status"}
-                  >
-                    {feedback.message}
+            <RefreshCw size={16} /> Try again
+          </button>
+        </EmptyState>
+      )}
+      {!loading && !loadError && !course && (
+        <EmptyState
+          title="Course not found"
+          description="This course ID is not in the authenticated Test catalogue."
+        >
+          <Link href="/my-courses" className="secondary">
+            Open My Courses
+          </Link>
+        </EmptyState>
+      )}
+      {!loading && !loadError && course && (
+        <>
+          {!embedded && (
+            <>
+              <div className="course-page-heading">
+                <CourseIcon course={course} size={28} />
+                <div>
+                  <p className="eyebrow">{course.code} · COURSE DETAIL</p>
+                  <h1>{course.title}</h1>
+                  <p>
+                    {course.department} · {course.semester}
                   </p>
-                )}
-                <div className="classmates-section-title">
-                  <h2>
-                    Coursemates{" "}
-                    <span className="count-pill">{peers.length}</span>
-                  </h2>
-                  {!peerLoading &&
-                    !groupSummaryError &&
-                    !inviteEligibilityError && (
-                      <span>
-                        <i className="green-dot" />
-                        {inviteCandidateIds.length} eligible to invite
-                      </span>
-                    )}
                 </div>
-                <div className="classmates-toolbar">
-                  <label className="directory-search">
-                    <Search size={18} />
-                    <span className="sr-only">Search coursemates</span>
-                    <input
-                      aria-label="Search coursemates by name, student ID, or major"
-                      placeholder="Search coursemates…"
-                      value={search}
-                      onChange={event => setSearch(event.target.value)}
-                    />
-                    {search && (
-                      <button
-                        type="button"
-                        aria-label="Clear classmate search"
-                        onClick={() => setSearch("")}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </label>
-                  <label className="filter-select">
-                    <span className="sr-only">Filter by availability</span>
-                    <select
-                      aria-label="Filter coursemates by availability"
-                      value={filter}
-                      onChange={event =>
-                        setFilter(event.target.value as RosterFilter)
-                      }
-                    >
-                      <option value="all">All availability</option>
-                      <option value="open">Looking for a group</option>
-                      <option value="considering">Open to invitations</option>
-                      <option value="full">Group formed</option>
-                    </select>
-                  </label>
-                  <span className="results-label">
-                    {visibleCount}{" "}
-                    {visibleCount === 1 ? "coursemate" : "coursemates"}
-                  </span>
-                </div>
-                {peerError && (
-                  <div className="course-directory-feedback error" role="alert">
-                    {peerError}{" "}
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setRetryToken(value => value + 1)}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                )}
-                {groupSummaryError && (
-                  <div className="course-directory-feedback error" role="alert">
-                    {groupSummaryError}{" "}
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setRetryToken(value => value + 1)}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                )}
-                {inviteEligibilityError && (
-                  <div className="course-directory-feedback info" role="status">
-                    {inviteEligibilityError}{" "}
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setRetryToken(value => value + 1)}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                )}
-                {peerLoading && (
-                  <div className="course-directory-state" role="status">
-                    <span className="spinner" /> Loading current coursemates…
-                  </div>
-                )}
-                {!peerLoading && !peerError && peers.length === 0 && (
-                  <EmptyState
-                    title="No other coursemates are enrolled yet"
-                    description="This list is based on current Test enrolment records. No sample names are added by the page."
-                  />
-                )}
-                {!peerLoading &&
-                  !peerError &&
-                  peers.length > 0 &&
-                  !groupSummaryError &&
-                  visibleCount === 0 && (
-                    <EmptyState
-                      title="No coursemates match those filters"
-                      description="Try another name or availability status."
-                    >
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
-                          setSearch("");
-                          setFilter("all");
-                        }}
-                      >
-                        Clear filters
-                      </button>
-                    </EmptyState>
-                  )}
-                {!peerLoading &&
-                  !peerError &&
-                  peers.length > 0 &&
-                  !groupSummaryError &&
-                  visibleCount > 0 && (
-                    <>
-                      <section
-                        className="classmate-group-section"
-                        aria-labelledby="classmates-in-group"
-                      >
-                        <div className="classmates-section-title">
-                          <h2 id="classmates-in-group">
-                            In a group{" "}
-                            <span className="count-pill">
-                              {visibleInGroup.length}
-                            </span>
-                          </h2>
-                        </div>
-                        {visibleInGroup.length ? (
-                          <div className="classmate-list">
-                            {visibleInGroup.map(renderPeerCard)}
-                          </div>
-                        ) : (
-                          <div className="group-workflow-empty">
-                            No coursemates in a group match this search.
-                          </div>
-                        )}
-                      </section>
-                      <section
-                        className="classmate-group-section"
-                        aria-labelledby="classmates-looking"
-                      >
-                        <div className="classmates-section-title">
-                          <h2 id="classmates-looking">
-                            Looking for a group{" "}
-                            <span className="count-pill">
-                              {visibleLooking.length}
-                            </span>
-                          </h2>
-                        </div>
-                        {visibleLooking.length ? (
-                          <div className="classmate-list">
-                            {visibleLooking.map(renderPeerCard)}
-                          </div>
-                        ) : (
-                          <div className="group-workflow-empty">
-                            No ungrouped coursemates match this search.
-                          </div>
-                        )}
-                      </section>
-                    </>
-                  )}
-                <p className="data-footnote">
-                  Group summaries return only each coursemate’s group
-                  association, name, size and status. The Test server remains
-                  authoritative for invite, request and cancellation
-                  eligibility.
+              </div>
+              <p className="course-description">
+                {course.description || "No course description is available."}
+              </p>
+              <div className="course-detail-list-link">
+                <Users size={17} />
+                <span>
+                  Classmate group status and actions are shown below. Students
+                  see only the group name, size and status—not other groups’
+                  private requests.
+                </span>
+              </div>
+            </>
+          )}
+          {!enrolled && (
+            <div className="course-detail-enrolment-gate" role="status">
+              <strong>You are not enrolled in this course.</strong> The
+              classmate roster and group associations are hidden until you add
+              the course.
+              <Link href="/my-courses">Browse and add courses</Link>
+            </div>
+          )}
+          {enrolled && (
+            <>
+              <div className="course-detail-invite-rule" role="note">
+                Invite actions follow the existing server eligibility rules. Any
+                active member may invite to a group; the creator may also send
+                the first invitation while a group is forming. Join requests are
+                available only for active groups. Groups have no maximum size.
+              </div>
+              {feedback && (
+                <p
+                  className={`group-workflow-feedback ${feedback.tone}`}
+                  role={feedback.tone === "error" ? "alert" : "status"}
+                >
+                  {feedback.message}
                 </p>
-              </>
-            )}
-          </>
-        )}
-      </main>
+              )}
+              <div className="classmates-section-title">
+                <h2>
+                  Coursemates <span className="count-pill">{peers.length}</span>
+                </h2>
+                {!peerLoading &&
+                  !groupSummaryError &&
+                  !inviteEligibilityError && (
+                    <span>
+                      <i className="green-dot" />
+                      {inviteCandidateIds.length} eligible to invite
+                    </span>
+                  )}
+              </div>
+              <div className="classmates-toolbar">
+                <label className="directory-search">
+                  <Search size={18} />
+                  <span className="sr-only">Search coursemates</span>
+                  <input
+                    aria-label="Search coursemates by name, student ID, or major"
+                    placeholder="Search coursemates…"
+                    value={search}
+                    onChange={event => setSearch(event.target.value)}
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      aria-label="Clear classmate search"
+                      onClick={() => setSearch("")}
+                    >
+                      ×
+                    </button>
+                  )}
+                </label>
+                <label className="filter-select">
+                  <span className="sr-only">Filter by availability</span>
+                  <select
+                    aria-label="Filter coursemates by availability"
+                    value={filter}
+                    onChange={event =>
+                      setFilter(event.target.value as RosterFilter)
+                    }
+                  >
+                    <option value="all">All availability</option>
+                    <option value="open">Looking for a group</option>
+                    <option value="considering">Open to invitations</option>
+                    <option value="full">Group formed</option>
+                  </select>
+                </label>
+                <span className="results-label">
+                  {visibleCount}{" "}
+                  {visibleCount === 1 ? "coursemate" : "coursemates"}
+                </span>
+              </div>
+              {peerError && (
+                <div className="course-directory-feedback error" role="alert">
+                  {peerError}{" "}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setRetryToken(value => value + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {groupSummaryError && (
+                <div className="course-directory-feedback error" role="alert">
+                  {groupSummaryError}{" "}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setRetryToken(value => value + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {inviteEligibilityError && (
+                <div className="course-directory-feedback info" role="status">
+                  {inviteEligibilityError}{" "}
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setRetryToken(value => value + 1)}
+                  >
+                    Try again
+                  </button>
+                </div>
+              )}
+              {peerLoading && (
+                <div className="course-directory-state" role="status">
+                  <span className="spinner" /> Loading current coursemates…
+                </div>
+              )}
+              {!peerLoading && !peerError && peers.length === 0 && (
+                <EmptyState
+                  title="No other coursemates are enrolled yet"
+                  description="This list is based on current Test enrolment records. No sample names are added by the page."
+                />
+              )}
+              {!peerLoading &&
+                !peerError &&
+                peers.length > 0 &&
+                !groupSummaryError &&
+                visibleCount === 0 && (
+                  <EmptyState
+                    title="No coursemates match those filters"
+                    description="Try another name or availability status."
+                  >
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setSearch("");
+                        setFilter("all");
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  </EmptyState>
+                )}
+              {!peerLoading &&
+                !peerError &&
+                peers.length > 0 &&
+                !groupSummaryError &&
+                visibleCount > 0 && (
+                  <>
+                    <section
+                      className="classmate-group-section"
+                      aria-labelledby="classmates-in-group"
+                    >
+                      <div className="classmates-section-title">
+                        <h2 id="classmates-in-group">
+                          In a group{" "}
+                          <span className="count-pill">
+                            {visibleInGroup.length}
+                          </span>
+                        </h2>
+                      </div>
+                      {visibleInGroup.length ? (
+                        <div className="classmate-list">
+                          {visibleInGroup.map(renderPeerCard)}
+                        </div>
+                      ) : (
+                        <div className="group-workflow-empty">
+                          No coursemates in a group match this search.
+                        </div>
+                      )}
+                    </section>
+                    <section
+                      className="classmate-group-section"
+                      aria-labelledby="classmates-looking"
+                    >
+                      <div className="classmates-section-title">
+                        <h2 id="classmates-looking">
+                          Looking for a group{" "}
+                          <span className="count-pill">
+                            {visibleLooking.length}
+                          </span>
+                        </h2>
+                      </div>
+                      {visibleLooking.length ? (
+                        <div className="classmate-list">
+                          {visibleLooking.map(renderPeerCard)}
+                        </div>
+                      ) : (
+                        <div className="group-workflow-empty">
+                          No ungrouped coursemates match this search.
+                        </div>
+                      )}
+                    </section>
+                  </>
+                )}
+              <p className="data-footnote">
+                Group summaries return only each coursemate’s group association,
+                name, size and status. The Test server remains authoritative for
+                invite, request and cancellation eligibility.
+              </p>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  if (embedded) {
+    return <div className="course-detail-embedded">{content}</div>;
+  }
+
+  return (
+    <div className="authenticated-courses-page course-detail-page">
+      <AccountHeader email={session.user?.email} />
+      <main className="authenticated-courses-main">{content}</main>
       <footer className="authenticated-courses-footer">
         Supabase Test course data · not verified university registration
       </footer>

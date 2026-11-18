@@ -3,13 +3,13 @@ import { ArrowRight, Users } from "lucide-react";
 import { Link } from "wouter";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { PageHeading } from "@/components/citylink/Shared";
+import AuthenticatedCoursePeers from "@/pages/citylink/AuthenticatedCoursePeers";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
   closeGroupRecruitmentPost,
   createGroupRecruitmentPost,
   editGroupRecruitmentPost,
   getStage6ErrorMessage,
-  listCourseUngroupedClassmates,
   listCurrentTermCourseGroups,
   listGroupRecruitmentPosts,
   MAX_RECRUITMENT_POST_LENGTH,
@@ -17,14 +17,11 @@ import {
   type CourseGroupSummary,
   type GroupRecruitmentPost,
   type RecruitmentPostCursor,
-  type UngroupedCoursemate,
-  type UngroupedCoursemateCursor,
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
   loadGroupWorkflowSnapshot,
   requestToJoinGroup,
-  sendGroupInvitation,
   type StudyGroupRow,
 } from "@/lib/supabaseGroups";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
@@ -37,9 +34,6 @@ type Snapshot = {
   posts: GroupRecruitmentPost[];
   postsHasMore: boolean;
   postsCursor: RecruitmentPostCursor | null;
-  ungrouped: UngroupedCoursemate[];
-  ungroupedHasMore: boolean;
-  ungroupedCursor: UngroupedCoursemateCursor | null;
   ownGroups: StudyGroupRow[];
   activeGroupIds: string[];
   userId: string;
@@ -59,11 +53,6 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [groupsPageBusy, setGroupsPageBusy] = useState(false);
   const [postsPageBusy, setPostsPageBusy] = useState(false);
-  const [ungroupedPageBusy, setUngroupedPageBusy] = useState(false);
-  const [personGroupChoice, setPersonGroupChoice] = useState<
-    Record<string, string>
-  >({});
-  const [invitingPersonId, setInvitingPersonId] = useState<string | null>(null);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -101,10 +90,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     void Promise.all([
       listCurrentTermCourseGroups(userId, courseId),
       listGroupRecruitmentPosts(userId, courseId),
-      listCourseUngroupedClassmates(userId, courseId),
       loadGroupWorkflowSnapshot(userId),
     ])
-      .then(([groupsPage, postsPage, ungroupedPage, ownSnapshot]) => {
+      .then(([groupsPage, postsPage, ownSnapshot]) => {
         if (!isCurrent()) return;
         setSnapshot({
           groups: groupsPage.items,
@@ -113,9 +101,6 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
           posts: postsPage.items,
           postsHasMore: postsPage.hasMore,
           postsCursor: postsPage.nextCursor,
-          ungrouped: ungroupedPage.items,
-          ungroupedHasMore: ungroupedPage.hasMore,
-          ungroupedCursor: ungroupedPage.nextCursor,
           ownGroups: ownSnapshot.groups,
           activeGroupIds: ownSnapshot.memberships
             .filter(membership => membership.membership_status === "active")
@@ -235,55 +220,6 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     }
   }
 
-  async function loadMoreUngrouped() {
-    if (
-      !userId ||
-      !ownSnapshot?.ungroupedHasMore ||
-      !ownSnapshot.ungroupedCursor ||
-      ungroupedPageBusy
-    )
-      return;
-    setUngroupedPageBusy(true);
-    setFeedback("");
-    const expectedGeneration = loadGeneration.current;
-    try {
-      const page = await listCourseUngroupedClassmates(
-        userId,
-        courseId,
-        ownSnapshot.ungroupedCursor
-      );
-      if (
-        currentUserId.current !== userId ||
-        loadGeneration.current !== expectedGeneration
-      )
-        return;
-      setSnapshot(previous => {
-        if (
-          !previous ||
-          previous.userId !== userId ||
-          previous.generation !== expectedGeneration
-        )
-          return previous;
-        const known = new Set(
-          previous.ungrouped.map(person => person.profileId)
-        );
-        return {
-          ...previous,
-          ungrouped: [
-            ...previous.ungrouped,
-            ...page.items.filter(person => !known.has(person.profileId)),
-          ],
-          ungroupedHasMore: page.hasMore,
-          ungroupedCursor: page.nextCursor,
-        };
-      });
-    } catch (pageError) {
-      setFeedback(getStage6ErrorMessage(pageError));
-    } finally {
-      setUngroupedPageBusy(false);
-    }
-  }
-
   async function applyToJoin(post: GroupRecruitmentPost) {
     if (!userId || !post.groupId || !post.applyEnabled || busyAction) return;
     setBusyAction(`apply:${post.id}`);
@@ -368,44 +304,15 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   }
 
   const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
-  const inviteableGroups = ownSnapshot
-    ? ownSnapshot.ownGroups.filter(
-        group =>
-          group.course_id === courseId &&
-          (group.status === "forming" || group.status === "active") &&
-          ownSnapshot.activeGroupIds.includes(group.id)
-      )
-    : [];
-
-  async function invitePerson(person: UngroupedCoursemate) {
-    if (!userId || !ownSnapshot || invitingPersonId) return;
-    const groupId =
-      personGroupChoice[person.profileId] ?? inviteableGroups[0]?.id;
-    if (!groupId) return;
-    setInvitingPersonId(person.profileId);
-    setFeedback("");
-    try {
-      await sendGroupInvitation(userId, groupId, person.profileId);
-      setFeedback(
-        `Invitation sent to ${person.displayName}. They will appear in My Groups until they respond.`
-      );
-      await reload();
-    } catch (inviteError) {
-      setFeedback(getGroupWorkflowErrorMessage(inviteError));
-    } finally {
-      setInvitingPersonId(null);
-    }
-  }
-
   return (
     <Stage6Layout title="Study groups and recruitment">
       <PageHeading
         eyebrow="CURRENT-TERM COURSEMATES"
-        title="Study groups and recruitment"
-        description="Browse current-term groups and recruitment posts. The server rechecks your eligibility for every request."
+        title="Find your groupmate"
+        description="See who is already in a group, who is looking for one, and browse recruitment posts below. The server rechecks your eligibility for every action."
       />
       <div className="stage6-notice" role="note">
-        These screens use the authenticated Supabase APIs. No fictional group or
+        These screens use the authenticated Test APIs. No fictional group or
         student records are substituted. Apply to join calls Roy’s existing
         request service; it never adds you directly to a group.
       </div>
@@ -414,6 +321,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
           {feedback}
         </p>
       )}
+      <AuthenticatedCoursePeers embedded courseId={courseId} />
 
       {session.status === "loading" || state === "loading" ? (
         <Stage6Status
@@ -571,111 +479,6 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                 onClick={() => void loadMoreGroups()}
               >
                 {groupsPageBusy ? "Loading more groups…" : "Load more groups"}
-              </button>
-            )}
-          </section>
-
-          <section
-            className="stage6-section"
-            aria-labelledby="stage6-people-heading"
-          >
-            <div className="stage6-section-heading">
-              <div>
-                <p className="eyebrow">PEOPLE</p>
-                <h2 id="stage6-people-heading">Coursemates without a group</h2>
-              </div>
-              <span className="stage6-count">
-                {ownSnapshot?.ungrouped.length ?? 0}
-              </span>
-            </div>
-            {!ownSnapshot?.ungrouped.length ? (
-              <Stage6Status
-                kind="empty"
-                title="Everyone has a group"
-                message="No current-term coursemates without a group are visible to you."
-              />
-            ) : (
-              <div className="stage6-group-grid">
-                {ownSnapshot.ungrouped.map(person => (
-                  <article
-                    className="stage6-group-card stage6-person-card"
-                    key={person.profileId}
-                  >
-                    <div className="stage6-person-main">
-                      <h3>{person.displayName}</h3>
-                      <p className="stage6-group-caption">
-                        {person.major ?? "Major not set"} · Year {person.year}
-                      </p>
-                      {person.skills.length > 0 && (
-                        <p className="stage6-group-caption">
-                          {person.skills.join(", ")}
-                        </p>
-                      )}
-                      <Link
-                        className="text-link"
-                        href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(person.profileId)}`}
-                      >
-                        View profile <ArrowRight size={14} />
-                      </Link>
-                    </div>
-                    <div className="stage6-person-actions">
-                      {inviteableGroups.length > 0 ? (
-                        <>
-                          {inviteableGroups.length > 1 && (
-                            <select
-                              aria-label={`Choose a group for ${person.displayName}`}
-                              value={
-                                personGroupChoice[person.profileId] ??
-                                inviteableGroups[0].id
-                              }
-                              onChange={event =>
-                                setPersonGroupChoice(previous => ({
-                                  ...previous,
-                                  [person.profileId]: event.target.value,
-                                }))
-                              }
-                            >
-                              {inviteableGroups.map(group => (
-                                <option value={group.id} key={group.id}>
-                                  {group.name}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <button
-                            className="secondary stage6-invite-button"
-                            type="button"
-                            disabled={invitingPersonId !== null}
-                            onClick={() => void invitePerson(person)}
-                          >
-                            {invitingPersonId === person.profileId
-                              ? "Sending…"
-                              : "Invite to my group"}
-                          </button>
-                        </>
-                      ) : (
-                        <Link
-                          className="secondary stage6-invite-button"
-                          href={`/my-groups?courseId=${encodeURIComponent(courseId)}&invitee=${encodeURIComponent(person.profileId)}`}
-                        >
-                          Create a group
-                        </Link>
-                      )}
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-            {ownSnapshot?.ungroupedHasMore && (
-              <button
-                className="secondary"
-                type="button"
-                disabled={ungroupedPageBusy}
-                onClick={() => void loadMoreUngrouped()}
-              >
-                {ungroupedPageBusy
-                  ? "Loading more people…"
-                  : "Load more people"}
               </button>
             )}
           </section>
