@@ -17,7 +17,7 @@ import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
 import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
-import GroupChatPlaceholder from "@/pages/citylink/GroupChatPlaceholder";
+import GroupChatPicker from "@/pages/citylink/GroupChatPicker";
 import GroupWorkspacePage from "@/pages/citylink/GroupWorkspacePage";
 import GroupChatPage from "@/pages/citylink/GroupChatPage";
 import {
@@ -268,8 +268,8 @@ export default function App() {
                 {() => (
                   <WorkspacePage
                     title="Group chat"
-                    renderAuthenticated={() => <GroupChatPlaceholder />}
-                    signedOut={<GroupChatPlaceholder />}
+                    renderAuthenticated={() => <GroupChatPicker />}
+                    signedOut={<GroupChatPicker />}
                   />
                 )}
               </Route>

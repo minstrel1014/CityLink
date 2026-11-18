@@ -344,7 +344,10 @@ export function AuthenticatedMessages() {
                         </span>
                       </div>
                       <div className="group-workflow-actions">
-                        <Link href="/group-chat" className="secondary">
+                        <Link
+                          href={`/groups/${group.id}/chat`}
+                          className="secondary"
+                        >
                           <MessageCircle size={15} /> Open Group Chat{" "}
                           <ArrowRight size={15} />
                         </Link>
