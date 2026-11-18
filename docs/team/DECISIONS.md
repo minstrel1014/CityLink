@@ -247,3 +247,11 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Expiry:** this exception ends when the comparison is reported. The standing project rule “never access Main” remains in force for all other work, including any later migration until a separate written authorization is recorded.
 - **Roles affected:** Project/Integration Lead, Role 6 (database security), and the integration lead task performing the read-only check.
 - **Data/API implications:** none. No object or row on Main is changed by this authorization.
+
+## 2026-11-18 — Stage 5 roster RPC parity (option A) and Main's current term
+
+- **Decision (Adam, project lead, 2026-11-18):** keep `public.list_course_classmates` exactly as it exists for the Stage 5 promotion to Main. Removing `student_id` and `status` from its output is deferred to a follow-up migration **before Stage 6 launch**, together with the matching client update. Option A was chosen over tightening now.
+- **Current term:** Main's only `courses.semester` value is `2026-Fall` (confirmed by the lead's read-only query). The term-model migration uses `2026-Fall` as `academic_terms.code` and `citylink_settings.current_term_id`.
+- **Implications:** until the follow-up, `authenticated` coursemates on Main can read `student_id` and `status` through this RPC for current-term courses. The follow-up must change the RPC, its client consumers, and its tests together; no schema change is expected.
+- **Roles affected:** Project/Integration Lead, Role 6 (migration review), Roy (client consumers), Eunice (QA), and the Stage 6 owner for the timing.
+- **Unresolved:** owner and date for the tightening follow-up; to be assigned before Stage 6 launch.
