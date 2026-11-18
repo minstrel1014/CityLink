@@ -357,7 +357,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         {group.activeMemberCount === 1 ? "member" : "members"}
                       </span>
                     </div>
-                    <h3>{group.groupName}</h3>
+                    <h3>{group.groupName || "Study group"}</h3>
                     <p className="stage6-group-caption">
                       Group details and member lists are checked again by the
                       server when opened.

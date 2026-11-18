@@ -20,6 +20,8 @@ import {
   listCurrentTermGroupMembers,
   listGroupChatMessages,
   listGroupRecruitmentPosts,
+  mapCourseGroupSummaries,
+  mapGroupRecruitmentPosts,
   sendGroupChatMessage,
 } from "@/lib/supabaseStage6";
 
@@ -380,5 +382,43 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
     expect(getStage6ErrorMessage({ code: "PGRST202" })).toMatch(
       /migration has not been applied/i
     );
+  });
+});
+
+describe("unnamed Stage 5 groups", () => {
+  it("accepts an empty group name in the course group list", () => {
+    const page = mapCourseGroupSummaries([
+      {
+        group_id: "group-1",
+        group_name: "",
+        group_status: "active",
+        active_member_count: 3,
+        can_create_post: false,
+        has_more: false,
+      },
+    ]);
+    expect(page.items[0].groupName).toBe("");
+    expect(page.nextCursor).toEqual({ groupName: "", groupId: "group-1" });
+  });
+
+  it("shows a fallback name for a post whose group is unnamed", () => {
+    const page = mapGroupRecruitmentPosts([
+      {
+        post_id: "post-1",
+        group_id: "group-1",
+        group_name: "",
+        active_member_count: 3,
+        author_name: "A student",
+        body: "Looking for teammates",
+        post_status: "open",
+        created_at: "2026-11-18T00:00:00Z",
+        updated_at: "2026-11-18T00:00:00Z",
+        closed_at: null,
+        apply_enabled: true,
+        can_manage: false,
+        has_more: false,
+      },
+    ]);
+    expect(page.items[0].groupName).toBe("Study group");
   });
 });

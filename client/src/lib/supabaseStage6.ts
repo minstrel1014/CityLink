@@ -103,6 +103,16 @@ function requiredString(row: Record<string, unknown>, key: string): string {
   return value;
 }
 
+// Groups created by Stage 5 have no name, so an empty string is valid here.
+// Keep the raw value because it is also the pagination cursor.
+function optionalGroupName(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== "string") {
+    throw new Error(`The Stage 6 service returned an invalid ${key} value.`);
+  }
+  return value;
+}
+
 function nullableString(row: Record<string, unknown>, key: string) {
   const value = row[key];
   if (value !== null && typeof value !== "string") {
@@ -194,7 +204,7 @@ export function mapCourseGroupSummaries(
     }
     return {
       groupId: requiredString(row, "group_id"),
-      groupName: requiredString(row, "group_name"),
+      groupName: optionalGroupName(row, "group_name"),
       status: status as CourseGroupSummary["status"],
       activeMemberCount: requiredCount(row, "active_member_count"),
       canCreatePost: requiredBoolean(row, "can_create_post"),
@@ -363,7 +373,11 @@ export function mapGroupRecruitmentPosts(
       throw new Error("The recruitment list contains an invalid member count.");
     }
     const groupId = nullableString(row, "group_id");
-    const groupName = nullableString(row, "group_name");
+    const rawGroupName = nullableString(row, "group_name");
+    const groupName =
+      rawGroupName === null || rawGroupName.trim()
+        ? rawGroupName
+        : "Study group";
     if ((groupId === null) !== (groupName === null)) {
       throw new Error(
         "The recruitment list contains incomplete group details."
