@@ -238,3 +238,12 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Data/API implications:** none. No database change is authorized by this decision. PR #5's SQL stays a proposal under `docs/stage6/`.
 - **Documentation note:** PR #5 also edits this file. When Jeffery merges `main` into his branch, he keeps both entries rather than replacing either one.
 - **Unresolved:** the shell PR number and merge time are not known yet; the exact conflict scope will be confirmed when it lands.
+
+## 2026-11-18 — One-time read-only Main inspection authorization
+
+- **Decision (Adam, project lead, 2026-11-18):** the lead authorizes a **one-time, read-only catalog inspection** of Supabase Main ref `pijslbchvstkoweslymr`, limited to schema metadata: table and column names, constraints, RLS flags, policies, and function names.
+- **Explicitly excluded:** reading application rows, DDL or DML of any kind, invoking RPCs, changing settings, and any access to Auth user data.
+- **Purpose:** confirm Main already has the base objects the five Stage 5 migrations depend on (`profiles`, `courses`, `enrolments`, `academic_terms`, `citylink_settings`, `courses(id, term_id)` uniqueness) before deciding whether to promote Stage 5 to Main.
+- **Expiry:** this exception ends when the comparison is reported. The standing project rule “never access Main” remains in force for all other work, including any later migration until a separate written authorization is recorded.
+- **Roles affected:** Project/Integration Lead, Role 6 (database security), and the integration lead task performing the read-only check.
+- **Data/API implications:** none. No object or row on Main is changed by this authorization.
