@@ -665,7 +665,8 @@ export default function AuthenticatedCoursePeers({
                 Invite actions follow the existing server eligibility rules. Any
                 active member may invite to a group; the creator may also send
                 the first invitation while a group is forming. Join requests are
-                available only for active groups. Groups have no maximum size.
+                available only from recruitment posts for active groups. Groups
+                have no maximum size.
               </div>
               {feedback && (
                 <p
