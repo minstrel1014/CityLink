@@ -310,7 +310,14 @@ export default function AuthenticatedMyGroup({
     setBusyAction("create");
     setNotice(null);
     try {
-      await createGroupAndInvite(userId, courseId, inviteeId);
+      const groupName = window
+        .prompt("Name your new group (1-50 characters):", "Study group")
+        ?.trim();
+      if (!groupName || groupName.length > 50) {
+        setBusyAction("");
+        return;
+      }
+      await createGroupAndInvite(userId, courseId, inviteeId, groupName);
       setNotice({
         tone: "success",
         message:

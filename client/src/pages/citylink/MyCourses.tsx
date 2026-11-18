@@ -617,7 +617,7 @@ export default function MyCourses({
                           className="course-groups-link"
                           href={`/my-courses/${encodeURIComponent(course.id)}/groups`}
                         >
-                          Groups &amp; posts <ArrowRight size={14} />
+                          People, groups &amp; posts <ArrowRight size={14} />
                         </Link>
                       )}
                       <button

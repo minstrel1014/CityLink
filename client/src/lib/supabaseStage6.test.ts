@@ -17,6 +17,7 @@ import {
   getGroupChatAccess,
   getStage6ErrorMessage,
   listCurrentTermCourseGroups,
+  listCourseUngroupedClassmates,
   listCurrentTermGroupMembers,
   listGroupChatMessages,
   listGroupRecruitmentPosts,
@@ -277,6 +278,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
           group_name: "Design team",
           active_member_count: 3,
           author_name: "A Student",
+          subject: "Looking for a teammate",
           body: "Looking for a designer.",
           post_status: "open",
           created_at: "2026-11-17T09:00:00.000Z",
@@ -331,14 +333,82 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
 
     supabaseMocks.rpc.mockResolvedValueOnce({ data: "post-2", error: null });
     await expect(
-      createGroupRecruitmentPost(userId, groupId, "  Need a researcher.  ")
+      createGroupRecruitmentPost(
+        userId,
+        groupId,
+        "  Research teammate  ",
+        "  Need a researcher.  "
+      )
     ).resolves.toBe("post-2");
     expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
       "create_group_recruitment_post",
-      { p_group_id: groupId, p_body: "Need a researcher." }
+      {
+        p_group_id: groupId,
+        p_subject: "Research teammate",
+        p_body: "Need a researcher.",
+      }
     );
   });
 
+  it("pages the ungrouped coursemate list with the returned cursor", async () => {
+    supabaseMocks.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          profile_id: "profile-1",
+          display_name: "A Student",
+          year: 2,
+          major: "Business",
+          skills: ["Excel"],
+          has_more: true,
+        },
+      ],
+      error: null,
+    });
+    const first = await listCourseUngroupedClassmates(userId, "course-1");
+    expect(first.hasMore).toBe(true);
+    expect(first.nextCursor).toEqual({
+      displayName: "A Student",
+      profileId: "profile-1",
+    });
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "list_course_ungrouped_classmates",
+      {
+        p_course_id: "course-1",
+        p_after_display_name: null,
+        p_after_profile_id: null,
+        p_limit: 50,
+      }
+    );
+
+    supabaseMocks.rpc.mockResolvedValueOnce({
+      data: [
+        {
+          profile_id: "profile-2",
+          display_name: "B Student",
+          year: 3,
+          major: null,
+          skills: [],
+          has_more: false,
+        },
+      ],
+      error: null,
+    });
+    const second = await listCourseUngroupedClassmates(
+      userId,
+      "course-1",
+      first.nextCursor ?? undefined
+    );
+    expect(second.hasMore).toBe(false);
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "list_course_ungrouped_classmates",
+      {
+        p_course_id: "course-1",
+        p_after_display_name: "A Student",
+        p_after_profile_id: "profile-1",
+        p_limit: 50,
+      }
+    );
+  });
   it("keeps terminal-group closed posts visible while hiding group fields and actions", async () => {
     supabaseMocks.rpc.mockResolvedValueOnce({
       data: [
@@ -348,6 +418,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
           group_name: null,
           active_member_count: null,
           author_name: "A Student",
+          subject: "Looking for a teammate",
           body: "Still looking for a teammate.",
           post_status: "closed",
           created_at: "2026-11-17T09:00:00.000Z",
@@ -409,6 +480,7 @@ describe("unnamed Stage 5 groups", () => {
         group_name: "",
         active_member_count: 3,
         author_name: "A student",
+        subject: "Looking for a teammate",
         body: "Looking for teammates",
         post_status: "open",
         created_at: "2026-11-18T00:00:00Z",
