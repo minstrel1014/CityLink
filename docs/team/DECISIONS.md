@@ -327,3 +327,11 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - Display names are required before using CityLink, at most 50 characters, editable again without limit for now. Existing accounts on "New CityLink member" are prompted once.
 - Joining a group happens only through recruitment posts. Posts require a subject and body, and show the group's members with links to their profiles.
 - Database changes needed for these rules are drafted in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`; they need Role 6 review and a separate Test authorization before application. No database change has been made.
+
+## 2026-11-18 — Authorization: Stage 6 chat/recruitment migration on Main
+
+**Status:** Authorized by Adam; execution pending at the time of this record.
+
+**Authorization text (verbatim):** "I, Adam, authorize the CityLink integration lead task to take a fresh backup of Supabase Main ref pijslbchvstkoweslymr and then apply only 20261118050000_stage6_chat_recruitment.sql to Main, one migration, forward-only. No reset, TRUNCATE, drop of existing objects, Auth/secret changes, or Test access. Stop and report on any error. Report the version, times, result and verification output; the authorization ends when the report is delivered."
+
+**Scope:** fresh Main backup, then the single Stage 6 migration already applied to Test and approved by Role 6. No other Main change. The authorization ends when the execution report is delivered.
