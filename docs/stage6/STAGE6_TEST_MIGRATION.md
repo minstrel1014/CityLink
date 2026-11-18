@@ -29,7 +29,7 @@ Recorded in `docs/team/DECISIONS.md`.
 ## Objects created
 
 - Tables: `public.group_chat_messages`, `public.group_recruitment_posts` (RLS enabled, no direct policies, no direct browser privileges)
-- Functions: 4 private helpers for chat access, browse and post management; 3 private lifecycle helpers; 11 public RPCs (chat list/send/access, course group discovery, member list/profile, recruitment list/create/edit/close)
+- Functions: 19 total — 10 public RPCs (chat list/send/access, course group discovery, member list/profile, recruitment list/create/edit/close) and 9 private functions (4 authorization helpers plus 5 lifecycle/trigger functions)
 - Indexes: chat page cursor index and post listing index
 - Triggers: recruitment auto-close on membership end, group terminal status and profile deletion
 

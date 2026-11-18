@@ -18,12 +18,9 @@
 -- Do not reset or delete Test data. Verification queries follow in
 -- docs/stage6/STAGE6_TEST_MIGRATION.md.
 
--- PROPOSAL ONLY — NOT A MIGRATION; DO NOT APPLY TO ANY DATABASE.
--- Revision 2, 2026-11-17, reflecting explicit lead decisions from Adam.
--- Target for a future, separately approved migration: disposable CityLink Test
--- ref wkzclgmhrtecnpexfesr only. Never apply to Supabase Main.
--- This proposal has not been applied. Role 6 and Roy must review the SQL and
--- tests; Adam must separately approve any application to Test.
+-- Revision 2 content, 2026-11-17, reflecting explicit lead decisions from Adam.
+-- Target: disposable CityLink Test ref wkzclgmhrtecnpexfesr only; never Main.
+-- Authorized for Test application by Adam on 2026-11-18 (see header).
 -- Preserves the existing broad profiles policy. New member-list RPCs use the
 -- same any-shared-course audience; profile_id is a non-display selector, with
 -- only the approved profile attributes plus pagination metadata returned.
@@ -459,6 +456,14 @@ BEGIN
     RAISE EXCEPTION 'message must contain 1 to 4000 characters';
   END IF;
   PERFORM 1
+  FROM public.study_groups AS g
+  WHERE g.id = p_group_id
+    AND g.status <> 'abandoned'
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'group is not available for messages';
+  END IF;
+  PERFORM 1
   FROM public.group_memberships AS m
   WHERE m.group_id = p_group_id
     AND m.profile_id = (SELECT auth.uid())
@@ -466,14 +471,6 @@ BEGIN
   FOR UPDATE;
   IF NOT FOUND OR NOT private.can_send_group_chat(p_group_id) THEN
     RAISE EXCEPTION 'only active group members may send messages';
-  END IF;
-  PERFORM 1
-  FROM public.study_groups AS g
-  WHERE g.id = p_group_id
-    AND g.status <> 'abandoned'
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'group is not available for messages';
   END IF;
   SELECT p.display_name INTO v_sender_name
   FROM public.profiles AS p WHERE p.id = (SELECT auth.uid());
@@ -955,7 +952,7 @@ GRANT EXECUTE ON FUNCTION public.close_group_recruitment_post(uuid) TO authentic
 
 COMMIT;
 
--- REVIEW BLOCKERS / REQUIRED TESTS (not SQL commands):
+-- POST-APPLY VERIFICATION NOTES (not SQL commands):
 -- 1. Test-only metadata review (2026-11-17) confirmed the existing UNIQUE
 --    study_groups(id, course_id, term_id) key, courses.term_id, and the group-to-
 --    course composite FK. Recheck these immediately before any application.
@@ -998,6 +995,6 @@ COMMIT;
 --     Role privilege checks in this inspection showed no table privileges for
 --     anon/authenticated/service_role, but do not auto-enable RLS here. Review
 --     the migration tool's access needs and policies separately.
--- 11. This file remains a proposal, not a reproducible migration. Once reviewed,
---     move an approved forward-only version to supabase/migrations/ and require
---     Adam's separate explicit approval before applying it to Test.
+-- 11. This file is the reproducible forward-only migration for Test. Applying it
+--     to Main or promoting Stage 6 to Main requires a separate written
+--     authorization from Adam.
