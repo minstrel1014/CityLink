@@ -141,3 +141,7 @@ No schema, RPC, RLS or Main change. The embedded list uses the existing field-li
 ### Follow-up card spacing (same day)
 
 The embedded roster did not load the full-page `.course-detail-page` selectors, so the group name and member count ran together and the View portfolio link did not use the course-detail spacing. `CourseDetail.css` now applies the same group-meta grid and block-level View portfolio link to `.course-detail-embedded`. Rechecked locally: group name and “3 people · Active” are on separate lines, and View portfolio is below the major/year line. No data, API or permission change.
+
+### Joining only through recruitment posts (same day)
+
+The people/coursemate cards no longer show “Request to join” for a grouped student. A grouped card now links to the group’s member/details page, and the user’s own group shows a disabled “Your group” label. Joining remains available from the recruitment post’s “Apply to join” action, which calls Roy’s existing `request_to_join_group` service. This removes the duplicate direct-join path from the roster; no API or permission change was made.
