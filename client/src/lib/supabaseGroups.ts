@@ -17,6 +17,9 @@ export interface CourseGroupSummary {
   group_name: string;
   group_status: "forming" | "active";
   group_size: number;
+  max_members: number | null;
+  capacity_count: number;
+  capacity_state: "available" | "full" | "maximum_not_set" | "over_limit";
 }
 
 export interface OwnCourseProfile {
@@ -31,6 +34,7 @@ export interface StudyGroupRow {
   creator_id: string | null;
   status: "forming" | "active" | "abandoned" | "archived";
   name: string;
+  max_members: number | null;
   created_at: string;
 }
 
@@ -167,6 +171,7 @@ export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
   }
 
   const byProfile = new Map<string, CourseGroupSummary>();
+  const byGroup = new Map<string, CourseGroupSummary>();
   for (const candidate of value) {
     if (
       !isRecord(candidate) ||
@@ -178,8 +183,12 @@ export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
             "group_name",
             "group_status",
             "group_size",
+            "max_members",
+            "capacity_count",
+            "capacity_state",
           ].includes(key)
-      )
+      ) ||
+      Object.keys(candidate).length !== 8
     ) {
       throw new Error("The coursemate group-summary response is invalid.");
     }
@@ -194,6 +203,9 @@ export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
         : typeof rawGroupSize === "string" && /^\d+$/.test(rawGroupSize)
           ? Number(rawGroupSize)
           : Number.NaN;
+    const maxMembers = candidate.max_members;
+    const capacityCount = candidate.capacity_count;
+    const capacityState = candidate.capacity_state;
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         profileId
@@ -204,20 +216,59 @@ export function mapCourseGroupSummaries(value: unknown): CourseGroupSummary[] {
       typeof groupName !== "string" ||
       (groupStatus !== "forming" && groupStatus !== "active") ||
       !Number.isSafeInteger(groupSize) ||
-      groupSize < 1 ||
+      groupSize < 2 ||
+      (maxMembers !== null &&
+        (typeof maxMembers !== "number" ||
+          !Number.isSafeInteger(maxMembers) ||
+          maxMembers < 2 ||
+          maxMembers > 19)) ||
+      typeof capacityCount !== "number" ||
+      !Number.isSafeInteger(capacityCount) ||
+      capacityCount !== groupSize ||
+      (capacityState !== "available" &&
+        capacityState !== "full" &&
+        capacityState !== "maximum_not_set" &&
+        capacityState !== "over_limit") ||
+      capacityState !==
+        (capacityCount > 19
+          ? "over_limit"
+          : maxMembers === null
+            ? "maximum_not_set"
+            : capacityCount >= maxMembers
+              ? "full"
+              : "available") ||
       byProfile.has(profileId)
     ) {
       throw new Error(
         "The coursemate group-summary response contains invalid data."
       );
     }
-    byProfile.set(profileId, {
+    const summary: CourseGroupSummary = {
       profile_id: profileId,
       group_id: groupId,
       group_name: groupName,
       group_status: groupStatus,
       group_size: groupSize,
-    });
+      max_members: maxMembers,
+      capacity_count: capacityCount,
+      capacity_state: capacityState,
+    };
+    const group = byGroup.get(groupId);
+    if (
+      group &&
+      (group.group_name !== summary.group_name ||
+        group.group_status !== summary.group_status ||
+        group.group_size !== summary.group_size ||
+        group.max_members !== summary.max_members ||
+        group.capacity_count !== summary.capacity_count ||
+        group.capacity_state !== summary.capacity_state)
+    ) {
+      throw new Error(
+        "The coursemate group-summary response contains inconsistent group data."
+      );
+    }
+    byProfile.set(profileId, summary);
+    byGroup.set(groupId, summary);
   }
   return [...byProfile.values()];
 }
@@ -363,16 +414,51 @@ export async function listActiveGroupMembers(
   groupId: string
 ): Promise<GroupMembershipRow[]> {
   const client = await verifyCurrentUser(userId);
-  const { data, error } = await client
-    .from("group_memberships")
-    .select(
-      "id, group_id, course_id, profile_id, display_name_snapshot, membership_status, joined_at"
-    )
-    .eq("group_id", groupId)
-    .eq("membership_status", "active")
-    .order("joined_at", { ascending: true });
-  if (error) throw error;
-  return mapActiveGroupMemberships(data ?? []);
+  const pageSize = 100;
+  const members: GroupMembershipRow[] = [];
+  const seenIds = new Set<string>();
+  let expectedCount: number | null = null;
+  while (true) {
+    const { data, error, count } = await client
+      .from("group_memberships")
+      .select(
+        "id, group_id, course_id, profile_id, display_name_snapshot, membership_status, joined_at",
+        { count: "exact" }
+      )
+      .eq("group_id", groupId)
+      .eq("membership_status", "active")
+      .order("joined_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(members.length, members.length + pageSize - 1);
+    if (error) throw error;
+    if (
+      count === null ||
+      !Number.isSafeInteger(count) ||
+      count < 0 ||
+      (expectedCount !== null && count !== expectedCount)
+    ) {
+      throw new Error(
+        "The group member list changed or could not be counted. Refresh and try again."
+      );
+    }
+    expectedCount = count;
+    const page = mapActiveGroupMemberships(data);
+    for (const member of page) {
+      if (member.group_id !== groupId || seenIds.has(member.id)) {
+        throw new Error(
+          "The group member list changed while loading. Refresh and try again."
+        );
+      }
+      seenIds.add(member.id);
+      members.push(member);
+    }
+    if (members.length === expectedCount) return members;
+    if (page.length === 0 || members.length > expectedCount) {
+      throw new Error(
+        "The group member list was incomplete. Refresh and try again."
+      );
+    }
+  }
 }
 
 export async function loadGroupWorkflowSnapshot(
@@ -383,7 +469,9 @@ export async function loadGroupWorkflowSnapshot(
     [
       client
         .from("study_groups")
-        .select("id, course_id, creator_id, status, name, created_at")
+        .select(
+          "id, course_id, creator_id, status, name, max_members, created_at"
+        )
         .order("created_at", { ascending: false }),
       client
         .from("group_memberships")
@@ -440,7 +528,9 @@ async function callGroupRpc<T>(
     | "request_to_join_group"
     | "review_group_join_request"
     | "cancel_group_join_request"
-    | "rename_study_group",
+    | "rename_study_group"
+    | "set_group_max_members"
+    | "remove_group_member",
   args: Record<string, unknown>
 ): Promise<T> {
   const client = await verifyCurrentUser(userId);
@@ -458,8 +548,10 @@ export async function createGroupAndInvite(
   userId: string,
   courseId: string,
   recipientId: string,
-  name: string
+  name: string,
+  maxMembers: number
 ): Promise<CreatedGroupAndInvitation> {
+  validateGroupMaxMembers(maxMembers);
   const rows = await callGroupRpc<CreatedGroupAndInvitation[]>(
     userId,
     "create_group_and_invite",
@@ -467,6 +559,7 @@ export async function createGroupAndInvite(
       p_course_id: courseId,
       p_recipient_id: recipientId,
       p_name: name.trim(),
+      p_max_members: maxMembers,
     }
   );
   const created = rows?.[0];
@@ -476,6 +569,35 @@ export async function createGroupAndInvite(
     );
   }
   return created;
+}
+
+function validateGroupMaxMembers(maxMembers: number): void {
+  if (!Number.isInteger(maxMembers) || maxMembers < 2 || maxMembers > 19) {
+    throw new Error("Group maximum must be a whole number between 2 and 19.");
+  }
+}
+
+export async function setGroupMaxMembers(
+  userId: string,
+  groupId: string,
+  maxMembers: number
+): Promise<number> {
+  validateGroupMaxMembers(maxMembers);
+  return callGroupRpc<number>(userId, "set_group_max_members", {
+    p_group_id: groupId,
+    p_max_members: maxMembers,
+  });
+}
+
+export function removeGroupMember(
+  userId: string,
+  groupId: string,
+  profileId: string
+): Promise<string> {
+  return callGroupRpc<string>(userId, "remove_group_member", {
+    p_group_id: groupId,
+    p_profile_id: profileId,
+  });
 }
 
 export function sendGroupInvitation(
@@ -556,6 +678,49 @@ export function getGroupWorkflowErrorMessage(error: unknown): string {
         : "";
   const message = rawMessage.toLocaleLowerCase();
 
+  if (message.includes("group is full")) {
+    return "Group is full";
+  }
+  if (message.includes("group maximum is not set")) {
+    return "Group maximum is not set. The group leader must set a maximum before anyone can be added.";
+  }
+  if (message.includes("group has more than 19 active members")) {
+    return "This group has more than 19 active members. The leader must remove members before anyone can be added or a maximum can be set.";
+  }
+  if (
+    message.includes(
+      "maximum cannot be lower than the current number of active members"
+    )
+  ) {
+    return "Maximum cannot be lower than the current number of active members. Remove members first.";
+  }
+  if (message.includes("group maximum does not match this group")) {
+    return "The chosen maximum does not match this group's maximum. The leader must edit the maximum before inviting.";
+  }
+  if (
+    message.includes("group maximum must be between 2 and 19") ||
+    message.includes("group maximum must be a whole number between 2 and 19")
+  ) {
+    return "Choose a whole-number group maximum between 2 and 19.";
+  }
+  if (message.includes("only the current group leader may set the maximum")) {
+    return "Only the current group leader can set the maximum. Refresh the page to update your access.";
+  }
+  if (message.includes("only the current group leader may remove members")) {
+    return "Only the current group leader can remove members. Refresh the page to update your access.";
+  }
+  if (message.includes("the current group leader cannot remove themselves")) {
+    return "The current group leader cannot remove themselves through this action.";
+  }
+  if (message.includes("the last active member cannot be removed")) {
+    return "The last active group member cannot be removed through this action.";
+  }
+  if (
+    message.includes("target is not an active member of this group") ||
+    message.includes("target is no longer an active member of this group")
+  ) {
+    return "This person is no longer an active member of the group. Refresh the page to see the current members.";
+  }
   if (message.includes("already has a pending join request for this group")) {
     return "This person already asked to join this group. Their request is the first pending action, so send no invitation; the group leader should review that request.";
   }

@@ -22,7 +22,9 @@ import {
   listActiveGroupMembers,
   loadGroupWorkflowSnapshot,
   loadOwnCourseProfile,
+  removeGroupMember,
   renameStudyGroup,
+  setGroupMaxMembers,
   type GroupMembershipRow,
   type GroupWorkflowSnapshot,
   type OwnCourseProfile,
@@ -38,6 +40,14 @@ import {
   EmptyState,
   PageHeading,
 } from "@/components/citylink/Shared";
+import { GroupCapacitySettings } from "./GroupCapacitySettings";
+import { GroupMemberRemoval } from "./GroupMemberRemoval";
+import {
+  canManageGroupCapacity,
+  canRemoveGroupMember,
+  getVisibleGroupCapacityCount,
+  validateGroupMaximum,
+} from "./groupCapacity";
 import "./CourseDetail.css";
 import "./AuthenticatedMyGroup.css";
 
@@ -150,12 +160,40 @@ export default function AuthenticatedMyGroup({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [retryToken, setRetryToken] = useState(0);
   const [groupName, setGroupName] = useState("");
+  const [groupMaximum, setGroupMaximum] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const requestGeneration = useRef(0);
+  const actionGeneration = useRef(0);
+  const actionBusy = useRef(false);
+  const actionGroupId =
+    data?.userId === userId && data.course.id === courseId
+      ? (data.group?.id ?? null)
+      : null;
+  const actionContext = useRef({
+    userId,
+    courseId,
+    groupId: actionGroupId,
+    status: session.status,
+  });
+  actionContext.current = {
+    userId,
+    courseId,
+    groupId: actionGroupId,
+    status: session.status,
+  };
 
   useEffect(() => {
     setNotice(null);
   }, [courseId, userId]);
+
+  useEffect(() => {
+    actionBusy.current = false;
+    setBusyAction("");
+    return () => {
+      actionGeneration.current += 1;
+      actionBusy.current = false;
+    };
+  }, [courseId, userId, actionGroupId, session.status]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -224,6 +262,9 @@ export default function AuthenticatedMyGroup({
           members,
         });
         setGroupName(group?.name ?? "");
+        setGroupMaximum(
+          group?.max_members == null ? "" : String(group.max_members)
+        );
         setLoading(false);
       })
       .catch(error => {
@@ -240,44 +281,124 @@ export default function AuthenticatedMyGroup({
     };
   }, [courseId, retryToken, session.status, userId]);
 
-  async function saveGroupName() {
-    if (!userId || !data?.group || !data.profile) return;
-    if (data.group.creator_id !== userId || busyAction) return;
-    setBusyAction("rename");
+  async function runAction(
+    key: string,
+    action: () => Promise<unknown>,
+    success: string
+  ) {
+    if (!userId || actionBusy.current) return;
+    const context = { ...actionContext.current };
+    const generation = actionGeneration.current;
+    const isCurrent = () =>
+      actionGeneration.current === generation &&
+      actionContext.current.userId === context.userId &&
+      actionContext.current.courseId === context.courseId &&
+      actionContext.current.groupId === context.groupId &&
+      actionContext.current.status === context.status;
+    actionBusy.current = true;
+    setBusyAction(key);
     setNotice(null);
     try {
-      await renameStudyGroup(userId, data.group.id, groupName);
-      setNotice({ tone: "success", message: "The group name was updated." });
+      await action();
+      if (!isCurrent()) return;
+      setNotice({ tone: "success", message: success });
       setRetryToken(value => value + 1);
     } catch (error) {
+      if (!isCurrent()) return;
       setNotice({
         tone: "error",
         message: getGroupWorkflowErrorMessage(error),
       });
     } finally {
-      setBusyAction("");
+      if (isCurrent()) {
+        actionBusy.current = false;
+        setBusyAction("");
+      }
     }
   }
 
+  async function saveGroupName() {
+    if (!userId || !data?.group || !data.profile) return;
+    if (data.group.creator_id !== userId) return;
+    await runAction(
+      "rename",
+      () => renameStudyGroup(userId, data.group!.id, groupName),
+      "The group name was updated."
+    );
+  }
+
   async function cancelInvite(invitationId: string) {
-    if (!userId || busyAction) return;
-    setBusyAction(`cancel-${invitationId}`);
-    setNotice(null);
-    try {
-      await cancelGroupInvitation(userId, invitationId);
-      setNotice({
-        tone: "success",
-        message: "The pending invitation was cancelled.",
-      });
-      setRetryToken(value => value + 1);
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
-    } finally {
-      setBusyAction("");
+    if (!userId) return;
+    await runAction(
+      `cancel-${invitationId}`,
+      () => cancelGroupInvitation(userId, invitationId),
+      "The pending invitation was cancelled."
+    );
+  }
+
+  async function saveGroupMaximum() {
+    if (
+      !userId ||
+      !data?.group ||
+      data.userId !== userId ||
+      data.course.id !== courseId
+    )
+      return;
+    const group = data.group;
+    if (!canManageGroupCapacity(group, data.members, userId)) return;
+    const validation = validateGroupMaximum(
+      groupMaximum,
+      getVisibleGroupCapacityCount(group, data.members, userId) ?? 0
+    );
+    if (validation.value === null) {
+      setNotice({ tone: "error", message: validation.error! });
+      return;
     }
+    const maximum = validation.value;
+    await runAction(
+      "maximum",
+      async () => {
+        const saved: unknown = await setGroupMaxMembers(
+          userId,
+          group.id,
+          maximum
+        );
+        if (saved !== maximum)
+          throw new Error("The saved maximum was not confirmed.");
+      },
+      "The group maximum was updated."
+    );
+  }
+
+  async function removeMember(member: GroupMembershipRow) {
+    if (
+      !userId ||
+      !data?.group ||
+      data.userId !== userId ||
+      data.course.id !== courseId ||
+      actionBusy.current
+    )
+      return;
+    const group = data.group;
+    if (
+      !member.profile_id ||
+      !canRemoveGroupMember(group, data.members, userId, member)
+    )
+      return;
+    const profileId = member.profile_id;
+    await runAction(
+      `remove-${member.id}`,
+      async () => {
+        const result: unknown = await removeGroupMember(
+          userId,
+          group.id,
+          profileId
+        );
+        if (result !== "removed")
+          throw new Error("The member removal was not confirmed.");
+      },
+      `${member.display_name_snapshot} was removed from the group.`
+    );
   }
 
   if (session.status === "loading") {
@@ -321,12 +442,11 @@ export default function AuthenticatedMyGroup({
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const members = ownData?.members ?? [];
   const groupSize = ownData?.group
-    ? members.length +
-      (ownData.group.status === "forming" &&
-      !members.some(member => member.profile_id === ownData.group?.creator_id)
-        ? 1
-        : 0)
-    : 0;
+    ? getVisibleGroupCapacityCount(ownData.group, members, userId)
+    : null;
+  const mayManageCapacity = ownData?.group
+    ? canManageGroupCapacity(ownData.group, members, userId)
+    : false;
   const leaderName =
     ownData?.group?.creator_id === userId
       ? (ownData.profile?.display_name ?? "You")
@@ -405,9 +525,9 @@ export default function AuthenticatedMyGroup({
             <Users size={22} />
           </span>
           <p className="my-group-rules-note">
-            Groups have no maximum size. The first invite creates a forming
-            group with you as leader; active members may invite, and only the
-            current group leader may review join requests.
+            Choose a maximum from 2 to 19 when starting a group. The first
+            invite creates a forming group with you as leader; active members
+            may invite, and only the current leader may review join requests.
           </p>
         </div>
         <Link
@@ -537,10 +657,28 @@ export default function AuthenticatedMyGroup({
                 </GroupCard>
 
                 <GroupCard
+                  eyebrow="GROUP SETTINGS"
+                  title="Group maximum"
+                  description="The count includes the forming-group leader, even before their membership is recorded."
+                  className="my-group-name-card my-group-capacity-card"
+                >
+                  <GroupCapacitySettings
+                    activeCount={groupSize}
+                    maxMembers={ownData.group.max_members}
+                    canManage={mayManageCapacity}
+                    value={groupMaximum}
+                    busy={busyAction !== ""}
+                    saving={busyAction === "maximum"}
+                    onChange={setGroupMaximum}
+                    onSave={() => void saveGroupMaximum()}
+                  />
+                </GroupCard>
+
+                <GroupCard
                   eyebrow="MEMBERSHIP"
                   title="Current members"
-                  count={groupSize}
-                  description="Active members in this group."
+                  count={groupSize ?? undefined}
+                  description="Active members in this group; a forming-group leader is included in the count."
                   className="my-group-members-card"
                   footer={
                     <GroupChatLink
@@ -574,6 +712,15 @@ export default function AuthenticatedMyGroup({
                                   : "Active member"}
                             </span>
                           </div>
+                          <GroupMemberRemoval
+                            group={ownData.group!}
+                            members={members}
+                            userId={userId}
+                            member={member}
+                            busy={busyAction !== ""}
+                            removing={busyAction === `remove-${member.id}`}
+                            onRemove={target => void removeMember(target)}
+                          />
                         </article>
                       ))}
                     </div>
@@ -582,8 +729,8 @@ export default function AuthenticatedMyGroup({
                       <strong>
                         {ownData.profile.display_name} · Group leader
                       </strong>
-                      This group is waiting for its first invitee to accept. No
-                      active memberships have been recorded yet.
+                      This group is waiting for an invitee to accept. The full
+                      member count is not available in this view.
                     </div>
                   ) : (
                     <EmptyState
@@ -604,9 +751,8 @@ export default function AuthenticatedMyGroup({
                   </span>
                   <h2>You do not have a group for this course yet</h2>
                   <p>
-                    Browse your coursemates, see who is looking for a group, and
-                    choose whether to invite someone or request to join an
-                    existing group.
+                    Browse your coursemates and invite someone, or browse
+                    recruitment posts to find a group seeking members.
                   </p>
                   <div className="authenticated-courses-state-actions">
                     <Link

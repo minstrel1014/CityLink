@@ -31,7 +31,8 @@
   font-weight: 650;
 }
 .group-workflows-toolbar select,
-.group-workflow-form select {
+.group-workflow-form select,
+.group-workflow-form input[type="number"] {
   width: min(390px, 100%);
   min-height: 40px;
   padding: 8px 11px;
@@ -201,7 +202,8 @@
     flex-direction: column;
   }
   .group-workflows-toolbar select,
-  .group-workflow-form select {
+  .group-workflow-form select,
+  .group-workflow-form input[type="number"] {
     width: 100%;
   }
 }

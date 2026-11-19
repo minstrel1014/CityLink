@@ -143,7 +143,8 @@ export function getPeerInvitationState(
   userId: string,
   peerId: string,
   courseId: string,
-  invitations: GroupInvitationRow[]
+  invitations: GroupInvitationRow[],
+  currentlyEligibleForInvitation = false
 ): PeerInvitationState | null {
   const related = invitations.filter(
     invitation =>
@@ -169,7 +170,10 @@ export function getPeerInvitationState(
   ) {
     return "sent";
   }
-  if (related.some(invitation => invitation.status === "accepted")) {
+  if (
+    !currentlyEligibleForInvitation &&
+    related.some(invitation => invitation.status === "accepted")
+  ) {
     return "connected";
   }
   return null;

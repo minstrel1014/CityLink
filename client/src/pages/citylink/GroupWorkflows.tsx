@@ -12,19 +12,30 @@ import {
   cancelGroupJoinRequest,
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
+  listActiveGroupMembers,
   listCourseGroupPeers,
   loadGroupWorkflowSnapshot,
   renameStudyGroup,
-  requestToJoinGroup,
   respondToGroupInvitation,
   reviewGroupJoinRequest,
   sendGroupInvitation,
   type GroupCoursePeer,
+  type GroupMembershipRow,
   type GroupWorkflowSnapshot,
 } from "@/lib/supabaseGroups";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { PageHeading } from "@/components/citylink/Shared";
-import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
+import {
+  CourseGroupLink,
+  GroupChatLink,
+} from "@/components/citylink/GroupNavigationLinks";
+import { ActiveGroupsPanel } from "./ActiveGroupsPanel";
+import {
+  getGroupCapacityState,
+  getVisibleGroupCapacityCount,
+  GROUP_MAXIMUM_OVER_LIMIT_MESSAGE,
+  validateGroupMaximum,
+} from "./groupCapacity";
 import "./GroupWorkflows.css";
 
 type Feedback = { tone: "success" | "error"; message: string };
@@ -90,10 +101,19 @@ export default function GroupWorkflows() {
   const [peerError, setPeerError] = useState("");
   const [firstInviteeId, setFirstInviteeId] = useState("");
   const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupMaximum, setNewGroupMaximum] = useState("");
   const [renameName, setRenameName] = useState("");
   const [renameGroupId, setRenameGroupId] = useState("");
   const [existingGroupId, setExistingGroupId] = useState("");
   const [inviteeId, setInviteeId] = useState("");
+  const [inviteCapacity, setInviteCapacity] = useState<{
+    userId: string;
+    courseId: string;
+    groupId: string;
+    members: GroupMembershipRow[];
+  } | null>(null);
+  const [inviteCapacityLoading, setInviteCapacityLoading] = useState(false);
+  const [inviteCapacityError, setInviteCapacityError] = useState("");
   const [busyAction, setBusyAction] = useState("");
   const [prefill] = useState(() => {
     if (typeof window === "undefined") {
@@ -106,6 +126,27 @@ export default function GroupWorkflows() {
     };
   });
   const requestGeneration = useRef(0);
+  const actionGeneration = useRef(0);
+  const actionBusy = useRef(false);
+  const actionContext = useRef({
+    userId,
+    selectedCourseId,
+    status: session.status,
+  });
+  actionContext.current = { userId, selectedCourseId, status: session.status };
+  const selectedInviteGroupRef = useRef(existingGroupId);
+  selectedInviteGroupRef.current = existingGroupId;
+
+  useEffect(() => {
+    actionBusy.current = false;
+    setBusyAction("");
+    setFeedback(null);
+    setNewGroupMaximum("");
+    return () => {
+      actionGeneration.current += 1;
+      actionBusy.current = false;
+    };
+  }, [userId, selectedCourseId, session.status]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -204,6 +245,49 @@ export default function GroupWorkflows() {
     };
   }, [prefill.courseId, prefill.inviteeId, selectedCourseId, userId]);
 
+  useEffect(() => {
+    let active = true;
+    setInviteCapacity(null);
+    setInviteCapacityError("");
+    if (
+      session.status !== "ready" ||
+      !userId ||
+      !selectedCourseId ||
+      !existingGroupId
+    ) {
+      setInviteCapacityLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    const isCurrent = () =>
+      active &&
+      userIdRef.current === userId &&
+      actionContext.current.status === "ready" &&
+      actionContext.current.selectedCourseId === selectedCourseId &&
+      selectedInviteGroupRef.current === existingGroupId;
+    setInviteCapacityLoading(true);
+    void listActiveGroupMembers(userId, existingGroupId)
+      .then(members => {
+        if (!isCurrent()) return;
+        setInviteCapacity({
+          userId,
+          courseId: selectedCourseId,
+          groupId: existingGroupId,
+          members,
+        });
+        setInviteCapacityLoading(false);
+      })
+      .catch(error => {
+        if (!isCurrent()) return;
+        setInviteCapacityError(getGroupWorkflowErrorMessage(error));
+        setInviteCapacityLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [userId, selectedCourseId, existingGroupId, retryToken, session.status]);
+
   const ownData = data?.userId === userId ? data : null;
   const enrolledCourses = useMemo(() => {
     if (!ownData) return [];
@@ -244,6 +328,31 @@ export default function GroupWorkflows() {
       activeMembershipGroupIds.has(group.id) ||
       (group.status === "forming" && group.creator_id === userId)
   );
+  const selectedInviteGroup = inviteableGroups.find(
+    group => group.id === existingGroupId
+  );
+  const currentInviteCapacity =
+    inviteCapacity?.userId === userId &&
+    inviteCapacity.courseId === selectedCourseId &&
+    inviteCapacity.groupId === existingGroupId
+      ? inviteCapacity
+      : null;
+  const inviteCount =
+    selectedInviteGroup && currentInviteCapacity && userId
+      ? getVisibleGroupCapacityCount(
+          selectedInviteGroup,
+          currentInviteCapacity.members,
+          userId
+        )
+      : null;
+  const inviteCapacityState =
+    selectedInviteGroup && currentInviteCapacity
+      ? inviteCount === null
+        ? selectedInviteGroup.max_members === null
+          ? "maximum_not_set"
+          : "unknown"
+        : getGroupCapacityState(inviteCount, selectedInviteGroup.max_members)
+      : null;
   const requestableGroups = groupsInCourse.filter(
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
@@ -268,25 +377,42 @@ export default function GroupWorkflows() {
   async function runAction(
     key: string,
     action: () => Promise<unknown>,
-    success: string
+    success: string | ((result: unknown) => string)
   ) {
-    if (!userId || busyAction) return;
+    if (!userId || actionBusy.current) return;
+    const context = { userId, selectedCourseId, status: session.status };
+    const generation = actionGeneration.current;
+    const isCurrent = () =>
+      actionGeneration.current === generation &&
+      actionContext.current.userId === context.userId &&
+      actionContext.current.selectedCourseId === context.selectedCourseId &&
+      actionContext.current.status === context.status;
+    actionBusy.current = true;
     setBusyAction(key);
     setFeedback(null);
     try {
-      await action();
-      setFeedback({ tone: "success", message: success });
+      const result = await action();
+      if (!isCurrent()) return;
+      setFeedback({
+        tone: "success",
+        message: typeof success === "function" ? success(result) : success,
+      });
       setNewGroupName("");
+      if (key === "create") setNewGroupMaximum("");
       setRenameName("");
       setRenameGroupId("");
       setRetryToken(value => value + 1);
     } catch (error) {
+      if (!isCurrent()) return;
       setFeedback({
         tone: "error",
         message: getGroupWorkflowErrorMessage(error),
       });
     } finally {
-      setBusyAction("");
+      if (isCurrent()) {
+        actionBusy.current = false;
+        setBusyAction("");
+      }
     }
   }
 
@@ -301,17 +427,34 @@ export default function GroupWorkflows() {
       });
       return;
     }
+    const maximum = validateGroupMaximum(newGroupMaximum);
+    if (maximum.value === null) {
+      setFeedback({ tone: "error", message: maximum.error! });
+      return;
+    }
     void runAction(
       "create",
       () =>
-        createGroupAndInvite(userId, selectedCourseId, firstInviteeId, name),
+        createGroupAndInvite(
+          userId,
+          selectedCourseId,
+          firstInviteeId,
+          name,
+          maximum.value!
+        ),
       "Your group is created and the first invitation has been sent."
     );
   }
 
   function sendInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!userId || !existingGroupId || !inviteeId) return;
+    if (
+      !userId ||
+      !existingGroupId ||
+      !inviteeId ||
+      (inviteCapacityState !== "available" && inviteCapacityState !== "unknown")
+    )
+      return;
     void runAction(
       "invite",
       () => sendGroupInvitation(userId, existingGroupId, inviteeId),
@@ -361,13 +504,13 @@ export default function GroupWorkflows() {
         <PageHeading
           eyebrow="SUPABASE GROUP WORKFLOWS"
           title="Find your group"
-          description="Create a group, invite coursemates, or request to join an active group. These actions use your signed-in Supabase account."
+          description="Create a group, invite coursemates, and review your invitations and requests. These actions use your signed-in Supabase account."
         />
         <div className="group-workflows-intro" role="note">
-          Group size is not limited. Invitations and join requests follow the
-          rule “first pending action wins.” Only the current group leader
-          reviews join requests; the server enforces this after leader
-          succession.
+          Choose a maximum from 2 to 19 when creating a group. Pending
+          invitations do not reserve a place. Invitations and join requests
+          follow the rule “first pending action wins.” Only the current group
+          leader reviews join requests.
         </div>
 
         {prefill.inviteeId &&
@@ -476,6 +619,32 @@ export default function GroupWorkflows() {
                 <span className="group-workflow-peek">
                   {newGroupName.trim().length}/50 characters
                 </span>
+                <label htmlFor="new-group-maximum">Group maximum</label>
+                <input
+                  id="new-group-maximum"
+                  type="number"
+                  min={2}
+                  max={19}
+                  step={1}
+                  value={newGroupMaximum}
+                  onChange={event => setNewGroupMaximum(event.target.value)}
+                  required
+                  disabled={busyAction !== ""}
+                  aria-describedby="new-group-maximum-help"
+                />
+                <span
+                  id="new-group-maximum-help"
+                  className="group-workflow-peek"
+                >
+                  Enter a whole number from 2 to 19. Choose a maximum; no number
+                  is selected for you.
+                </span>
+                {newGroupMaximum !== "" &&
+                  validateGroupMaximum(newGroupMaximum).error && (
+                    <p className="group-workflow-feedback error" role="alert">
+                      {validateGroupMaximum(newGroupMaximum).error}
+                    </p>
+                  )}
                 <label htmlFor="first-group-invitee">
                   Choose the first person to invite
                 </label>
@@ -518,6 +687,7 @@ export default function GroupWorkflows() {
                   className="primary"
                   disabled={
                     !newGroupName.trim() ||
+                    validateGroupMaximum(newGroupMaximum).value === null ||
                     !firstInviteeId ||
                     busyAction !== "" ||
                     peerLoading
@@ -570,6 +740,12 @@ export default function GroupWorkflows() {
                             >
                               View members
                             </Link>
+                            <CourseGroupLink
+                              courseId={group.course_id}
+                              className="secondary"
+                            >
+                              Manage group settings
+                            </CourseGroupLink>
                           </div>
                         </div>
                         {isLeader &&
@@ -662,6 +838,7 @@ export default function GroupWorkflows() {
                     value={existingGroupId}
                     onChange={event => setExistingGroupId(event.target.value)}
                     required
+                    disabled={busyAction !== ""}
                   >
                     <option value="">Select your group</option>
                     {inviteableGroups.map(group => (
@@ -671,13 +848,56 @@ export default function GroupWorkflows() {
                       </option>
                     ))}
                   </select>
+                  {selectedInviteGroup && (
+                    <CourseGroupLink courseId={selectedCourseId}>
+                      View group settings and members
+                    </CourseGroupLink>
+                  )}
+                  {existingGroupId && inviteCapacityLoading && (
+                    <p className="group-workflow-peek" role="status">
+                      Checking group capacity…
+                    </p>
+                  )}
+                  {inviteCapacityError && (
+                    <p className="group-workflow-feedback error" role="alert">
+                      {inviteCapacityError}{" "}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setRetryToken(value => value + 1)}
+                      >
+                        Try again
+                      </button>
+                    </p>
+                  )}
+                  {inviteCapacityState === "over_limit" && (
+                    <p className="group-workflow-peek">
+                      {GROUP_MAXIMUM_OVER_LIMIT_MESSAGE}
+                    </p>
+                  )}
+                  {inviteCapacityState === "maximum_not_set" && (
+                    <p className="group-workflow-peek">
+                      Group maximum is not set
+                    </p>
+                  )}
+                  {inviteCapacityState === "full" && (
+                    <p className="group-workflow-peek">Group is full</p>
+                  )}
+                  {inviteCapacityState === "unknown" && (
+                    <p className="group-workflow-peek">
+                      The full member count is not available in this view. The
+                      server will check capacity when you send an invitation.
+                    </p>
+                  )}
                   <label htmlFor="invite-peer">Coursemate</label>
                   <select
                     id="invite-peer"
                     value={inviteeId}
                     onChange={event => setInviteeId(event.target.value)}
                     required
-                    disabled={!availablePeers.length || peerLoading}
+                    disabled={
+                      !availablePeers.length || peerLoading || busyAction !== ""
+                    }
                   >
                     <option value="">
                       {peerLoading
@@ -695,6 +915,8 @@ export default function GroupWorkflows() {
                     disabled={
                       !existingGroupId ||
                       !inviteeId ||
+                      (inviteCapacityState !== "available" &&
+                        inviteCapacityState !== "unknown") ||
                       busyAction !== "" ||
                       peerLoading
                     }
@@ -712,120 +934,22 @@ export default function GroupWorkflows() {
               )}
             </section>
 
-            <section className="group-workflow-panel wide">
-              <h2>Groups you can request to join</h2>
-              <p>
-                Active groups in the selected course are listed from Supabase.
-                If an invitation is already pending for you, respond to it
-                rather than sending a second action.
-              </p>
-              {requestableGroups.length ? (
-                <div className="group-workflow-list">
-                  {requestableGroups.map(group => {
-                    const pendingRequest = joinRequests.find(
-                      request =>
-                        request.group_id === group.id &&
-                        request.requester_id === userId &&
-                        request.status === "pending"
-                    );
-                    const pendingInvitation = incomingInvitations.find(
-                      invitation =>
-                        invitation.group_id === group.id &&
-                        invitation.status === "pending"
-                    );
-                    const alreadyGrouped = memberships.some(
-                      membership =>
-                        membership.course_id === group.course_id &&
-                        membership.membership_status === "active"
-                    );
-                    return (
-                      <article className="group-workflow-item" key={group.id}>
-                        <div className="group-workflow-item-top">
-                          <div>
-                            <h3>{group.name || "Study group"}</h3>
-                            <p>{selectedCourse?.code} · Active group</p>
-                          </div>
-                          <span className="group-workflow-status">Active</span>
-                        </div>
-                        <div className="group-workflow-item-bottom">
-                          {pendingRequest ? (
-                            <span className="member-note">
-                              Your join request is pending.
-                            </span>
-                          ) : pendingInvitation ? (
-                            <span className="member-note">
-                              You have an invitation to this group; respond to
-                              it below.
-                            </span>
-                          ) : alreadyGrouped ? (
-                            <span className="member-note">
-                              You already belong to a group for this course.
-                            </span>
-                          ) : (
-                            <span className="group-workflow-peek">
-                              No maximum group size.
-                            </span>
-                          )}
-                          <div className="group-workflow-actions">
-                            {pendingRequest ? (
-                              <button
-                                type="button"
-                                className="secondary"
-                                disabled={busyAction !== ""}
-                                onClick={() =>
-                                  void runAction(
-                                    `cancel-request-${pendingRequest.id}`,
-                                    () =>
-                                      cancelGroupJoinRequest(
-                                        userId,
-                                        pendingRequest.id
-                                      ),
-                                    "Your join request was cancelled."
-                                  )
-                                }
-                              >
-                                {busyAction ===
-                                `cancel-request-${pendingRequest.id}`
-                                  ? "Cancelling…"
-                                  : "Cancel request"}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="primary"
-                                disabled={
-                                  Boolean(pendingInvitation) ||
-                                  alreadyGrouped ||
-                                  busyAction !== ""
-                                }
-                                onClick={() =>
-                                  void runAction(
-                                    `request-${group.id}`,
-                                    () => requestToJoinGroup(userId, group.id),
-                                    "Your request to join has been sent."
-                                  )
-                                }
-                              >
-                                {busyAction === `request-${group.id}`
-                                  ? "Sending…"
-                                  : "Request to join"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="group-workflow-empty">
-                  <strong>
-                    No active groups are available in this course.
-                  </strong>
-                  When an eligible group is active, it will appear here.
-                </div>
-              )}
-            </section>
+            <ActiveGroupsPanel
+              groups={requestableGroups}
+              courseCode={selectedCourse?.code}
+              userId={userId}
+              joinRequests={joinRequests}
+              incomingInvitations={incomingInvitations}
+              memberships={memberships}
+              busyAction={busyAction}
+              onCancelRequest={requestId =>
+                void runAction(
+                  `cancel-request-${requestId}`,
+                  () => cancelGroupJoinRequest(userId, requestId),
+                  "Your join request was cancelled."
+                )
+              }
+            />
 
             <section className="group-workflow-panel">
               <h2>Received invitations</h2>
@@ -894,7 +1018,15 @@ export default function GroupWorkflows() {
                                       invitation.id,
                                       true
                                     ),
-                                  "You accepted the invitation and joined the group."
+                                  result => {
+                                    if (result === "accepted")
+                                      return "You accepted the invitation and joined the group.";
+                                    if (result === "expired")
+                                      return "This invitation expired and you did not join the group.";
+                                    throw new Error(
+                                      "The invitation response was not confirmed."
+                                    );
+                                  }
                                 )
                               }
                             >
@@ -987,8 +1119,7 @@ export default function GroupWorkflows() {
               <h2>Join requests</h2>
               <p>
                 Requests shown depend on current server access rules. Only the
-                current group leader may review requests; the server enforces
-                this after leader succession.
+                current group leader may review requests in this view.
               </p>
               <div className="group-workflow-list">
                 {joinRequests.length ? (
@@ -1080,7 +1211,15 @@ export default function GroupWorkflows() {
                                           request.id,
                                           true
                                         ),
-                                      "The request was approved and the student joined."
+                                      result => {
+                                        if (result === "approved")
+                                          return "The request was approved and the student joined.";
+                                        if (result === "expired")
+                                          return "This request expired and the student did not join the group.";
+                                        throw new Error(
+                                          "The request review was not confirmed."
+                                        );
+                                      }
                                     )
                                   }
                                 >

@@ -147,3 +147,14 @@ This dated addendum supersedes older sign-in landing and “fictional course dat
 - [x] Initial commit `fd26cd56deac8a9a1e52bd6ebf38c7397cad9a8e` was pushed on `feature/adam-ux-shell` and [PR #9](https://github.com/minstrel1014/CityLink/pull/9) opened against `main`; the PR remains unmerged. Check its latest head and mergeability before review; do not push or merge directly to `main`.
 
 Validation commands and exact results, file inventory, API boundaries, assumptions, open issues, and next steps are recorded in `docs/WORKSPACE_SHELL_HANDOFF.md`; the approved product and coordination decisions are in `docs/team/DECISIONS.md`.
+
+## Coordinated group-capacity client — 2026-11-19
+
+- [x] **Owner ledger and decision:** Adam remains Project, Integration, and Release Lead; demo repair, user-journey work, QA refinements, and the capacity-client UI are additive assignments in the existing Adam-repair task. Roy, Jeffery, Role 6, and Eunice retain their existing roles; see `docs/stage6/CAPACITY_CLIENT_HANDOFF.md`.
+- [x] Implement an explicit 2–19 maximum alongside the group name in both current creation entry points, and call the draft four-argument creation service without selecting a default.
+- [x] Implement current-leader maximum editing, existing-group unset and over-limit guidance, and individual confirmed member removal using the proposed RPCs. Backend enforcement still requires the separately authorized migration and live QA.
+- [x] Implement capacity-aware People and recruitment mapping, current/maximum and full/unset/over-limit presentation, and existing-action full-group error messages. Pending records are not cancelled by the client; backend enforcement and concurrency QA remain outstanding.
+- [x] Preserve the Option A presentation-only direct-request decision and unchanged `request_to_join_group` wrapper, without modifying RLS, the database, or recruitment-post rules. Reconcile with draft PR #33 before release.
+- [x] Add service, mapping, input, UI, error-state, roster-visibility, re-invite, and regression tests. Typecheck passed; 21 test files / 294 tests passed; Test-configured build passed with the documented existing warnings; formatting and whitespace checks passed. Signed-in multi-account Test QA remains open.
+- [ ] Reconcile the overlapping QA PR #33 and profile-invitation PR #31; the latter adds a group-creation path that also needs the explicit maximum. Preserve their user-facing work and rerun checks on the combined result.
+- [ ] Coordinate an explicit safe client/schema cutover, old and cached clients, and the exact final migration head with the lead and Role 6. No SQL, migration, Test schema/data, RLS/grants, Main access, merge, or publish is authorized by this client task. Commit and push only the feature branch and open a review PR; tell the existing lead task when ready.

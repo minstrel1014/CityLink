@@ -13,11 +13,32 @@ export interface PageResult<T, C> {
   nextCursor: C | null;
 }
 
+export type CapacityState =
+  | "available"
+  | "full"
+  | "maximum_not_set"
+  | "over_limit";
+
+export type ApplyBlockReason =
+  | "group_full"
+  | "maximum_not_set"
+  | "group_over_limit"
+  | "post_closed"
+  | "group_inactive"
+  | "already_member"
+  | "pending_invitation"
+  | "pending_request"
+  | "profile_unavailable"
+  | "not_eligible";
+
 export interface CourseGroupSummary {
   groupId: string;
   groupName: string;
   status: "forming" | "active";
   activeMemberCount: number;
+  maxMembers: number | null;
+  capacityCount: number;
+  capacityState: CapacityState;
   canCreatePost: boolean;
 }
 
@@ -86,6 +107,9 @@ export interface GroupRecruitmentPost {
   groupId: string | null;
   groupName: string | null;
   activeMemberCount: number | null;
+  maxMembers: number | null;
+  capacityCount: number | null;
+  capacityState: CapacityState | null;
   authorName: string;
   subject: string;
   body: string;
@@ -94,6 +118,7 @@ export interface GroupRecruitmentPost {
   updatedAt: string;
   closedAt: string | null;
   applyEnabled: boolean;
+  applyBlockReason: ApplyBlockReason | null;
   canManage: boolean;
 }
 
@@ -156,11 +181,75 @@ function requiredBoolean(row: Record<string, unknown>, key: string) {
 
 function requiredCount(row: Record<string, unknown>, key: string) {
   const raw = row[key];
-  const count = typeof raw === "number" ? raw : Number(raw);
+  const count =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && /^\d+$/.test(raw)
+        ? Number(raw)
+        : NaN;
   if (!Number.isSafeInteger(count) || count < 0) {
     throw new Error(`The Stage 6 service returned an invalid ${key} value.`);
   }
   return count;
+}
+
+function mapVisibleCapacity(row: Record<string, unknown>) {
+  const activeMemberCount = requiredCount(row, "active_member_count");
+  const capacityCount = requiredCount(row, "capacity_count");
+  const maxMembers =
+    row.max_members === null ? null : requiredCount(row, "max_members");
+  if (maxMembers !== null && (maxMembers < 2 || maxMembers > 19)) {
+    throw new Error(
+      "The Stage 6 service returned an invalid max_members value."
+    );
+  }
+  const capacityState = row.capacity_state;
+  const expectedState: CapacityState =
+    capacityCount > 19
+      ? "over_limit"
+      : maxMembers === null
+        ? "maximum_not_set"
+        : capacityCount >= maxMembers
+          ? "full"
+          : "available";
+  if (activeMemberCount !== capacityCount || capacityState !== expectedState) {
+    throw new Error("The Stage 6 service returned inconsistent capacity data.");
+  }
+  return {
+    activeMemberCount,
+    capacityCount,
+    maxMembers,
+    capacityState: expectedState,
+  };
+}
+
+const applyBlockReasons: readonly ApplyBlockReason[] = [
+  "group_full",
+  "maximum_not_set",
+  "group_over_limit",
+  "post_closed",
+  "group_inactive",
+  "already_member",
+  "pending_invitation",
+  "pending_request",
+  "profile_unavailable",
+  "not_eligible",
+];
+
+function mapApplyBlockReason(
+  row: Record<string, unknown>
+): ApplyBlockReason | null {
+  const reason = row.apply_block_reason;
+  if (reason === null) return null;
+  if (
+    typeof reason !== "string" ||
+    !applyBlockReasons.includes(reason as ApplyBlockReason)
+  ) {
+    throw new Error(
+      "The recruitment list contains an invalid application block reason."
+    );
+  }
+  return reason as ApplyBlockReason;
 }
 
 function allowOnlyKeys(row: Record<string, unknown>, keys: string[]) {
@@ -220,6 +309,9 @@ export function mapCourseGroupSummaries(
       "group_name",
       "group_status",
       "active_member_count",
+      "max_members",
+      "capacity_count",
+      "capacity_state",
       "can_create_post",
       "has_more",
     ]);
@@ -231,7 +323,7 @@ export function mapCourseGroupSummaries(
       groupId: requiredString(row, "group_id"),
       groupName: optionalGroupName(row, "group_name"),
       status: status as CourseGroupSummary["status"],
-      activeMemberCount: requiredCount(row, "active_member_count"),
+      ...mapVisibleCapacity(row),
       canCreatePost: requiredBoolean(row, "can_create_post"),
     };
   });
@@ -374,6 +466,9 @@ export function mapGroupRecruitmentPosts(
       "group_id",
       "group_name",
       "active_member_count",
+      "max_members",
+      "capacity_count",
+      "capacity_state",
       "author_name",
       "subject",
       "body",
@@ -382,6 +477,7 @@ export function mapGroupRecruitmentPosts(
       "updated_at",
       "closed_at",
       "apply_enabled",
+      "apply_block_reason",
       "can_manage",
       "has_more",
     ]);
@@ -389,25 +485,75 @@ export function mapGroupRecruitmentPosts(
     if (status !== "open" && status !== "closed") {
       throw new Error("The recruitment list contains an invalid post status.");
     }
-    const activeMemberCount = row.active_member_count;
-    const parsedCount =
-      activeMemberCount === null ? null : Number(activeMemberCount);
-    if (
-      parsedCount !== null &&
-      (!Number.isSafeInteger(parsedCount) || parsedCount < 0)
-    ) {
-      throw new Error("The recruitment list contains an invalid member count.");
-    }
     const groupId = nullableString(row, "group_id");
     const rawGroupName = nullableString(row, "group_name");
     const groupName =
       rawGroupName === null || rawGroupName.trim()
         ? rawGroupName
         : "Study group";
-    if ((groupId === null) !== (groupName === null)) {
+    if (
+      (groupId === null) !== (groupName === null) ||
+      (groupId !== null && !groupId.trim())
+    ) {
       throw new Error(
         "The recruitment list contains incomplete group details."
       );
+    }
+    const applyEnabled = requiredBoolean(row, "apply_enabled");
+    const applyBlockReason = mapApplyBlockReason(row);
+    if (applyEnabled !== (applyBlockReason === null)) {
+      throw new Error(
+        "The recruitment list contains inconsistent application data."
+      );
+    }
+    let capacity: {
+      activeMemberCount: number | null;
+      maxMembers: number | null;
+      capacityCount: number | null;
+      capacityState: CapacityState | null;
+    };
+    if (groupId === null) {
+      if (
+        row.active_member_count !== null ||
+        row.max_members !== null ||
+        row.capacity_count !== null ||
+        row.capacity_state !== null ||
+        applyBlockReason !== "group_inactive"
+      ) {
+        throw new Error(
+          "The recruitment list contains incomplete group redaction."
+        );
+      }
+      capacity = {
+        activeMemberCount: null,
+        maxMembers: null,
+        capacityCount: null,
+        capacityState: null,
+      };
+    } else {
+      capacity = mapVisibleCapacity(row);
+      const capacityReason: Partial<Record<CapacityState, ApplyBlockReason>> = {
+        full: "group_full",
+        maximum_not_set: "maximum_not_set",
+        over_limit: "group_over_limit",
+      };
+      const expectedReason =
+        status === "closed"
+          ? "post_closed"
+          : capacityReason[capacity.capacityState!];
+      if (
+        (expectedReason && applyBlockReason !== expectedReason) ||
+        (!expectedReason &&
+          (applyBlockReason === "post_closed" ||
+            applyBlockReason === "group_inactive" ||
+            applyBlockReason === "group_full" ||
+            applyBlockReason === "maximum_not_set" ||
+            applyBlockReason === "group_over_limit"))
+      ) {
+        throw new Error(
+          "The recruitment list contains inconsistent application data."
+        );
+      }
     }
     const createdAt = requiredString(row, "created_at");
     const updatedAt = requiredString(row, "updated_at");
@@ -424,7 +570,7 @@ export function mapGroupRecruitmentPosts(
       id: requiredString(row, "post_id"),
       groupId,
       groupName,
-      activeMemberCount: parsedCount,
+      ...capacity,
       authorName: requiredString(row, "author_name"),
       subject: requiredString(row, "subject"),
       body: requiredString(row, "body"),
@@ -432,7 +578,8 @@ export function mapGroupRecruitmentPosts(
       createdAt,
       updatedAt,
       closedAt,
-      applyEnabled: requiredBoolean(row, "apply_enabled"),
+      applyEnabled,
+      applyBlockReason,
       canManage: requiredBoolean(row, "can_manage"),
     };
   });

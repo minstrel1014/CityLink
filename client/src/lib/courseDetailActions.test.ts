@@ -129,6 +129,21 @@ describe("authenticated course detail invitation actions", () => {
       getPeerInvitationState("user-1", "unknown", "course-1", invitations)
     ).toBeNull();
   });
+
+  it("allows a currently eligible person to be invited again after an accepted invitation", () => {
+    expect(
+      getPeerInvitationState("user-1", "peer-3", "course-1", invitations, true)
+    ).toBeNull();
+    expect(
+      getPeerInvitationState("user-1", "peer-3", "course-1", invitations, false)
+    ).toBe("connected");
+    expect(
+      getPeerInvitationState("user-1", "peer-1", "course-1", invitations, true)
+    ).toBe("sent");
+    expect(
+      getPeerInvitationState("user-1", "peer-2", "course-1", invitations, true)
+    ).toBe("received");
+  });
 });
 
 describe("two-view course detail helpers", () => {

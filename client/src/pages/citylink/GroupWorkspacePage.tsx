@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import React, { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Users } from "lucide-react";
 import { Link } from "wouter";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
@@ -24,6 +24,12 @@ import {
   requestToJoinGroup,
   type StudyGroupRow,
 } from "@/lib/supabaseGroups";
+import {
+  canApplyToRecruitmentPost,
+  Stage6ApplyControl,
+  Stage6CapacityCount,
+  Stage6CapacityStatus,
+} from "./Stage6Capacity";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
 type LoadState = "loading" | "ready" | "error";
@@ -221,7 +227,13 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   }
 
   async function applyToJoin(post: GroupRecruitmentPost) {
-    if (!userId || !post.groupId || !post.applyEnabled || busyAction) return;
+    if (
+      !userId ||
+      !post.groupId ||
+      !canApplyToRecruitmentPost(post) ||
+      busyAction
+    )
+      return;
     setBusyAction(`apply:${post.id}`);
     setFeedback("");
     try {
@@ -371,11 +383,15 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         {group.status === "forming" ? "Forming" : "Active"}
                       </span>
                       <span className="stage6-members-count">
-                        <Users size={15} /> {group.activeMemberCount} active{" "}
-                        {group.activeMemberCount === 1 ? "member" : "members"}
+                        <Users size={15} />
+                        <Stage6CapacityCount
+                          count={group.capacityCount}
+                          maximum={group.maxMembers}
+                        />
                       </span>
                     </div>
                     <h3>{group.groupName || "Study group"}</h3>
+                    <Stage6CapacityStatus state={group.capacityState} />
                     <p className="stage6-group-caption">
                       Group details and member lists are checked again by the
                       server when opened.
@@ -518,9 +534,15 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         <p>
                           Posted by {post.authorName} ·{" "}
                           {new Date(post.createdAt).toLocaleDateString()}
-                          {post.activeMemberCount !== null &&
-                            ` · ${post.activeMemberCount} active ${post.activeMemberCount === 1 ? "member" : "members"}`}
                         </p>
+                        {post.capacityCount !== null && (
+                          <p>
+                            <Stage6CapacityCount
+                              count={post.capacityCount}
+                              maximum={post.maxMembers}
+                            />
+                          </p>
+                        )}
                       </div>
                       {post.groupId && post.groupName && (
                         <Link
@@ -531,6 +553,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         </Link>
                       )}
                     </div>
+                    {post.capacityState !== null && (
+                      <Stage6CapacityStatus state={post.capacityState} />
+                    )}
                     <p className="stage6-post-body">{post.body}</p>
                     {post.groupId === null && (
                       <p className="stage6-readonly-note">
@@ -545,7 +570,10 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         edited, reopened, or applied to.
                       </p>
                     )}
-                    {editingPostId === post.id ? (
+                    {editingPostId === post.id &&
+                    post.groupId !== null &&
+                    post.canManage &&
+                    post.status === "open" ? (
                       <form
                         className="stage6-post-form"
                         onSubmit={event => void savePost(event, post)}
@@ -605,45 +633,39 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                       </form>
                     ) : (
                       <div className="stage6-post-actions">
-                        {post.canManage && post.status === "open" && (
-                          <>
-                            <button
-                              type="button"
-                              className="secondary"
-                              onClick={() => {
-                                setEditingPostId(post.id);
-                                setDraft(post.body);
-                                setPostSubject(post.subject);
-                              }}
-                            >
-                              Edit post
-                            </button>
-                            <button
-                              type="button"
-                              className="secondary"
-                              disabled={busyAction !== null}
-                              onClick={() => void closePost(post)}
-                            >
-                              {busyAction === `close:${post.id}`
-                                ? "Closing…"
-                                : "Close post"}
-                            </button>
-                          </>
-                        )}
-                        {post.status === "open" &&
-                          post.applyEnabled &&
-                          post.groupId && (
-                            <button
-                              type="button"
-                              className="primary"
-                              disabled={busyAction !== null}
-                              onClick={() => void applyToJoin(post)}
-                            >
-                              {busyAction === `apply:${post.id}`
-                                ? "Sending request…"
-                                : "Apply to join"}
-                            </button>
+                        {post.groupId !== null &&
+                          post.canManage &&
+                          post.status === "open" && (
+                            <>
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => {
+                                  setEditingPostId(post.id);
+                                  setDraft(post.body);
+                                  setPostSubject(post.subject);
+                                }}
+                              >
+                                Edit post
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                disabled={busyAction !== null}
+                                onClick={() => void closePost(post)}
+                              >
+                                {busyAction === `close:${post.id}`
+                                  ? "Closing…"
+                                  : "Close post"}
+                              </button>
+                            </>
                           )}
+                        <Stage6ApplyControl
+                          post={post}
+                          busy={busyAction !== null}
+                          applying={busyAction === `apply:${post.id}`}
+                          onApply={() => void applyToJoin(post)}
+                        />
                       </div>
                     )}
                   </article>

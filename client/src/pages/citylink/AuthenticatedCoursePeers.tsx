@@ -37,6 +37,11 @@ import {
 } from "@/lib/courseDetailActions";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
+import {
+  CreatePeopleGroupInviteDialog,
+  getPeopleInviteErrorMessage,
+  PeopleGroupCapacity,
+} from "./PeopleCapacity";
 import "./CourseDetail.css";
 
 type DetailData = {
@@ -111,6 +116,16 @@ export default function AuthenticatedCoursePeers({
   const userId = session.user?.id ?? null;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const actionContext = useRef({ userId, courseId });
+  const pendingInvite = useRef<symbol | null>(null);
+  if (
+    actionContext.current.userId !== userId ||
+    actionContext.current.courseId !== courseId
+  ) {
+    actionContext.current = { userId, courseId };
+    pendingInvite.current = null;
+  }
+  const createDialogTrigger = useRef<HTMLButtonElement | null>(null);
 
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +143,10 @@ export default function AuthenticatedCoursePeers({
   const [busyPeerId, setBusyPeerId] = useState("");
   const [choosingPeerId, setChoosingPeerId] = useState("");
   const [chosenGroupId, setChosenGroupId] = useState("");
+  const [creatingPeer, setCreatingPeer] = useState<GroupCoursePeer | null>(
+    null
+  );
+  const [creationError, setCreationError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
   const requestGeneration = useRef(0);
   useEffect(() => {
@@ -136,6 +155,8 @@ export default function AuthenticatedCoursePeers({
     setFilter("all");
     setChoosingPeerId("");
     setChosenGroupId("");
+    setCreatingPeer(null);
+    setCreationError("");
     setBusyPeerId("");
   }, [courseId, userId]);
 
@@ -304,40 +325,68 @@ export default function AuthenticatedCoursePeers({
   const visibleLooking = splitPeers.lookingForGroup.filter(matchesFilter);
   const visibleCount = visibleInGroup.length + visibleLooking.length;
 
-  async function sendInvite(peer: GroupCoursePeer) {
+  async function sendInvite(
+    peer: GroupCoursePeer,
+    creation?: { name: string; maxMembers: number }
+  ) {
     if (
       !userId ||
       !ownData ||
       busyPeerId ||
+      pendingInvite.current ||
       groupSummaryError ||
+      inviteEligibilityError ||
+      !isCoursePeerInviteable(peer.status) ||
       !inviteCandidateIds.includes(peer.profile_id) ||
       summaryByProfile.has(peer.profile_id)
-    )
+    ) {
+      if (creation && !pendingInvite.current) {
+        setCreationError(
+          "Invitation eligibility could not be confirmed. Close this dialog and refresh the page."
+        );
+      }
       return;
+    }
+    if (inviteGroups.length === 0 && !creation) {
+      setCreationError("");
+      setCreatingPeer(peer);
+      return;
+    }
+    if (creation && inviteGroups.length !== 0) {
+      setCreationError(
+        "Your group status has changed. Close this dialog and refresh the page before inviting."
+      );
+      return;
+    }
+    const selectedGroupId =
+      inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
+    if (!creation && !selectedGroupId) return;
+
+    const context = actionContext.current;
+    const attempt = Symbol("people-invitation");
+    pendingInvite.current = attempt;
     setBusyPeerId(peer.profile_id);
     setFeedback(null);
+    setCreationError("");
     try {
-      if (inviteGroups.length === 0) {
-        const groupName = window
-          .prompt("Name your new group (1-50 characters):", "Study group")
-          ?.trim();
-        if (!groupName || groupName.length > 50) return;
+      if (creation) {
         await createGroupAndInvite(
           userId,
           courseId,
           peer.profile_id,
-          groupName
+          creation.name,
+          creation.maxMembers
         );
+        if (actionContext.current !== context) return;
+        setCreatingPeer(null);
         setFeedback({
           tone: "success",
           message:
             "Your first invitation was sent. A forming group has been created with you as its leader; it becomes active when the invitee accepts.",
         });
       } else {
-        const selectedGroupId =
-          inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
-        if (!selectedGroupId) return;
         await sendGroupInvitation(userId, selectedGroupId, peer.profile_id);
+        if (actionContext.current !== context) return;
         setFeedback({
           tone: "success",
           message: "Your group invitation was sent.",
@@ -347,12 +396,15 @@ export default function AuthenticatedCoursePeers({
       setChosenGroupId("");
       setRetryToken(value => value + 1);
     } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
+      if (actionContext.current !== context) return;
+      const message = getPeopleInviteErrorMessage(error);
+      if (creation) setCreationError(message);
+      else setFeedback({ tone: "error", message });
     } finally {
-      setBusyPeerId("");
+      if (pendingInvite.current === attempt) {
+        pendingInvite.current = null;
+        setBusyPeerId("");
+      }
     }
   }
 
@@ -360,10 +412,19 @@ export default function AuthenticatedCoursePeers({
     const summary = summaryByProfile.get(peer.profile_id);
     const invitationState =
       ownData && userId
-        ? getPeerInvitationState(userId, peer.profile_id, courseId, [
-            ...ownData.groups.incomingInvitations,
-            ...ownData.groups.outgoingInvitations,
-          ])
+        ? getPeerInvitationState(
+            userId,
+            peer.profile_id,
+            courseId,
+            [
+              ...ownData.groups.incomingInvitations,
+              ...ownData.groups.outgoingInvitations,
+            ],
+            !inviteEligibilityError &&
+              !groupSummaryError &&
+              inviteCandidateIds.includes(peer.profile_id) &&
+              !summary
+          )
         : null;
     const isChoosing = choosingPeerId === peer.profile_id;
     const inviteable = Boolean(
@@ -412,11 +473,12 @@ export default function AuthenticatedCoursePeers({
           {summary ? (
             <div className="classmate-group-meta">
               <strong>{summary.group_name || "Study group"}</strong>
-              <span>
-                {summary.group_size}{" "}
-                {summary.group_size === 1 ? "person" : "people"} ·{" "}
-                {groupStatusLabel(summary.group_status)}
-              </span>
+              <span>{groupStatusLabel(summary.group_status)}</span>
+              <PeopleGroupCapacity
+                count={summary.capacity_count}
+                maximum={summary.max_members}
+                state={summary.capacity_state}
+              />
             </div>
           ) : (
             <div className="classmate-group-meta looking">
@@ -504,11 +566,14 @@ export default function AuthenticatedCoursePeers({
                 className="primary invite-compact"
                 disabled={Boolean(busyPeerId)}
                 aria-label={`Invite ${peer.display_name}`}
-                onClick={() => {
+                onClick={event => {
                   if (inviteGroups.length > 1) {
                     setChoosingPeerId(peer.profile_id);
                     setChosenGroupId("");
                   } else {
+                    if (inviteGroups.length === 0) {
+                      createDialogTrigger.current = event.currentTarget;
+                    }
                     void sendInvite(peer);
                   }
                 }}
@@ -664,9 +729,9 @@ export default function AuthenticatedCoursePeers({
               <div className="course-detail-invite-rule" role="note">
                 Invite actions follow the existing server eligibility rules. Any
                 active member may invite to a group; the creator may also send
-                the first invitation while a group is forming. Join requests are
-                available only from recruitment posts for active groups. Groups
-                have no maximum size.
+                the first invitation while a group is forming. Group leaders set
+                a maximum, and pending invitations do not reserve a place.
+                Browse recruitment posts to find groups seeking members.
               </div>
               {feedback && (
                 <p
@@ -851,9 +916,29 @@ export default function AuthenticatedCoursePeers({
                 )}
               <p className="data-footnote">
                 Group summaries return only each coursemate’s group association,
-                name, size and status. The Test server remains authoritative for
-                invite, request and cancellation eligibility.
+                name, capacity and status. The Test server remains authoritative
+                for invite, request and cancellation eligibility.
               </p>
+              {creatingPeer && (
+                <CreatePeopleGroupInviteDialog
+                  peerName={creatingPeer.display_name}
+                  busy={busyPeerId === creatingPeer.profile_id}
+                  serverError={creationError}
+                  onCancel={() => {
+                    setCreatingPeer(null);
+                    setCreationError("");
+                  }}
+                  onSubmit={(name, maxMembers) =>
+                    void sendInvite(creatingPeer, { name, maxMembers })
+                  }
+                  onCloseAutoFocus={event => {
+                    if (createDialogTrigger.current?.isConnected) {
+                      event.preventDefault();
+                      createDialogTrigger.current.focus();
+                    }
+                  }}
+                />
+              )}
             </>
           )}
         </>
