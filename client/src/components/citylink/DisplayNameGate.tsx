@@ -1,4 +1,4 @@
-import {
+import React, {
   useEffect,
   useRef,
   useState,
@@ -54,6 +54,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     }
     if (!supabaseClient) {
       setState("error");
+      setReadyIdentity(sessionIdentity);
       setError("Supabase is not configured, so your name cannot be checked.");
       return () => {
         active = false;
@@ -70,6 +71,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
         if (!active) return;
         if (loadError) {
           setState("error");
+          setReadyIdentity(sessionIdentity);
           setError(
             "CityLink could not confirm your stored display name. Check your connection and try again."
           );
@@ -77,6 +79,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
         }
         if (!data) {
           setState("error");
+          setReadyIdentity(sessionIdentity);
           setError(
             "Your signed-in account has no profile row, so CityLink cannot confirm your name."
           );
@@ -89,6 +92,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
           current === DEFAULT_NAME
         ) {
           setState("needs-name");
+          setReadyIdentity(sessionIdentity);
           return;
         }
         setState("ready");
@@ -96,6 +100,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
       } catch {
         if (!active) return;
         setState("error");
+        setReadyIdentity(sessionIdentity);
         setError(
           "CityLink could not confirm your stored display name. Check your connection and try again."
         );

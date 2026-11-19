@@ -80,6 +80,14 @@ Adam-repair's re-review found that the People invitation/creation guard survived
 
 Final local checks for this follow-up: `corepack pnpm check` passed; `corepack pnpm test` passed **26 files / 472 tests**; the Test-configured build passed with **1,748 modules** and the existing configuration-script/chunk advisories. Tests use mocked hooks and services. Mounted-browser account-switch, same-account re-sign-in, chat route-change timing, stale-profile paint privacy, live RLS, and concurrent-last-place QA remain outstanding. Already-dispatched requests cannot be undone by switching accounts; the server remains authoritative. No SQL, database, merge, or publication occurred.
 
+### DisplayNameGate onboarding/recovery blocker — 2026-11-19
+
+Adam-repair's exact-head re-review found that the new account-bound gate masked two completed states as `checking`: an account with no usable stored name (`needs-name`) and a failed profile read (`error`). The gate now records the exact account/generation for every completed load state, not only `ready`, so the name form and Retry/Sign out recovery remain reachable while a different account still starts in `checking`.
+
+Mounted jsdom tests now cover a valid stored name, the needs-name form, a profile-read error with recovery controls, and an account switch from a valid name to a new unnamed account. The component explicitly imports React for this test runtime; `jsdom` is a development dependency only. No production API, RPC, database, or authorization behavior changed.
+
+Final local checks for the blocker fix: `corepack pnpm check` passed; `corepack pnpm test` passed **27 files / 476 tests**; `corepack pnpm build` passed with **1,748 modules** and the existing configuration-script/chunk advisories; Prettier and `git diff --check` passed. These are mounted test-runtime checks, not a signed-in browser or live Test result. No SQL was executed and neither Test nor Main was changed.
+
 ### Remaining pre-existing review risks (not fixed in this follow-up)
 
 - Successful recruitment Apply still does not refresh the post’s pending state; the idempotent server RPC prevents a duplicate request, but the UI can remain clickable until the post list reloads.
