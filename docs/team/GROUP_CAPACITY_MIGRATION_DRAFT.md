@@ -1,8 +1,8 @@
 # Group hard-maximum migration draft
 
-Status: **DRAFT — not reviewed for execution and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
+Status: **DRAFT — Role 6 static review passed at `252e292`; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
 
-No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied. The draft exists so Role 6 can perform the final SQL review before Adam gives separate Test authorization.
+Role 6 found no remaining static blockers at `252e292`. This is still a static review: it does not validate live catalog state, ownership/RLS, or runtime concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
 
 ## What the draft contains
 
@@ -54,6 +54,7 @@ A forming group with only its creator and one pending invitation must not appear
 
 ## Static checks performed
 
+- Role 6 static review at `252e292`: no remaining blockers; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
 - `pglast` parsed the migration as 43 top-level SQL statements with no parse error.
 - `git diff --check` passed.
 - `corepack pnpm check` passed.
@@ -66,6 +67,6 @@ These checks do not validate PL/pgSQL runtime semantics, live RLS behavior, func
 ## Open questions
 
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
-- Role 6 must confirm the exact context-table privileges and transaction-ID behavior.
+- Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s separate Test authorization is still required after the final SQL review.
