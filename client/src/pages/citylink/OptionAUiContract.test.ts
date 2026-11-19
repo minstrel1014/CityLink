@@ -31,6 +31,30 @@ describe("Option A presentation-only contract", () => {
     );
   });
 
+  it("gives neutral recruitment guidance in the My Group empty state and removes unlimited-size claims", () => {
+    const myGroup = pageSource("./AuthenticatedMyGroup.tsx").replace(
+      /\s+/g,
+      " "
+    );
+    const workflow = pageSource("./GroupWorkflows.tsx").replace(/\s+/g, " ");
+    const start = myGroup.indexOf(
+      "You do not have a group for this course yet"
+    );
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = myGroup.indexOf("</section>", start);
+    expect(end).toBeGreaterThan(start);
+    const emptyState = myGroup.slice(start, end);
+    expect(emptyState).toContain(
+      "browse recruitment posts to find a group seeking members"
+    );
+    expect(emptyState).not.toMatch(/request to join an existing group/i);
+    expect(myGroup).not.toMatch(/groups have no maximum size/i);
+    expect(workflow).not.toMatch(/group size is not limited/i);
+    expect(workflow).not.toMatch(
+      /the server enforces this after leader succession/i
+    );
+  });
+
   it("preserves the recruitment-post application call through the existing shared service", () => {
     const recruitment = pageSource("./GroupWorkspacePage.tsx");
     expect(recruitment).toMatch(

@@ -369,10 +369,9 @@ export default function GroupWorkflows() {
           description="Create a group, invite coursemates, and manage invitations and requests using your signed-in Supabase account."
         />
         <div className="group-workflows-intro" role="note">
-          Group size is not limited. Invitations and join requests follow the
-          rule “first pending action wins.” Only the current group leader
-          reviews join requests; the server enforces this after leader
-          succession.
+          Invitations and join requests follow the rule “first pending action
+          wins.” In this screen, the current group leader reviews join requests;
+          server-side review permissions are still under review.
         </div>
 
         {prefill.inviteeId &&
@@ -893,9 +892,9 @@ export default function GroupWorkflows() {
             <section className="group-workflow-panel wide">
               <h2>Join requests</h2>
               <p>
-                Requests shown depend on current server access rules. Only the
-                current group leader may review requests; the server enforces
-                this after leader succession.
+                Requests shown depend on current server access rules. On this
+                screen, the current group leader reviews requests; server-side
+                review permissions are still under review.
               </p>
               <div className="group-workflow-list">
                 {joinRequests.length ? (

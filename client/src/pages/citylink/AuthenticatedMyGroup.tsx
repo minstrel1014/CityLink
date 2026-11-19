@@ -404,9 +404,9 @@ export default function AuthenticatedMyGroup({
             <Users size={22} />
           </span>
           <p className="my-group-rules-note">
-            Groups have no maximum size. The first invite creates a forming
-            group with you as leader; active members may invite, and only the
-            current group leader may review join requests.
+            The first invite creates a forming group with you as leader; active
+            members may invite, and only the current group leader may review
+            join requests.
           </p>
         </div>
         <Link
@@ -604,8 +604,8 @@ export default function AuthenticatedMyGroup({
                   <h2>You do not have a group for this course yet</h2>
                   <p>
                     Browse your coursemates, see who is looking for a group, and
-                    choose whether to invite someone or request to join an
-                    existing group.
+                    invite someone, or browse recruitment posts to find a group
+                    seeking members.
                   </p>
                   <div className="authenticated-courses-state-actions">
                     <Link
