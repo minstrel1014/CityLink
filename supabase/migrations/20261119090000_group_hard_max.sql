@@ -1501,7 +1501,8 @@ begin
               and r.requester_id = (select auth.uid())
               and r.status = 'pending'
           ) then 'pending_request'
-          else 'not_eligible'
+          when not e.apply_enabled then 'not_eligible'
+          else null
         end as apply_block_reason
       from eligible as e
     ), page as (

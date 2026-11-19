@@ -1,8 +1,8 @@
 # Group hard-maximum migration draft
 
-Status: **DRAFT — Role 6 static review passed at `252e292`; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
+Status: **DRAFT — revised after Adam-repair’s static review; fresh Roy/Role 6 review required; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
 
-Role 6 found no remaining static blockers at `252e292`. This is still a static review: it does not validate live catalog state, ownership/RLS, or runtime concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
+Role 6 found no remaining static blockers at `252e292`, but Adam-repair’s later review found the recruitment Apply regression and other open findings. The SQL has changed since Role 6’s review, so a fresh exact-head review is required. This remains a static draft: it does not validate live catalog state, ownership/RLS, or runtime concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
 
 ## What the draft contains
 
@@ -52,9 +52,27 @@ Role 6 should specifically verify:
 
 A forming group with only its creator and one pending invitation must not appear in course-detail People results from `list_course_group_summaries`. After a second person actually joins, the group may appear. Pending invitations never count as people. This filter was added after Role 6’s re-review at `1497e70`.
 
+### Recruitment Apply positive case
+
+Adam-repair’s static review found that `list_group_recruitment_posts` always returned a non-null `apply_block_reason`, so `apply_enabled` was always false. The `ELSE 'not_eligible'` branch is now `WHEN NOT e.apply_enabled THEN 'not_eligible' ELSE NULL`, allowing an eligible viewer of an open post with room to apply.
+
+The verification set must cover an eligible/open/room positive case returning `apply_enabled = true` and `apply_block_reason = NULL`, plus full, unset, over-limit, closed, pending-invitation, pending-request, already-member, and profile-unavailable cases. Overlapping conditions and the intended reason precedence must be confirmed with Roy and Role 6; the current SQL checks profile availability before membership/pending actions, which differs from the proposed contract’s stated order.
+
+### Additional review findings still open
+
+Adam-repair’s report also flagged these items for owner review; none is changed silently here:
+
+- `can_create_post` is calculated from active membership but the browseable query excludes the viewer’s own group; verify the pre-existing recruitment-create flag/list-filter contradiction independently.
+- The `max_members` column/constraint reuse does not fail closed if an existing same-named object has a different definition; add an exact-definition preflight or document the accepted risk.
+- Effective ACLs, default privileges, and direct `study_groups.max_members` visibility need live-catalog verification.
+- The private removal helper relies on its public caller for some authority checks; verify all callers and the live invitation-trigger state.
+- Existing pending invitation/request handling occurs before some eligibility checks; reconcile this with the contract and test concurrency and retry behavior.
+- The old-client/new-schema and new-client/old-schema cutover needs an explicit compatibility and recovery plan, including cached browser sessions and PR #31’s additional creation entry point.
+- No coordinated capacity-client PR was open when this was checked; application remains blocked until that PR is reviewed and released.
+
 ## Static checks performed
 
-- Role 6 static review at `252e292`: no remaining blockers; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
+- Role 6 static review at `252e292` (historical, before the Apply fix): no remaining blockers; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
 - `pglast` parsed the migration as 43 top-level SQL statements with no parse error.
 - `git diff --check` passed.
 - `corepack pnpm check` passed.
@@ -67,6 +85,7 @@ These checks do not validate PL/pgSQL runtime semantics, live RLS behavior, func
 ## Open questions
 
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
+- Fresh Roy/Role 6 review is required for the recruitment Apply positive case and the exact revised head.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s separate Test authorization is still required after the final SQL review.
