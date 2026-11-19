@@ -396,7 +396,7 @@ export function GroupWorkspaceContent({
             };
           }),
         error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
-        finally: () => {
+        settle: () => {
           groupsOperation.current = false;
           setGroupsPageBusy(false);
         },
@@ -448,7 +448,7 @@ export function GroupWorkspaceContent({
             };
           }),
         error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
-        finally: () => {
+        settle: () => {
           postsOperation.current = false;
           setPostsPageBusy(false);
         },
@@ -648,6 +648,9 @@ export function GroupWorkspaceContent({
       !postSubject.trim()
     )
       return;
+    // Recheck synchronously after the last render/state checks and immediately
+    // before claiming the write, so a course/account change cannot dispatch.
+    if (!scope.isCurrent(token)) return;
     await runScopedAction(
       scope,
       token,

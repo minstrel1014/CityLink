@@ -179,6 +179,25 @@ describe("context-scoped work", () => {
     expect(scope.isCurrent(unmountedToken)).toBe(false);
   });
 
+  it("releases local operation locks even when a reload invalidates the scope", async () => {
+    const scope = new GroupWorkspaceScope(context);
+    const token = scope.startLoad()!;
+    const pending = deferred<string>();
+    const settle = vi.fn();
+    const finallyHandler = vi.fn();
+    const task = runScoped(scope, token, () => pending.promise, {
+      success: vi.fn(),
+      error: vi.fn(),
+      settle,
+      finally: finallyHandler,
+    });
+    scope.startLoad();
+    pending.resolve("stale page");
+    await task;
+    expect(settle).toHaveBeenCalledTimes(1);
+    expect(finallyHandler).not.toHaveBeenCalled();
+  });
+
   it("reports a current discovery failure instead of applying a snapshot", async () => {
     const scope = new GroupWorkspaceScope(context);
     const token = scope.startLoad()!;

@@ -134,6 +134,8 @@ export async function runScoped<T>(
   handlers: {
     success: (value: T) => void;
     error: (error: unknown) => void;
+    /** Release local operation locks even when the scope became stale. */
+    settle?: () => void;
     finally?: () => void;
   }
 ): Promise<void> {
@@ -143,7 +145,11 @@ export async function runScoped<T>(
   } catch (error) {
     if (scope.isCurrent(token)) handlers.error(error);
   } finally {
-    if (scope.isCurrent(token)) handlers.finally?.();
+    try {
+      handlers.settle?.();
+    } finally {
+      if (scope.isCurrent(token)) handlers.finally?.();
+    }
   }
 }
 

@@ -511,13 +511,10 @@ describe("capacity service RPCs", () => {
 describe("safe capacity feedback", () => {
   it.each([
     ["Group is full", "Group is full"],
-    [
-      "Group maximum is not set",
-      "Group maximum is not set. The group leader must set a maximum before anyone can be added.",
-    ],
+    ["Group maximum is not set", "Group maximum is not set"],
     [
       "Group maximum is not set; set a maximum before adding members",
-      "Group maximum is not set. The group leader must set a maximum before anyone can be added.",
+      "Group maximum is not set",
     ],
     [
       "This group has more than 19 active members. The leader must remove members before anyone can be added or a maximum can be set.",

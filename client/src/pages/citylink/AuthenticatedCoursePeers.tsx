@@ -18,6 +18,7 @@ import {
 import {
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
+  listActiveGroupMembers,
   listCourseGroupInviteCandidates,
   listCourseGroupPeers,
   listCourseGroupSummaries,
@@ -26,6 +27,7 @@ import {
   sendGroupInvitation,
   type CourseGroupSummary,
   type GroupCoursePeer,
+  type GroupMembershipRow,
   type GroupWorkflowSnapshot,
   type OwnCourseProfile,
 } from "@/lib/supabaseGroups";
@@ -42,10 +44,7 @@ import {
   getPeopleInviteErrorMessage,
   PeopleGroupCapacity,
 } from "./PeopleCapacity";
-import {
-  getGroupCapacityState,
-  getVisibleGroupCapacityCount,
-} from "./groupCapacity";
+import { getGroupCapacityState } from "./groupCapacity";
 import "./CourseDetail.css";
 
 type DetailData = {
@@ -128,6 +127,28 @@ function inviteCapacityMessage(
   return null;
 }
 
+export function getInviteGroupCapacity(
+  group: GroupWorkflowSnapshot["groups"][number],
+  roster: GroupMembershipRow[] | null,
+  userId: string
+): { count: number | null; maximum: number | null } {
+  if (roster === null) {
+    // A failed or incomplete roster read must remain server-checked.
+    return { count: null, maximum: group.max_members };
+  }
+  const creatorIncluded = roster.some(
+    member => member.profile_id === group.creator_id
+  );
+  const formingCreator =
+    group.status === "forming" &&
+    group.creator_id === userId &&
+    !creatorIncluded;
+  return {
+    count: roster.length + (formingCreator ? 1 : 0),
+    maximum: group.max_members,
+  };
+}
+
 export default function AuthenticatedCoursePeers({
   courseId,
   embedded = false,
@@ -165,6 +186,9 @@ export default function AuthenticatedCoursePeers({
   const [peerError, setPeerError] = useState("");
   const [groupSummaryError, setGroupSummaryError] = useState("");
   const [inviteEligibilityError, setInviteEligibilityError] = useState("");
+  const [inviteRosters, setInviteRosters] = useState<
+    Record<string, GroupMembershipRow[] | null>
+  >({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<RosterFilter>("all");
@@ -335,23 +359,54 @@ export default function AuthenticatedCoursePeers({
         : [],
     [courseId, ownData, userId]
   );
+  useEffect(() => {
+    let active = true;
+    if (!userId || inviteGroups.length === 0) {
+      setInviteRosters({});
+      return () => {
+        active = false;
+      };
+    }
+    void Promise.all(
+      inviteGroups.map(async group => {
+        try {
+          return [
+            group.id,
+            await listActiveGroupMembers(userId, group.id),
+          ] as const;
+        } catch {
+          return [group.id, null] as const;
+        }
+      })
+    ).then(entries => {
+      if (!active) return;
+      setInviteRosters(Object.fromEntries(entries));
+    });
+    return () => {
+      active = false;
+    };
+  }, [authGeneration, inviteGroups, refreshToken, userId]);
   const inviteGroupOptions = useMemo(() => {
     if (!ownData || !userId) return [];
     return inviteGroups.map(group => {
-      const visibleCount = getVisibleGroupCapacityCount(
+      // The workflow snapshot contains only the viewer's own membership row.
+      // Use the separately loaded full roster; a failed read stays unknown.
+      const capacity = getInviteGroupCapacity(
         group,
-        ownData.groups.memberships,
+        inviteRosters[group.id] ?? null,
         userId
       );
+      const visibleCount = capacity.count;
+      const maximum = capacity.maximum;
       const capacityState =
         visibleCount === null
-          ? group.max_members === null
+          ? maximum === null
             ? "maximum_not_set"
             : "unknown"
-          : getGroupCapacityState(visibleCount, group.max_members);
-      return { group, visibleCount, capacityState };
+          : getGroupCapacityState(visibleCount, maximum);
+      return { group, visibleCount, maximum, capacityState };
     });
-  }, [inviteGroups, ownData, userId]);
+  }, [inviteGroups, inviteRosters, ownData, userId]);
   const selectedInviteOption = inviteGroupOptions.find(
     option => option.group.id === chosenGroupId
   );
@@ -362,7 +417,7 @@ export default function AuthenticatedCoursePeers({
     ? inviteCapacityMessage(
         activeInviteOption.capacityState,
         activeInviteOption.visibleCount,
-        activeInviteOption.group.max_members
+        activeInviteOption.maximum
       )
     : null;
   const splitPeers = useMemo(
@@ -448,7 +503,7 @@ export default function AuthenticatedCoursePeers({
         ? inviteCapacityMessage(
             selectedOption.capacityState,
             selectedOption.visibleCount,
-            selectedOption.group.max_members
+            selectedOption.maximum
           )
         : null;
       if (blockedMessage) {
@@ -644,7 +699,7 @@ export default function AuthenticatedCoursePeers({
                     const blockedMessage = inviteCapacityMessage(
                       option.capacityState,
                       option.visibleCount,
-                      option.group.max_members
+                      option.maximum
                     );
                     return (
                       <option

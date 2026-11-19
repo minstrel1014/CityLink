@@ -98,12 +98,22 @@ The independent review is still pinned to `dd20e6a`; this follow-up is not indep
 - Chat clears its draft and busy state when the group or auth generation changes.
 - Coursemate profile state is cleared when the account or auth generation changes.
 - Capacity refresh is serialized against post/group pagination, preserves loaded posts and group cards that were not present in the refreshed range, preserves drafts, and refreshes browseable group cards as well as People summaries.
-- People invites now disable and explain known `full`, `maximum_not_set`, and `over_limit` groups before dispatch. A genuinely unknown forming-creator count remains server-checked.
+- People invites now disable and explain known `full`, `maximum_not_set`, and `over_limit` groups before dispatch. Roster counts come from a separate full `listActiveGroupMembers` read for each invite group; a forming creator with no membership row has the safe one-person fallback, while a failed roster read remains server-checked.
 - The browse-card `Open chat` branch gated on `canCreatePost` was removed. Private chat remains available from the current-member card in My Group through `Open Group Chat`.
 - A successful Apply now refreshes recruitment posts and group cards so the pending state is not left clickable.
 - Workflow group reads now validate `max_members` as null or a whole number from 2 to 19 instead of accepting an unvalidated cast.
 
-Local checks for this follow-up: `corepack pnpm check` passed; `corepack pnpm test` passed **28 files / 482 tests**; `corepack pnpm build` passed with **1,749 modules** and the existing configuration-script and chunk-size warnings. These are mocked/local checks, not signed-in browser, live RLS, or concurrent-user QA.
+Local checks for this follow-up: `corepack pnpm check` passed; `corepack pnpm test` passed **29 files / 489 tests**; `corepack pnpm build` passed with **1,749 modules** and the existing configuration-script and chunk-size warnings. These are mocked/local checks, not signed-in browser, live RLS, or concurrent-user QA.
+
+### Final confirmed-fix pass — 2026-11-19
+
+- People invite capacity now loads the full roster with `listActiveGroupMembers` for each invite group instead of counting the viewer's one membership row. A forming creator with no membership row uses the safe one-person fallback; a failed roster read fails closed to the server check. The workflow snapshot remains viewer-filtered.
+- Group and post pagination now use an unconditional `settle` callback to release their operation locks even when a workspace reload invalidates the scoped request. The capacity/Apply refresh can therefore run after an overlapped Load more.
+- Recruitment-post creation performs a final synchronous scope recheck immediately before claiming the write.
+- Group-service session verification captures and validates the current access token without calling the SDK's session-removing `getUser()` path for a replaced cross-tab account.
+- `getGroupWorkflowErrorMessage` returns the approved exact string `Group maximum is not set`; longer guidance remains a separate UI explanation.
+
+Limitation retained deliberately: a same-user sign-in in another tab is treated as confirmation, not an identity boundary, so the app does not force a remount or clear drafts for it. A different user, sign-out, password recovery, or initial session still invalidates the old request boundary. Live cross-tab and mounted-browser verification remains required.
 
 ### Remaining pre-existing review risks (not fixed in this follow-up)
 

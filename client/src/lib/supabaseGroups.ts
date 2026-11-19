@@ -358,7 +358,26 @@ async function verifyCurrentUser(userId: string) {
       "Sign in with a Supabase account before using group features."
     );
   }
-  const { data, error } = await supabaseClient.auth.getUser();
+  const getSession = supabaseClient.auth.getSession;
+  const sessionData =
+    typeof getSession === "function"
+      ? await getSession.call(supabaseClient.auth)
+      : null;
+  const accessToken = sessionData?.data.session?.access_token;
+  if (
+    sessionData?.error ||
+    (typeof getSession === "function" &&
+      (typeof accessToken !== "string" || !accessToken.trim()))
+  ) {
+    throw new Error(
+      "Your sign-in could not be verified. Sign in again before continuing."
+    );
+  }
+  // Validate the captured token without asking the SDK to remove a newer
+  // cross-tab session if this old request belongs to a replaced account.
+  const { data, error } = accessToken
+    ? await supabaseClient.auth.getUser(accessToken)
+    : await supabaseClient.auth.getUser();
   if (error || data.user?.id !== userId) {
     throw new Error(
       "Your sign-in could not be verified. Sign in again before continuing."
@@ -1033,7 +1052,7 @@ export function getGroupWorkflowErrorMessage(error: unknown): string {
     return "Group is full";
   }
   if (message.includes("group maximum is not set")) {
-    return "Group maximum is not set. The group leader must set a maximum before anyone can be added.";
+    return "Group maximum is not set";
   }
   if (message.includes("group has more than 19 active members")) {
     return "This group has more than 19 active members. The leader must remove members before anyone can be added or a maximum can be set.";
