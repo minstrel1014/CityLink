@@ -48,6 +48,10 @@ Role 6 should specifically verify:
 7. The dependency-checked drop/recreate of the three read RPCs and restored grants.
 8. Whether the canonical count should replace the existing `active_member_count` value on browseable and recruitment cards; this draft uses the canonical capacity count there.
 
+### Required verification case
+
+A forming group with only its creator and one pending invitation must not appear in course-detail People results from `list_course_group_summaries`. After a second person actually joins, the group may appear. Pending invitations never count as people. This filter was added after Role 6’s re-review at `1497e70`.
+
 ## Static checks performed
 
 - `pglast` parsed the migration as 43 top-level SQL statements with no parse error.

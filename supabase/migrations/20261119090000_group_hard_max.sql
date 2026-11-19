@@ -1194,6 +1194,10 @@ as $function$
       else 'available'
     end as capacity_state
   from base
+  -- Course-detail People results are visible only once at least two actual
+  -- people are in the group. Pending invitations do not count, and a forming
+  -- creator alone must not create a one-person summary card.
+  where (base.active_count + base.creator_bonus) >= 2
   order by base.profile_id, base.group_id;
 $function$;
 
