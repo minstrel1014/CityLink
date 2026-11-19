@@ -6,6 +6,7 @@
 - Additional assignments retained: demo repair, signed-in user journey, and this course-people/invitation QA refinement. No replacement task or ownership handoff was created.
 - Coordination: Roy owns group workflows; Jeffery owns group chat and recruitment; Eunice owns QA; the Database Security and QA Owner reviews schema, RLS, and migrations. The lead coordinates shared contracts and reviews.
 - Branch: `feature/adam-qa-ux-nov19`; baseline GitHub `main` commit `1a583e30c019733d1880d2614ca853481509fdad`.
+- Review: [draft PR #33](https://github.com/minstrel1014/CityLink/pull/33), open against `main` and unmerged. Feature checkpoint `f085d647d75c9978cf043d7f02e2e848aa522eb3` was pushed and its remote hash verified. The PR is a draft because signed-in QA and the separately coordinated capacity implementation remain outstanding.
 
 ## Decisions
 
