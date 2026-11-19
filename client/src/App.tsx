@@ -232,7 +232,10 @@ export default function App() {
                     <WorkspacePage
                       title="My profile"
                       renderAuthenticated={session => (
-                        <AuthenticatedProfile userId={session.user!.id} />
+                        <AuthenticatedProfile
+                          key={`${session.user!.id}:${session.authGeneration ?? 0}`}
+                          userId={session.user!.id}
+                        />
                       )}
                       signedOut={<MyProfile />}
                     />

@@ -72,18 +72,35 @@ type Snapshot = {
 export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
-  const context = { status: session.status, userId, courseId };
+  const sessionGeneration = session.authGeneration ?? 0;
+  const context = {
+    status: session.status,
+    userId,
+    courseId,
+    authGeneration: sessionGeneration,
+  };
   const scope = useRef(new GroupWorkspaceScope(context)).current;
   useLayoutEffect(() => {
-    scope.updateContext({ status: session.status, userId, courseId });
+    scope.updateContext({
+      status: session.status,
+      userId,
+      courseId,
+      authGeneration: sessionGeneration,
+    });
     return () => scope.invalidate();
-  }, [scope, session.status, userId, courseId]);
+  }, [scope, session.status, userId, courseId, sessionGeneration]);
   return (
     <GroupWorkspaceContent
-      key={JSON.stringify([session.status, userId, courseId])}
+      key={JSON.stringify([
+        session.status,
+        userId,
+        courseId,
+        sessionGeneration,
+      ])}
       courseId={courseId}
       userId={userId}
       sessionStatus={session.status}
+      sessionGeneration={sessionGeneration}
       scope={scope}
     />
   );
@@ -93,11 +110,13 @@ export function GroupWorkspaceContent({
   courseId,
   userId,
   sessionStatus,
+  sessionGeneration = 0,
   scope,
 }: {
   courseId: string;
   userId: string | null;
   sessionStatus: string;
+  sessionGeneration?: number;
   scope: GroupWorkspaceScope;
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -108,6 +127,8 @@ export function GroupWorkspaceContent({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [groupsPageBusy, setGroupsPageBusy] = useState(false);
   const [postsPageBusy, setPostsPageBusy] = useState(false);
+  const [postsRefreshBusy, setPostsRefreshBusy] = useState(false);
+  const [peopleRefreshToken, setPeopleRefreshToken] = useState(0);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -250,13 +271,21 @@ export function GroupWorkspaceContent({
   }
 
   useEffect(() => {
-    if (!scope.matchesContext({ status: sessionStatus, userId, courseId }))
+    if (
+      !scope.matchesContext({
+        status: sessionStatus,
+        userId,
+        courseId,
+        authGeneration: sessionGeneration,
+      })
+    )
       return;
     const token = scope.startLoad();
     setSnapshot(null);
     setBusyAction(null);
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
+    setPostsRefreshBusy(false);
     setCreatingGroupId(null);
     setEditingPostId(null);
     setDraft("");
@@ -292,7 +321,7 @@ export function GroupWorkspaceContent({
     return () => {
       if (token && scope.isCurrent(token)) scope.invalidate();
     };
-  }, [courseId, reloadToken, sessionStatus, userId, scope]);
+  }, [courseId, reloadToken, sessionGeneration, sessionStatus, userId, scope]);
 
   const ownSnapshot =
     sessionStatus === "ready" &&
@@ -306,6 +335,7 @@ export function GroupWorkspaceContent({
     status: sessionStatus,
     userId,
     courseId,
+    authGeneration: sessionGeneration,
   })
     ? scope.currentToken()
     : null;
@@ -317,6 +347,7 @@ export function GroupWorkspaceContent({
     setBusyAction(null);
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
+    setPostsRefreshBusy(false);
     setReloadToken(value => value + 1);
   }
 
@@ -414,6 +445,61 @@ export function GroupWorkspaceContent({
     );
   }
 
+  async function refreshPostsForCapacity() {
+    const token = ownSnapshot?.token;
+    if (!token || !scope.isCurrent(token) || postsRefreshBusy) return;
+    const targetCount = Math.max(1, ownSnapshot.posts.length);
+    setPostsRefreshBusy(true);
+    setFeedback("");
+    try {
+      const refreshed: GroupRecruitmentPost[] = [];
+      let cursor: RecruitmentPostCursor | undefined;
+      let hasMore = false;
+      let nextCursor: RecruitmentPostCursor | null = null;
+      do {
+        const page = await listGroupRecruitmentPosts(
+          token.userId,
+          token.courseId,
+          cursor
+        );
+        if (!scope.isCurrent(token)) return;
+        refreshed.push(...page.items);
+        hasMore = page.hasMore;
+        nextCursor = page.nextCursor;
+        cursor = page.nextCursor ?? undefined;
+        if (!page.items.length || !page.hasMore || !page.nextCursor) break;
+      } while (refreshed.length < targetCount);
+      if (!scope.isCurrent(token)) return;
+      setSnapshot(previous => {
+        if (
+          !previous ||
+          !scope.isCurrent(previous.token) ||
+          previous.token.generation !== token.generation ||
+          (previous.token.authGeneration ?? 0) !== (token.authGeneration ?? 0)
+        )
+          return previous;
+        return {
+          ...previous,
+          posts: refreshed,
+          postsHasMore: hasMore,
+          postsCursor: nextCursor,
+        };
+      });
+      // People cards load their own summaries. Revalidate them too so a
+      // refreshed post and its People card cannot show contradictory capacity.
+      setPeopleRefreshToken(value => value + 1);
+      setFeedback(
+        "Group capacity refreshed. Unsaved drafts and loaded posts were kept."
+      );
+    } catch (refreshError) {
+      if (scope.isCurrent(token)) {
+        setFeedback(getStage6ErrorMessage(refreshError));
+      }
+    } finally {
+      if (scope.isCurrent(token)) setPostsRefreshBusy(false);
+    }
+  }
+
   async function applyToJoin(post: GroupRecruitmentPost) {
     const token = ownSnapshot?.token;
     if (
@@ -427,7 +513,8 @@ export function GroupWorkspaceContent({
     await runScopedAction(
       scope,
       token,
-      () => requestToJoinGroup(userId, post.groupId!, () => scope.isCurrent(token)),
+      () =>
+        requestToJoinGroup(userId, post.groupId!, () => scope.isCurrent(token)),
       {
         start: () => {
           setBusyAction(`apply:${post.id}`);
@@ -569,7 +656,11 @@ export function GroupWorkspaceContent({
           {feedback}
         </p>
       )}
-      <AuthenticatedCoursePeers embedded courseId={courseId} />
+      <AuthenticatedCoursePeers
+        embedded
+        courseId={courseId}
+        refreshToken={peopleRefreshToken}
+      />
 
       {sessionStatus === "loading" ||
       state === "loading" ||
@@ -1019,10 +1110,10 @@ export function GroupWorkspaceContent({
                           )}
                         <Stage6ApplyControl
                           post={post}
-                          busy={busyAction !== null}
+                          busy={busyAction !== null || postsRefreshBusy}
                           applying={busyAction === `apply:${post.id}`}
                           onApply={() => void applyToJoin(post)}
-                          onRefresh={() => reload(renderToken)}
+                          onRefresh={() => void refreshPostsForCapacity()}
                         />
                       </div>
                     )}

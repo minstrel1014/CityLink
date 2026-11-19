@@ -4,12 +4,13 @@ export type WorkspaceContext = {
   status: string;
   userId: string | null;
   courseId: string;
+  authGeneration?: number;
 };
-
 export type WorkspaceToken = {
   userId: string;
   courseId: string;
   generation: number;
+  authGeneration?: number;
 };
 
 type ActionClaim = { token: WorkspaceToken };
@@ -29,7 +30,8 @@ export class GroupWorkspaceScope {
     return (
       this.context.status === context.status &&
       this.context.userId === context.userId &&
-      this.context.courseId === context.courseId
+      this.context.courseId === context.courseId &&
+      (this.context.authGeneration ?? 0) === (context.authGeneration ?? 0)
     );
   }
 
@@ -52,9 +54,14 @@ export class GroupWorkspaceScope {
   }
 
   currentToken(): WorkspaceToken | null {
-    const { status, userId, courseId } = this.context;
+    const { status, userId, courseId, authGeneration } = this.context;
     return status === "ready" && userId
-      ? { userId, courseId, generation: this.generation }
+      ? {
+          userId,
+          courseId,
+          generation: this.generation,
+          authGeneration: authGeneration ?? 0,
+        }
       : null;
   }
 
@@ -63,6 +70,7 @@ export class GroupWorkspaceScope {
       this.context.status === "ready" &&
       this.context.userId === token.userId &&
       this.context.courseId === token.courseId &&
+      (this.context.authGeneration ?? 0) === (token.authGeneration ?? 0) &&
       this.generation === token.generation
     );
   }

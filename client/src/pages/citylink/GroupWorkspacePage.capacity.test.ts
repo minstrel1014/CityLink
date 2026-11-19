@@ -179,6 +179,8 @@ function pageWith(
     options.busy ?? null,
     false,
     false,
+    false,
+    0,
     options.creatingGroupId ?? null,
     editingPostId,
     options.draft ?? "",
@@ -472,6 +474,46 @@ describe("own-group recruitment form (isolated render mocks)", () => {
     ).toBe(false);
   });
 
+  it("refreshes capacity without clearing an active recruitment draft", async () => {
+    const fullPost: GroupRecruitmentPost = {
+      ...availablePost(),
+      applyEnabled: false,
+      applyBlockReason: "group_full",
+      capacityState: "full",
+    };
+    mocks.listPosts.mockResolvedValue({
+      items: [fullPost],
+      hasMore: false,
+      nextCursor: null,
+    });
+    const page = pageWith(fullPost, true, null, {
+      creatingGroupId: "own-1",
+      subject: "Unsaved subject",
+      draft: "Unsaved body",
+    });
+    const control = descendants(page).find(
+      node =>
+        node.type === Stage6ApplyControl && node.props.post.id === "post-1"
+    );
+    expect(control).toBeDefined();
+    const refresh = descendants(Stage6ApplyControl(control!.props)).find(
+      node =>
+        node.type === "button" && node.props.children === "Refresh group status"
+    );
+    expect(refresh).toBeDefined();
+    refresh!.props.onClick();
+    await vi.waitFor(() => expect(mocks.setters[9]).toHaveBeenCalled());
+    expect(mocks.listPosts).toHaveBeenCalledWith(
+      "user-1",
+      "course-1",
+      undefined
+    );
+    expect(mocks.setters[10]).not.toHaveBeenCalled();
+    expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
+  });
+
   it("publishes with the existing service arguments, synchronously blocks duplicates, and refreshes on success", async () => {
     const wait = pending<string>();
     mocks.create.mockReturnValueOnce(wait.promise);
@@ -500,9 +542,9 @@ describe("own-group recruitment form (isolated render mocks)", () => {
     await vi.waitFor(() =>
       expect(mocks.setters[4]).toHaveBeenCalledWith("Recruitment post created.")
     );
-    expect(mocks.setters[10]).toHaveBeenCalledWith("");
-    expect(mocks.setters[11]).toHaveBeenCalledWith("");
-    expect(mocks.setters[8]).toHaveBeenCalledWith(null);
+    expect(mocks.setters[12]).toHaveBeenCalledWith("");
+    expect(mocks.setters[13]).toHaveBeenCalledWith("");
+    expect(mocks.setters[10]).toHaveBeenCalledWith(null);
     expect(mocks.setters[3]).toHaveBeenCalled();
     expect(mocks.setters[5]).toHaveBeenCalledWith(null);
     expect(shouldDispatch()).toBe(false);
@@ -525,8 +567,8 @@ describe("own-group recruitment form (isolated render mocks)", () => {
     expect(mocks.stageError).toHaveBeenCalledWith(problem);
     expect(mocks.setters[5]).toHaveBeenLastCalledWith(null);
     expect(mocks.setters[3]).not.toHaveBeenCalled();
-    expect(mocks.setters[10]).not.toHaveBeenCalled();
-    expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
   });
 
   it("does not let editing another post overwrite an in-flight draft, including before rerender", async () => {
@@ -543,15 +585,15 @@ describe("own-group recruitment form (isolated render mocks)", () => {
     expect(edit).toBeDefined();
     formFor(page).props.onSubmit({ preventDefault: vi.fn() });
     edit!.props.onClick();
-    expect(mocks.setters[9]).not.toHaveBeenCalled();
-    expect(mocks.setters[10]).not.toHaveBeenCalled();
     expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
     wait.reject(new Error("write rejected"));
     await vi.waitFor(() =>
       expect(mocks.setters[4]).toHaveBeenCalledWith("Post error")
     );
-    expect(mocks.setters[10]).not.toHaveBeenCalled();
-    expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
     const busyPage = pageWith(
       { ...availablePost(), canManage: true },
       true,
@@ -589,16 +631,16 @@ describe("own-group recruitment form (isolated render mocks)", () => {
     )!;
     editForm.props.onSubmit({ preventDefault: vi.fn() });
     create.props.onClick();
-    expect(mocks.setters[8]).not.toHaveBeenCalled();
-    expect(mocks.setters[9]).not.toHaveBeenCalled();
     expect(mocks.setters[10]).not.toHaveBeenCalled();
     expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
     wait.reject(new Error("edit rejected"));
     await vi.waitFor(() =>
       expect(mocks.setters[4]).toHaveBeenCalledWith("Post error")
     );
-    expect(mocks.setters[10]).not.toHaveBeenCalled();
-    expect(mocks.setters[11]).not.toHaveBeenCalled();
+    expect(mocks.setters[12]).not.toHaveBeenCalled();
+    expect(mocks.setters[13]).not.toHaveBeenCalled();
   });
 
   it("renders the in-flight form disabled", () => {
@@ -795,6 +837,8 @@ describe("actual load effect with mocked services", () => {
       null,
       false,
       false,
+      false,
+      0,
       null,
       null,
       "",

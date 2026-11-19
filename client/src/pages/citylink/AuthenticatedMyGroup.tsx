@@ -151,6 +151,7 @@ export default function AuthenticatedMyGroup({
 }) {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
+  const authGeneration = session.authGeneration ?? 0;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
 
@@ -174,17 +175,19 @@ export default function AuthenticatedMyGroup({
     courseId,
     groupId: actionGroupId,
     status: session.status,
+    authGeneration,
   });
   actionContext.current = {
     userId,
     courseId,
     groupId: actionGroupId,
     status: session.status,
+    authGeneration,
   };
 
   useEffect(() => {
     setNotice(null);
-  }, [courseId, userId]);
+  }, [authGeneration, courseId, userId]);
 
   useEffect(() => {
     actionBusy.current = false;
@@ -193,7 +196,7 @@ export default function AuthenticatedMyGroup({
       actionGeneration.current += 1;
       actionBusy.current = false;
     };
-  }, [courseId, userId, actionGroupId, session.status]);
+  }, [authGeneration, courseId, userId, actionGroupId, session.status]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -279,7 +282,7 @@ export default function AuthenticatedMyGroup({
         requestGeneration.current += 1;
       }
     };
-  }, [courseId, retryToken, session.status, userId]);
+  }, [authGeneration, courseId, retryToken, session.status, userId]);
 
   async function runAction(
     key: string,
@@ -294,7 +297,8 @@ export default function AuthenticatedMyGroup({
       actionContext.current.userId === context.userId &&
       actionContext.current.courseId === context.courseId &&
       actionContext.current.groupId === context.groupId &&
-      actionContext.current.status === context.status;
+      actionContext.current.status === context.status &&
+      actionContext.current.authGeneration === context.authGeneration;
     actionBusy.current = true;
     setBusyAction(key);
     setNotice(null);

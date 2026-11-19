@@ -87,6 +87,7 @@ function prettyStatus(status: string) {
 export default function GroupWorkflows() {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
+  const authGeneration = session.authGeneration ?? 0;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
 
@@ -132,8 +133,14 @@ export default function GroupWorkflows() {
     userId,
     selectedCourseId,
     status: session.status,
+    authGeneration,
   });
-  actionContext.current = { userId, selectedCourseId, status: session.status };
+  actionContext.current = {
+    userId,
+    selectedCourseId,
+    status: session.status,
+    authGeneration,
+  };
   const selectedInviteGroupRef = useRef(existingGroupId);
   selectedInviteGroupRef.current = existingGroupId;
 
@@ -146,7 +153,7 @@ export default function GroupWorkflows() {
       actionGeneration.current += 1;
       actionBusy.current = false;
     };
-  }, [userId, selectedCourseId, session.status]);
+  }, [authGeneration, userId, selectedCourseId, session.status]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -201,7 +208,7 @@ export default function GroupWorkflows() {
       if (requestGeneration.current === generation)
         requestGeneration.current += 1;
     };
-  }, [retryToken, session.status, userId]);
+  }, [authGeneration, retryToken, session.status, userId]);
 
   useEffect(() => {
     let active = true;
@@ -243,7 +250,13 @@ export default function GroupWorkflows() {
     return () => {
       active = false;
     };
-  }, [prefill.courseId, prefill.inviteeId, selectedCourseId, userId]);
+  }, [
+    authGeneration,
+    prefill.courseId,
+    prefill.inviteeId,
+    selectedCourseId,
+    userId,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -264,6 +277,7 @@ export default function GroupWorkflows() {
       active &&
       userIdRef.current === userId &&
       actionContext.current.status === "ready" &&
+      actionContext.current.authGeneration === authGeneration &&
       actionContext.current.selectedCourseId === selectedCourseId &&
       selectedInviteGroupRef.current === existingGroupId;
     setInviteCapacityLoading(true);
@@ -286,7 +300,14 @@ export default function GroupWorkflows() {
     return () => {
       active = false;
     };
-  }, [userId, selectedCourseId, existingGroupId, retryToken, session.status]);
+  }, [
+    authGeneration,
+    userId,
+    selectedCourseId,
+    existingGroupId,
+    retryToken,
+    session.status,
+  ]);
 
   const ownData = data?.userId === userId ? data : null;
   const enrolledCourses = useMemo(() => {
@@ -380,13 +401,19 @@ export default function GroupWorkflows() {
     success: string | ((result: unknown) => string)
   ) {
     if (!userId || actionBusy.current) return;
-    const context = { userId, selectedCourseId, status: session.status };
+    const context = {
+      userId,
+      selectedCourseId,
+      status: session.status,
+      authGeneration,
+    };
     const generation = actionGeneration.current;
     const isCurrent = () =>
       actionGeneration.current === generation &&
       actionContext.current.userId === context.userId &&
       actionContext.current.selectedCourseId === context.selectedCourseId &&
-      actionContext.current.status === context.status;
+      actionContext.current.status === context.status &&
+      actionContext.current.authGeneration === context.authGeneration;
     actionBusy.current = true;
     setBusyAction(key);
     setFeedback(null);
@@ -767,7 +794,12 @@ export default function GroupWorkflows() {
                                 void runAction(
                                   `rename-${group.id}`,
                                   guard =>
-                                    renameStudyGroup(userId, group.id, name, guard),
+                                    renameStudyGroup(
+                                      userId,
+                                      group.id,
+                                      name,
+                                      guard
+                                    ),
                                   "Your group name was updated."
                                 );
                               }}

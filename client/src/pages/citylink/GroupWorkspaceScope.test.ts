@@ -126,6 +126,7 @@ describe("context-scoped work", () => {
   it.each([
     ["account", { ...context, userId: "user-2" }],
     ["course", { ...context, courseId: "course-2" }],
+    ["auth generation", { ...context, authGeneration: 1 }],
     ["session readiness", { ...context, status: "loading", userId: null }],
   ])(
     "discards late success, error and finalization after %s changes",

@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -24,6 +25,11 @@ export interface SupabaseSessionState {
   session: Session | null;
   user: User | null;
   authEvent: AuthChangeEvent | null;
+  /**
+   * Increments for a new sign-in/sign-out event, but not for an ordinary token
+   * refresh. Guards use it to reject actions from an older session.
+   */
+  authGeneration?: number;
   error: string | null;
 }
 
@@ -35,11 +41,13 @@ const initialState: SupabaseSessionState = {
   session: null,
   user: null,
   authEvent: null,
+  authGeneration: 0,
   error: null,
 };
 
 export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(initialState);
+  const authGeneration = useRef(0);
 
   useEffect(() => {
     if (!supabaseClient) return;
@@ -51,12 +59,21 @@ export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
       receivedAuthEvent = true;
       if (!isActive) return;
 
+      if (
+        event === "INITIAL_SESSION" ||
+        event === "SIGNED_IN" ||
+        event === "SIGNED_OUT" ||
+        event === "PASSWORD_RECOVERY"
+      ) {
+        authGeneration.current += 1;
+      }
       setState({
         configuration: "ready",
         status: "ready",
         session,
         user: session?.user ?? null,
         authEvent: event,
+        authGeneration: authGeneration.current,
         error: null,
       });
     });
@@ -73,6 +90,7 @@ export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
             session: null,
             user: null,
             authEvent: null,
+            authGeneration: authGeneration.current,
             error: error.message,
           });
           return;
@@ -84,6 +102,7 @@ export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
           session: sessionData.session,
           user: sessionData.session?.user ?? null,
           authEvent: null,
+          authGeneration: authGeneration.current,
           error: null,
         });
       })
@@ -96,6 +115,7 @@ export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
           session: null,
           user: null,
           authEvent: null,
+          authGeneration: authGeneration.current,
           error:
             error instanceof Error
               ? error.message

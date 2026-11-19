@@ -108,21 +108,26 @@ function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
 export default function AuthenticatedCoursePeers({
   courseId,
   embedded = false,
+  refreshToken = 0,
 }: {
   courseId: string;
   embedded?: boolean;
+  refreshToken?: number;
 }) {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
+  const authGeneration = session.authGeneration ?? 0;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
-  const actionContext = useRef({ userId, courseId });
+  const mountedRef = useRef(true);
+  const actionContext = useRef({ userId, courseId, authGeneration });
   const pendingInvite = useRef<symbol | null>(null);
   if (
     actionContext.current.userId !== userId ||
-    actionContext.current.courseId !== courseId
+    actionContext.current.courseId !== courseId ||
+    actionContext.current.authGeneration !== authGeneration
   ) {
-    actionContext.current = { userId, courseId };
+    actionContext.current = { userId, courseId, authGeneration };
     pendingInvite.current = null;
   }
   const createDialogTrigger = useRef<HTMLButtonElement | null>(null);
@@ -150,6 +155,18 @@ export default function AuthenticatedCoursePeers({
   const [retryToken, setRetryToken] = useState(0);
   const requestGeneration = useRef(0);
   useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingInvite.current = null;
+      actionContext.current = {
+        userId: null,
+        courseId: "",
+        authGeneration: -1,
+      };
+    };
+  }, []);
+  useEffect(() => {
     setFeedback(null);
     setSearch("");
     setFilter("all");
@@ -158,7 +175,7 @@ export default function AuthenticatedCoursePeers({
     setCreatingPeer(null);
     setCreationError("");
     setBusyPeerId("");
-  }, [courseId, userId]);
+  }, [authGeneration, courseId, userId]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -206,7 +223,7 @@ export default function AuthenticatedCoursePeers({
       if (requestGeneration.current === generation)
         requestGeneration.current += 1;
     };
-  }, [retryToken, session.status, userId]);
+  }, [authGeneration, retryToken, session.status, userId]);
 
   const ownData = data?.userId === userId ? data : null;
   const course = ownData?.directory.courses.find(item => item.id === courseId);
@@ -272,7 +289,16 @@ export default function AuthenticatedCoursePeers({
     return () => {
       active = false;
     };
-  }, [courseId, enrolled, ownData?.userId, retryToken, session.status, userId]);
+  }, [
+    authGeneration,
+    courseId,
+    enrolled,
+    ownData?.userId,
+    refreshToken,
+    retryToken,
+    session.status,
+    userId,
+  ]);
 
   const inviteGroups = useMemo(
     () =>
@@ -365,7 +391,9 @@ export default function AuthenticatedCoursePeers({
     const context = actionContext.current;
     const attempt = Symbol("people-invitation");
     const isCurrent = () =>
-      actionContext.current === context && pendingInvite.current === attempt;
+      mountedRef.current &&
+      actionContext.current === context &&
+      pendingInvite.current === attempt;
     pendingInvite.current = attempt;
     setBusyPeerId(peer.profile_id);
     setFeedback(null);
@@ -380,7 +408,7 @@ export default function AuthenticatedCoursePeers({
           creation.maxMembers,
           isCurrent
         );
-        if (actionContext.current !== context) return;
+        if (!isCurrent()) return;
         setCreatingPeer(null);
         setFeedback({
           tone: "success",
@@ -394,7 +422,7 @@ export default function AuthenticatedCoursePeers({
           peer.profile_id,
           isCurrent
         );
-        if (actionContext.current !== context) return;
+        if (!isCurrent()) return;
         setFeedback({
           tone: "success",
           message: "Your group invitation was sent.",
@@ -404,12 +432,12 @@ export default function AuthenticatedCoursePeers({
       setChosenGroupId("");
       setRetryToken(value => value + 1);
     } catch (error) {
-      if (actionContext.current !== context) return;
+      if (!isCurrent()) return;
       const message = getPeopleInviteErrorMessage(error);
       if (creation) setCreationError(message);
       else setFeedback({ tone: "error", message });
     } finally {
-      if (pendingInvite.current === attempt) {
+      if (isCurrent()) {
         pendingInvite.current = null;
         setBusyPeerId("");
       }
