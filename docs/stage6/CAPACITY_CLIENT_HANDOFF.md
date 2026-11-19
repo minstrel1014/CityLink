@@ -68,4 +68,10 @@ Adam-repair's review found four client issues. The follow-up adds an optional `s
 
 The profile save now rechecks its context after the display-name RPC and before the separate profile-field update, so a context switch cannot start the second write. DisplayNameGate now scopes save completion to the initiating account generation, preventing a delayed save from account A from unlocking account B's client-side name gate. Capacity-blocked My Groups and recruitment Apply states now expose a **Refresh group status** action; the server remains authoritative.
 
+### Remaining pre-existing review risks (not fixed in this follow-up)
+- Successful recruitment Apply still does not refresh the post’s pending state; the idempotent server RPC prevents a duplicate request, but the UI can remain clickable until the post list reloads.
+- Profile fields remain editable while a save is pending; a late completion can replace the draft and discard later typing.
+- The installed auth SDK’s `getUser` missing-session error path can remove a newer stored session; this is pre-existing and not unique to this branch. Authorized mounted-browser/account-switch QA must verify it.
+- These are tracked separately from the four addressed review findings and do not imply server authorization is weak; server RLS/RPC checks remain authoritative.
+
 Added `client/src/lib/supabaseRequestAuth.test.ts` for the guard helper and updated the source-contract/workspace tests for the new optional argument. Final local checks: `corepack pnpm check` passed; `corepack pnpm test` passed **26 files / 470 tests**; `corepack pnpm build` with verified browser-safe Test-only configuration passed with **1,748 modules**, the existing non-module configuration-script warning, and the existing greater-than-500-kB chunk advisory. Formatting and `git diff --check` are checked before the follow-up commit. Component tests use mocked React hooks, so they do not substitute for mounted-browser or live Test QA. No SQL was executed; neither Test nor Main database was changed.
