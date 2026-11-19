@@ -190,4 +190,5 @@ Validation commands and exact results, file inventory, API boundaries, assumptio
 
 ### Integration reconciliation — 2026-11-19
 
-- [ ] Reconcile PR #33 (QA People/Back) and PR #31 (portfolio/invitation) onto updated PR #36 head `87671a0` on `feature/capacity-integration-20261119-v2`; preserve Option A, Back navigation, portfolio behavior, full-roster capacity, and session guards. No merge to main, SQL, Test/Main change, or publish.
+- [x] Reconcile PR #33 (QA People/Back) and PR #31 (portfolio/invitation) onto updated PR #36 head `87671a0` on `feature/capacity-integration-20261119-v2`; preserve Option A, Back navigation, portfolio behavior, full-roster capacity, and session guards. Local typecheck passed; 37 files / 594 tests passed; build passed with 1,758 modules and the existing warnings; Prettier and whitespace checks passed. Recorded in `docs/stage6/CAPACITY_INTEGRATION_HANDOFF.md`.
+- [ ] Independent review of the exact integration head; fresh exact #34 review; agree the cutover/cached-client plan in `docs/team/CAPACITY_CLIENT_SCHEMA_CUTOVER_PROPOSAL.md`; separate Test authorization and signed-in multi-account/concurrency QA. No merge to main, SQL, Test/Main change, or publish.
