@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Check, RefreshCw, Send, Users, X } from "lucide-react";
 import { Link } from "wouter";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import { invitationAcceptanceFeedback } from "@/lib/invitationAcceptance";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
   loadCourseDirectory,
@@ -268,14 +269,18 @@ export default function GroupWorkflows() {
   async function runAction(
     key: string,
     action: () => Promise<unknown>,
-    success: string
+    success: string | ((result: unknown) => Feedback)
   ) {
     if (!userId || busyAction) return;
     setBusyAction(key);
     setFeedback(null);
     try {
-      await action();
-      setFeedback({ tone: "success", message: success });
+      const result = await action();
+      setFeedback(
+        typeof success === "function"
+          ? success(result)
+          : { tone: "success", message: success }
+      );
       setNewGroupName("");
       setRenameName("");
       setRenameGroupId("");
@@ -894,7 +899,7 @@ export default function GroupWorkflows() {
                                       invitation.id,
                                       true
                                     ),
-                                  "You accepted the invitation and joined the group."
+                                  invitationAcceptanceFeedback
                                 )
                               }
                             >

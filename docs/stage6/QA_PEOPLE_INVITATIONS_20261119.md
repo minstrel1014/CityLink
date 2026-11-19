@@ -1,0 +1,58 @@
+# QA follow-up: course people and received invitations
+
+## Owner and scope
+
+- Human owner: Adam; base role: Project, Integration, and Release Lead.
+- Additional assignments retained: demo repair, signed-in user journey, and this course-people/invitation QA refinement. No replacement task or ownership handoff was created.
+- Coordination: Roy owns group workflows; Jeffery owns group chat and recruitment; Eunice owns QA; the Database Security and QA Owner reviews schema, RLS, and migrations. The lead coordinates shared contracts and reviews.
+- Branch: `feature/adam-qa-ux-nov19`; baseline GitHub `main` commit `1a583e30c019733d1880d2614ca853481509fdad`.
+
+## Decisions
+
+Adam requested one mixed coursemate list rather than separate group/ungrouped categories, with the group or other status displayed per person; the purpose is to avoid implying that a group is joinable without a recruitment post. A student's card should show **Requested** when the signed-in viewer has a pending request to that group, and **You are in this group already** when the viewer is an active member. Those labels are based only on the viewer's own matching request or membership, not another student's request, and are not server authorization decisions.
+
+The existing My Groups screen and checked-in `request_to_join_group` service also permit direct requests to an eligible active group. That means the existing People-page sentence claiming requests are available _only_ through recruitment posts is not a confirmed server-enforced rule. Per the project instruction, the direct-request control, RPC and that sentence remain unchanged until Adam decides the authorization question. A temporary wording edit was reversed; the lead was notified of the correction. The obsolete separate statement that groups have no maximum was removed because Adam superseded that rule.
+
+Adam additionally requested a way to go back to the actual previous page throughout the app, rather than hard-coded links such as My Courses when the user came from Find your groupmate. Preserve existing appropriate safe fallback destinations when a page is opened directly without a prior in-app page; do not send users to an untrusted external page or create navigation loops.
+
+QA reported that a received invitation lacked an Accept button. On the baseline, the signed-in Invitations page was intentionally read-only; Accept was already available separately in My Groups. That explains the missing button but does not prove whether a particular invitation was eligible or whether a live acceptance would succeed. A direct action should reuse the existing server-authorized invitation response rather than update tables directly.
+
+On 2026-11-19 Adam explicitly changed the prior no-cap decision: the **current group leader** sets and edits a **hard maximum from 2–19**; 19 is the highest allowed setting, not a default. Existing groups must choose a maximum before adding people. A maximum cannot be lowered below current membership; groups already larger than 19 cannot set a valid limit or add people until their size decreases naturally, and nobody is removed automatically. When full, new invitations and applications are blocked; existing pending invitations and join requests stay pending but cannot be accepted or approved until a place opens. Display a clear **“Group is full”** error when an attempted invitation, join, or join request is blocked. Adam also requested current/max on grouped people cards. Existing abandonment/expiry rules are unchanged.
+
+This is a product decision, not approval of an exact storage/API/security design or authorization to change a database. Capacity must not be claimed or enforced by UI alone.
+
+The lead's canonical decision and proposed cross-role contract are in [PR #32](https://github.com/minstrel1014/CityLink/pull/32), which remains unmerged. Its exact technical proposal and open questions are not automatically approved by Adam's product decision.
+
+## Read-only Test inspection
+
+On 2026-11-19 this task inspected catalog metadata only on disposable Test project `wkzclgmhrtecnpexfesr`. No application rows, Auth users, secrets, or Supabase Main were read, and no SQL changes or database writes were made.
+
+- `public.study_groups` contains identity, course/term, `creator_id`, status, name and timestamps; it has no maximum-size column.
+- The inspected Test RLS policies permit group visibility through `private.can_view_group`, membership reads for the member or an active group member, invitation reads for participants or active group members, and join-request reads for the requester or current active group leader. These are server controls, not UI authorization.
+- Existing security-definer APIs include `create_group_and_invite`, `send_group_invitation`, `respond_to_group_invitation`, `request_to_join_group`, `review_group_join_request`, `list_course_group_summaries`, `list_current_term_course_groups` and `list_group_recruitment_posts`. Existing group and post response contracts provide member counts but not a group maximum.
+- Live Test metadata confirms `respond_to_group_invitation` is executable by `authenticated` but not `anon`, requires the recipient and a pending invitation, and can return `expired` instead of `accepted` if eligibility no longer holds. A successful call must therefore not automatically be described as joining the group. The function was inspected but not invoked.
+- Since membership can be created by both accepting invitations and approving requests, a hard cap would need coherent, concurrency-safe server enforcement across all approved admission paths as well as accurately scoped read contracts. The precise API and data contract, storage design, and locking strategy are **not approved or designed here**.
+
+Before implementation, the lead must coordinate the shared API/data contract with the affected owners and obtain Role 6 review. Any migration must be reviewed and separately approved before application to Test; this task has not modified a database or accessed Main.
+
+## Validation and follow-up
+
+The feature branch now presents one mixed coursemate list, matching the viewer's pending request or active membership using existing authorized data. After a request attempt, matching same-window views re-read server data and discard stale results; account/course-scoped views prevent an old action or read from updating a different context. Availability filters exclude already-grouped people because the visible group badge does not indicate they are available to invite. This refresh is not cross-tab or realtime, and a network failure can leave a server outcome temporarily uncertain.
+
+The Invitations page now offers **Accept** only for a pending invitation addressed to the signed-in account. The existing response service remains authoritative; the UI distinguishes accepted, expired, and unconfirmed results and refreshes the server state after success or failure. A same-runtime account-scoped guard prevents a second acceptance after an in-app remount. The old My Groups Accept path now also avoids falsely reporting an expired invitation as accepted. Decline and all existing database permissions are unchanged.
+
+The shared **Back** button follows trusted same-tab app history rather than a fixed My Courses link. It avoids known sign-in redirect loops and does not use external or unrecognized history. When a page is entered directly or history is lost after a reload, the Back button is disabled instead of guessing; existing explicitly named destination links remain available. The app's existing full-page 404 redirect also loses this in-memory history. The blocking display-name gate intentionally hides navigation. Search filters and scroll position are not restored. On browsers without Navigation API entry keys, manually using browser Back/Forward can conservatively reset the trusted in-app history.
+
+On the separate QA Preview, a read-only desktop fictional-demo check verified that Back returned a profile to its originating coursemate directory and, when opened from Invitations, returned it to Invitations. A simulated 375-pixel fictional-demo viewport showed the Back control, returned the profile to Invitations, and had no horizontal overflow. The browser console showed no application errors. These checks did not test the signed-in Test flows or physical devices.
+
+Final `corepack pnpm check` and `corepack pnpm build` passed; `corepack pnpm test` passed 21 files and 204 tests. The full test run emitted existing missing `MANUS_OAUTH_API_URL` and test-session logs. The build emitted the existing non-module `/api/platform/config.js` warning and a >500 kB JavaScript chunk advisory. The first new rendered-list test failed because its JSX runtime required an explicit React import; after the import was added, the focused tests passed. A formatting check initially identified this handoff file, which was formatted before the final check.
+
+The separate QA Preview on port 3002 showed the signed-out sign-in page and no browser console output. No live invitation acceptance, group admission, account mutation, or persistent Test row was created. Signed-in, multi-account, and physical-device QA require a separately approved Test plan. The Preview does **not** yet enforce the approved maximum or display current/max; do not mistake these UI changes for a completed capacity implementation.
+
+## Changed files
+
+- Navigation: `client/src/main.tsx`, `client/src/components/ErrorBoundary.tsx`, `client/src/components/citylink/{BackNavigation.tsx,BackNavigation.css,BackNavigation.test.ts,DisplayNameGate.tsx}`, and `client/src/lib/{appHistory.ts,appHistory.test.ts,appHistoryStore.ts,appHistoryStore.test.ts}`.
+- People and request refresh: `client/src/components/citylink/{CoursePeerList.tsx,CoursePeerList.test.ts}`, `client/src/lib/{courseDetailActions.ts,courseDetailActions.test.ts,courseRequestRefresh.ts,courseRequestRefresh.test.ts}`, and `client/src/pages/citylink/{AuthenticatedCoursePeers.tsx,CourseDetail.css,GroupWorkspacePage.tsx}`.
+- Invitations: `client/src/lib/{invitationAcceptance.ts,invitationAcceptance.test.ts,invitationActionCoordinator.ts,invitationActionCoordinator.test.ts}`, and `client/src/pages/citylink/{AuthenticatedWorkspacePages.tsx,GroupWorkflows.tsx,ReceivedInvitationCard.tsx,ReceivedInvitationCard.test.ts}`.
+- Fixed-destination labels and shell: `client/src/pages/citylink/{AuthenticatedMyGroup.tsx,Classmates.tsx,CoursemateProfilePage.tsx,GroupChatPage.tsx,GroupChatPicker.tsx,GroupMembersPage.tsx,Stage6Layout.tsx,StudentPortfolio.tsx,Workspace.tsx}`.
+- Route metadata and records: `client/public/manus-routes.json`, `TODO.md`, and this handoff. No migration, database service, RLS, grant, or generated secret file was changed.

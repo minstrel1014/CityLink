@@ -1,8 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { ArrowRight, MessageCircle, Users } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import {
+  acceptReceivedInvitation,
+  findAcceptableReceivedInvitation,
+  refreshInvitationSnapshot,
+  type InvitationFeedback,
+} from "@/lib/invitationAcceptance";
+import { invitationActionCoordinator } from "@/lib/invitationActionCoordinator";
 import {
   getCourseDirectoryErrorMessage,
   loadCourseDirectory,
@@ -11,6 +27,8 @@ import {
 import {
   getGroupWorkflowErrorMessage,
   loadGroupWorkflowSnapshot,
+  respondToGroupInvitation,
+  type GroupInvitationRow,
   type GroupWorkflowSnapshot,
 } from "@/lib/supabaseGroups";
 import { supabaseClient } from "@/lib/supabaseClient";
@@ -18,6 +36,7 @@ import {
   activeMemberGroups,
   visiblePendingJoinRequests,
 } from "@/lib/workspaceRouteRules";
+import { ReceivedInvitationCard } from "./ReceivedInvitationCard";
 import "./GroupWorkflows.css";
 import "./AuthenticatedWorkspacePages.css";
 
@@ -133,7 +152,135 @@ function formatDate(value: string) {
 }
 
 export function AuthenticatedInvitations() {
-  const { data, loading, error, retry } = useWorkspaceData();
+  const session = useSupabaseSession();
+  const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
+  const currentUserId = useRef(userId);
+  currentUserId.current = userId;
+
+  // A new identity gets a fresh state and guard; old async work is ignored.
+  return (
+    <AuthenticatedInvitationsForUser
+      key={userId ?? "signed-out"}
+      userId={userId}
+      currentUserId={currentUserId}
+    />
+  );
+}
+
+function AuthenticatedInvitationsForUser({
+  userId,
+  currentUserId,
+}: {
+  userId: string | null;
+  currentUserId: RefObject<string | null>;
+}) {
+  const [data, setData] = useState<WorkspaceData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [feedback, setFeedback] = useState<InvitationFeedback | null>(null);
+  const subscribeToBusy = useCallback(
+    (listener: () => void) =>
+      userId
+        ? invitationActionCoordinator.subscribe(userId, listener)
+        : () => {},
+    [userId]
+  );
+  const getBusyInvitationId = useCallback(
+    () =>
+      userId ? invitationActionCoordinator.getBusyInvitationId(userId) : null,
+    [userId]
+  );
+  const busyInvitationId = useSyncExternalStore(
+    subscribeToBusy,
+    getBusyInvitationId,
+    () => null
+  );
+  const busy = useRef(false);
+  const mounted = useRef(false);
+  const snapshot = useRef<WorkspaceData | null>(null);
+  const loadGeneration = useRef(0);
+  const isCurrent = () =>
+    mounted.current && Boolean(userId) && currentUserId.current === userId;
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    const unregister = userId
+      ? invitationActionCoordinator.registerView(userId, () =>
+          reload().catch(showLoadError)
+        )
+      : () => {};
+    return () => {
+      mounted.current = false;
+      loadGeneration.current += 1;
+      unregister();
+    };
+  }, [userId]);
+
+  function showLoadError() {
+    if (!isCurrent()) return;
+    snapshot.current = null;
+    setData(null);
+    setLoading(false);
+    setError(
+      "Could not load the latest invitations. Check your connection or account access and try again before taking another action."
+    );
+  }
+
+  function reload() {
+    if (!userId || !supabaseClient) return Promise.resolve();
+    return refreshInvitationSnapshot({
+      generation: loadGeneration,
+      isCurrent,
+      load: async () => {
+        const [courses, groups] = await Promise.all([
+          loadCourseDirectory(userId),
+          loadGroupWorkflowSnapshot(userId),
+        ]);
+        return { userId, courses, groups };
+      },
+      onLoading: () => {
+        snapshot.current = null;
+        setData(null);
+        setLoading(true);
+        setError("");
+      },
+      onLoaded: result => {
+        snapshot.current = result;
+        setData(result);
+        setLoading(false);
+      },
+      onError: showLoadError,
+    });
+  }
+
+  useEffect(() => {
+    if (!userId || !supabaseClient) {
+      setLoading(false);
+      return;
+    }
+    void reload().catch(showLoadError);
+  }, [userId]);
+
+  function accept(invitation: GroupInvitationRow) {
+    const currentInvitation = findAcceptableReceivedInvitation(
+      snapshot.current?.groups.incomingInvitations ?? [],
+      invitation.id,
+      userId
+    );
+    if (!currentInvitation) return;
+    void acceptReceivedInvitation({
+      userId,
+      invitation: currentInvitation,
+      busy,
+      coordinator: invitationActionCoordinator,
+      isCurrent,
+      respond: respondToGroupInvitation,
+      errorMessage: getGroupWorkflowErrorMessage,
+      onFeedback: setFeedback,
+    });
+  }
+
+  const retry = () => void reload().catch(showLoadError);
   const coursesById = useMemo(
     () =>
       new Map((data?.courses.courses ?? []).map(course => [course.id, course])),
@@ -156,19 +303,28 @@ export function AuthenticatedInvitations() {
       <PageHeading
         eyebrow="YOUR TEST-BACKED GROUP WORKFLOWS"
         title="Invitations"
-        description="Review invitations and pending join requests returned by your existing signed-in group services."
+        description="Review invitations and pending join requests, and accept invitations sent to your account."
       >
         <GroupWorkflowLink />
       </PageHeading>
       <p className="group-workflows-intro" role="note">
-        This view is read-only. It shows your pending requests and requests for
-        groups where you are recorded as creator. Only the original group
-        creator is approved to review requests; server-side enforcement is under
-        review.
+        You can accept pending invitations sent to your account here. This view
+        also shows your pending requests and requests for groups where you are
+        the current leader, whether the original leader or a successor. Only the
+        current active group leader can review requests in group workflows;
+        server-side enforcement still needs review.
       </p>
+      {feedback && (
+        <div
+          className={`group-workflow-feedback ${feedback.tone}`}
+          role={feedback.tone === "error" ? "alert" : "status"}
+        >
+          {feedback.message}
+        </div>
+      )}
       {loading && <WorkspaceLoading label="invitations" />}
       {!loading && error && <WorkspaceError message={error} onRetry={retry} />}
-      {!loading && !error && data && (
+      {!error && data && (
         <div className="group-workflow-grid authenticated-workspace-lists">
           <section className="group-workflow-panel">
             <h2>Received invitations</h2>
@@ -178,28 +334,17 @@ export function AuthenticatedInvitations() {
                   const group = groupsById.get(invitation.group_id);
                   const course = coursesById.get(invitation.course_id);
                   return (
-                    <article
-                      className="group-workflow-item"
+                    <ReceivedInvitationCard
                       key={invitation.id}
-                    >
-                      <div className="group-workflow-item-top">
-                        <div>
-                          <h3>{group?.name || "Study group invitation"}</h3>
-                          <p>
-                            {course?.code || "Course"} · From{" "}
-                            {invitation.sender_name_snapshot}
-                          </p>
-                        </div>
-                        <span
-                          className={`group-workflow-status ${invitation.status}`}
-                        >
-                          {formatStatus(invitation.status)}
-                        </span>
-                      </div>
-                      <p className="authenticated-workspace-date">
-                        {formatDate(invitation.created_at)}
-                      </p>
-                    </article>
+                      invitation={invitation}
+                      groupName={group?.name}
+                      courseCode={course?.code}
+                      formattedDate={formatDate(invitation.created_at)}
+                      userId={userId}
+                      busyInvitationId={busyInvitationId}
+                      isRefreshing={loading}
+                      onAccept={accept}
+                    />
                   );
                 })
               ) : (
@@ -413,7 +558,7 @@ export function AuthenticatedAbout() {
           </p>
           <div className="authenticated-workspace-empty-action">
             <Link href="/dashboard" className="primary">
-              Back to your dashboard <ArrowRight size={16} />
+              Open your dashboard <ArrowRight size={16} />
             </Link>
           </div>
         </section>

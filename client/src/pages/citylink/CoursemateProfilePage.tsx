@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
@@ -75,7 +75,7 @@ export default function CoursemateProfilePage({
         className="text-link stage6-profile-back"
         href={`/my-courses/${encodeURIComponent(courseId)}/groups`}
       >
-        <ArrowLeft size={14} /> Back to people
+        Find your groupmate
       </Link>
       {loading ? (
         <Stage6Status

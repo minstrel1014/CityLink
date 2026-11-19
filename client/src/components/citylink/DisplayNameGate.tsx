@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { BackNavigationFrame } from "@/components/citylink/BackNavigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
@@ -126,7 +127,9 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {canRenderChildren ? children : null}
+      {canRenderChildren ? (
+        <BackNavigationFrame>{children}</BackNavigationFrame>
+      ) : null}
       {state !== "ready" && (
         <div
           className="display-name-gate"

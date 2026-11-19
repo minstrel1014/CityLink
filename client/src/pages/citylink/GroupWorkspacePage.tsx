@@ -4,7 +4,10 @@ import { Link } from "wouter";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { PageHeading } from "@/components/citylink/Shared";
 import AuthenticatedCoursePeers from "@/pages/citylink/AuthenticatedCoursePeers";
-import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import {
+  useSupabaseSession,
+  type SupabaseSessionState,
+} from "@/contexts/SupabaseSessionContext";
 import {
   closeGroupRecruitmentPost,
   createGroupRecruitmentPost,
@@ -24,6 +27,15 @@ import {
   requestToJoinGroup,
   type StudyGroupRow,
 } from "@/lib/supabaseGroups";
+import {
+  appendCurrentRecruitmentPage,
+  createActionOwner,
+  createRequestGeneration,
+  isCurrentCourseSnapshot,
+  matchesCourseScope,
+  requestWithCourseInvalidation,
+  subscribeCourseRequestInvalidation,
+} from "@/lib/courseRequestRefresh";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
 type LoadState = "loading" | "ready" | "error";
@@ -37,14 +49,31 @@ type Snapshot = {
   ownGroups: StudyGroupRow[];
   activeGroupIds: string[];
   userId: string;
+  courseId: string;
   generation: number;
 };
 
 export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const session = useSupabaseSession();
+  const key = JSON.stringify([
+    session.status,
+    session.user?.id ?? null,
+    courseId,
+  ]);
+  return <GroupWorkspaceView key={key} courseId={courseId} session={session} />;
+}
+
+function GroupWorkspaceView({
+  courseId,
+  session,
+}: {
+  courseId: string;
+  session: SupabaseSessionState;
+}) {
   const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
-  const currentUserId = useRef(userId);
-  currentUserId.current = userId;
+  const scope = { userId, courseId };
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
@@ -57,15 +86,50 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [postSubject, setPostSubject] = useState("");
-  const loadGeneration = useRef(0);
+  const loadGeneration = useRef(createRequestGeneration()).current;
+  const actions = useRef(createActionOwner()).current;
+  const mounted = useRef(false);
+  const groupsPageRequest = useRef<symbol | null>(null);
+  const postsPageRequest = useRef<symbol | null>(null);
 
   useEffect(() => {
-    const generation = ++loadGeneration.current;
+    mounted.current = true;
+    actions.mount();
+    return () => {
+      mounted.current = false;
+      actions.unmount();
+      loadGeneration.invalidate();
+      groupsPageRequest.current = null;
+      postsPageRequest.current = null;
+    };
+  }, [actions, loadGeneration]);
+
+  function reload() {
+    // Invalidate synchronously, before React schedules the fresh reads. This
+    // prevents already-running pagination from restoring stale eligibility.
+    loadGeneration.invalidate();
+    groupsPageRequest.current = null;
+    postsPageRequest.current = null;
+    setGroupsPageBusy(false);
+    setPostsPageBusy(false);
+    setSnapshot(null);
+    setState("loading");
+    setReloadToken(value => value + 1);
+  }
+
+  useEffect(
+    () =>
+      subscribeCourseRequestInvalidation(() => currentScope.current, reload),
+    [loadGeneration]
+  );
+
+  useEffect(() => {
+    const generation = loadGeneration.invalidate();
     let active = true;
     const isCurrent = () =>
       active &&
-      loadGeneration.current === generation &&
-      currentUserId.current === userId;
+      loadGeneration.isCurrent(generation) &&
+      matchesCourseScope(currentScope.current, scope);
     if (session.status === "loading") {
       setState("loading");
       return () => {
@@ -86,7 +150,6 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     setSnapshot(null);
     setState("loading");
     setError("");
-    setFeedback("");
     void Promise.all([
       listCurrentTermCourseGroups(userId, courseId),
       listGroupRecruitmentPosts(userId, courseId),
@@ -106,6 +169,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
             .filter(membership => membership.membership_status === "active")
             .map(membership => membership.group_id),
           userId,
+          courseId,
           generation,
         });
         setState("ready");
@@ -118,40 +182,43 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
 
     return () => {
       active = false;
-      if (loadGeneration.current === generation) loadGeneration.current += 1;
+      if (loadGeneration.isCurrent(generation)) loadGeneration.invalidate();
     };
-  }, [courseId, reloadToken, session.status, userId]);
-
-  async function reload() {
-    setReloadToken(value => value + 1);
-  }
+  }, [courseId, loadGeneration, reloadToken, session.status, userId]);
 
   async function loadMoreGroups() {
     if (
       !userId ||
       !ownSnapshot?.groupsHasMore ||
       !ownSnapshot.groupsCursor ||
-      groupsPageBusy
+      groupsPageRequest.current ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
     )
       return;
+    const pageToken = Symbol("groups-page");
+    groupsPageRequest.current = pageToken;
+    const expectedGeneration = ownSnapshot.generation;
+    const isCurrent = () =>
+      mounted.current &&
+      matchesCourseScope(currentScope.current, scope) &&
+      loadGeneration.isCurrent(expectedGeneration) &&
+      groupsPageRequest.current === pageToken;
     setGroupsPageBusy(true);
     setFeedback("");
-    const expectedGeneration = loadGeneration.current;
     try {
       const page = await listCurrentTermCourseGroups(
         userId,
         courseId,
         ownSnapshot.groupsCursor
       );
-      if (
-        currentUserId.current !== userId ||
-        loadGeneration.current !== expectedGeneration
-      )
-        return;
+      if (!isCurrent()) return;
       setSnapshot(previous => {
         if (
+          !mounted.current ||
+          !loadGeneration.isCurrent(expectedGeneration) ||
+          !matchesCourseScope(currentScope.current, scope) ||
+          !matchesCourseScope(previous, scope) ||
           !previous ||
-          previous.userId !== userId ||
           previous.generation !== expectedGeneration
         )
           return previous;
@@ -167,9 +234,12 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
         };
       });
     } catch (pageError) {
-      setFeedback(getStage6ErrorMessage(pageError));
+      if (isCurrent()) setFeedback(getStage6ErrorMessage(pageError));
     } finally {
-      setGroupsPageBusy(false);
+      if (isCurrent()) {
+        groupsPageRequest.current = null;
+        setGroupsPageBusy(false);
+      }
     }
   }
 
@@ -178,62 +248,78 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       !userId ||
       !ownSnapshot?.postsHasMore ||
       !ownSnapshot.postsCursor ||
-      postsPageBusy
+      postsPageRequest.current ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
     )
       return;
+    const pageToken = Symbol("posts-page");
+    postsPageRequest.current = pageToken;
+    const expectedGeneration = ownSnapshot.generation;
+    const isCurrent = () =>
+      mounted.current &&
+      matchesCourseScope(currentScope.current, scope) &&
+      loadGeneration.isCurrent(expectedGeneration) &&
+      postsPageRequest.current === pageToken;
     setPostsPageBusy(true);
     setFeedback("");
-    const expectedGeneration = loadGeneration.current;
     try {
       const page = await listGroupRecruitmentPosts(
         userId,
         courseId,
         ownSnapshot.postsCursor
       );
-      if (
-        currentUserId.current !== userId ||
-        loadGeneration.current !== expectedGeneration
-      )
-        return;
+      if (!isCurrent()) return;
       setSnapshot(previous => {
         if (
-          !previous ||
-          previous.userId !== userId ||
-          previous.generation !== expectedGeneration
+          !mounted.current ||
+          !matchesCourseScope(currentScope.current, scope)
         )
           return previous;
-        const known = new Set(previous.posts.map(post => post.id));
-        return {
-          ...previous,
-          posts: [
-            ...previous.posts,
-            ...page.items.filter(post => !known.has(post.id)),
-          ],
-          postsHasMore: page.hasMore,
-          postsCursor: page.nextCursor,
-        };
+        return appendCurrentRecruitmentPage(
+          previous,
+          { userId, courseId },
+          expectedGeneration,
+          loadGeneration.current(),
+          page
+        );
       });
     } catch (pageError) {
-      setFeedback(getStage6ErrorMessage(pageError));
+      if (isCurrent()) setFeedback(getStage6ErrorMessage(pageError));
     } finally {
-      setPostsPageBusy(false);
+      if (isCurrent()) {
+        postsPageRequest.current = null;
+        setPostsPageBusy(false);
+      }
     }
   }
 
   async function applyToJoin(post: GroupRecruitmentPost) {
-    if (!userId || !post.groupId || !post.applyEnabled || busyAction) return;
+    if (
+      !userId ||
+      !post.groupId ||
+      !post.applyEnabled ||
+      busyAction ||
+      !ownSnapshot ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
+    )
+      return;
+    const action = actions.begin();
+    if (!action) return;
     setBusyAction(`apply:${post.id}`);
     setFeedback("");
     try {
-      await requestToJoinGroup(userId, post.groupId);
+      await requestWithCourseInvalidation({ userId, courseId }, () =>
+        requestToJoinGroup(userId, post.groupId!)
+      );
+      if (!actions.isCurrent(action)) return;
       setFeedback(
         "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
       );
     } catch (applyError) {
-      const message = getGroupWorkflowErrorMessage(applyError);
-      setFeedback(message);
+      if (!actions.isCurrent(action)) return;
+      setFeedback(getGroupWorkflowErrorMessage(applyError));
     } finally {
-      setBusyAction(null);
+      if (actions.finish(action)) setBusyAction(null);
     }
   }
 
@@ -242,7 +328,17 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     group: CourseGroupSummary
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
+    if (
+      !userId ||
+      busyAction ||
+      !draft.trim() ||
+      !postSubject.trim() ||
+      !ownSnapshot ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
+    )
+      return;
+    const action = actions.begin();
+    if (!action) return;
     setBusyAction(`create:${group.groupId}`);
     setFeedback("");
     try {
@@ -252,15 +348,17 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
         postSubject,
         draft
       );
+      if (!actions.isCurrent(action)) return;
       setDraft("");
       setPostSubject("");
       setCreatingGroupId(null);
       setFeedback("Recruitment post created.");
-      await reload();
+      reload();
     } catch (createError) {
-      setFeedback(getStage6ErrorMessage(createError));
+      if (actions.isCurrent(action))
+        setFeedback(getStage6ErrorMessage(createError));
     } finally {
-      setBusyAction(null);
+      if (actions.finish(action)) setBusyAction(null);
     }
   }
 
@@ -269,41 +367,69 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     post: GroupRecruitmentPost
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
+    if (
+      !userId ||
+      busyAction ||
+      !draft.trim() ||
+      !postSubject.trim() ||
+      !ownSnapshot ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
+    )
+      return;
+    const action = actions.begin();
+    if (!action) return;
     setBusyAction(`edit:${post.id}`);
     setFeedback("");
     try {
       await editGroupRecruitmentPost(userId, post.id, postSubject, draft);
+      if (!actions.isCurrent(action)) return;
       setEditingPostId(null);
       setDraft("");
       setPostSubject("");
       setFeedback("Recruitment post updated.");
-      await reload();
+      reload();
     } catch (editError) {
-      setFeedback(getStage6ErrorMessage(editError));
+      if (actions.isCurrent(action))
+        setFeedback(getStage6ErrorMessage(editError));
     } finally {
-      setBusyAction(null);
+      if (actions.finish(action)) setBusyAction(null);
     }
   }
 
   async function closePost(post: GroupRecruitmentPost) {
-    if (!userId || busyAction) return;
+    if (
+      !userId ||
+      busyAction ||
+      !ownSnapshot ||
+      !loadGeneration.isCurrent(ownSnapshot.generation)
+    )
+      return;
+    const action = actions.begin();
+    if (!action) return;
     setBusyAction(`close:${post.id}`);
     setFeedback("");
     try {
       await closeGroupRecruitmentPost(userId, post.id);
+      if (!actions.isCurrent(action)) return;
       setFeedback(
         "Recruitment post closed. It remains visible but can no longer receive applications."
       );
-      await reload();
+      reload();
     } catch (closeError) {
-      setFeedback(getStage6ErrorMessage(closeError));
+      if (actions.isCurrent(action))
+        setFeedback(getStage6ErrorMessage(closeError));
     } finally {
-      setBusyAction(null);
+      if (actions.finish(action)) setBusyAction(null);
     }
   }
 
-  const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
+  const ownSnapshot = isCurrentCourseSnapshot(
+    snapshot,
+    scope,
+    loadGeneration.current()
+  )
+    ? snapshot
+    : null;
   return (
     <Stage6Layout title="Study groups and recruitment">
       <PageHeading
@@ -323,7 +449,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       )}
       <AuthenticatedCoursePeers embedded courseId={courseId} />
 
-      {session.status === "loading" || state === "loading" ? (
+      {session.status === "loading" ||
+      state === "loading" ||
+      (state === "ready" && !ownSnapshot) ? (
         <Stage6Status
           kind="loading"
           title="Loading current-term groups…"
@@ -446,6 +574,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                           <button
                             className="text-button"
                             type="button"
+                            disabled={busyAction !== null}
                             onClick={() => {
                               setCreatingGroupId(null);
                               setDraft("");
@@ -459,6 +588,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         <button
                           type="button"
                           className="stage6-create-post"
+                          disabled={busyAction !== null}
                           onClick={() => {
                             setCreatingGroupId(group.groupId);
                             setDraft("");
@@ -594,6 +724,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         <button
                           className="text-button"
                           type="button"
+                          disabled={busyAction !== null}
                           onClick={() => {
                             setEditingPostId(null);
                             setDraft("");
@@ -610,6 +741,7 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                             <button
                               type="button"
                               className="secondary"
+                              disabled={busyAction !== null}
                               onClick={() => {
                                 setEditingPostId(post.id);
                                 setDraft(post.body);

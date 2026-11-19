@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
   BookOpen,
   MessageCircle,
@@ -424,7 +423,7 @@ export default function AuthenticatedMyGroup({
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
         <Link href="/my-courses" className="back-link">
-          <ArrowLeft size={17} /> Back to My Courses
+          View My Courses
         </Link>
         {loading && (
           <div className="course-directory-state" role="status">
