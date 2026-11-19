@@ -168,13 +168,15 @@ public.create_group_and_invite(
 returns table(group_id uuid, invitation_id uuid)
 ```
 
-The new group is created with the supplied maximum. The function validates 2–19 before inserting. If an existing forming group for the same leader/course/term is reused, the function must use that group’s stored maximum and must not silently replace it; if the stored maximum is null, the caller must set it through `set_group_max_members` before another invitation is created. The client must be updated in the same release because the old three-argument signature would otherwise fail.
+The new group is created with the supplied maximum. The function validates 2–19 before inserting. If an existing forming group for the same leader/course/term is reused, the function must not allow an unconfigured group to bypass capacity: if the stored maximum is null, it must reject and direct the leader to `set_group_max_members`; if the stored maximum differs from the supplied value, it must reject rather than silently overwrite it. The leader may change the stored value only through the reviewed maximum-edit RPC. The client must be updated in the same release because the old three-argument signature would otherwise fail.
+
+The migration must explicitly drop the old three-argument `create_group_and_invite(uuid, uuid)` signature after dependency checks, so it cannot remain callable as a capacity bypass. Do not leave both signatures available.
 
 Option B—starting a new group with no maximum and blocking acceptance later—is **not approved**. Do not implement both overloads, because ambiguous overloads make it unclear which behavior the client is calling.
 
 ### 5.3 Send invitation
 
-`public.send_group_invitation(uuid, uuid)` keeps its signature. After locking the group row and confirming that the actor is allowed to invite, it must:
+`public.send_group_invitation(uuid, uuid)` keeps its signature. The existing invitation authority remains unchanged: any active member may invite to a forming or active group, and a forming-group creator may send the first invitation even before holding a membership row. Do not restrict invitations to the leader. After locking the group row and confirming that the actor is allowed to invite, it must:
 
 1. Return an existing pending invitation to the same recipient unchanged, if one exists. This preserves idempotency and does not create a new place.
 2. Otherwise call the capacity helper before inserting a new invitation. If the maximum is unset, reject. If the active count is at the maximum, raise “Group is full.”
@@ -194,7 +196,7 @@ Option B—starting a new group with no maximum and blocking acceptance later—
 
 `public.respond_to_group_invitation(uuid, boolean)` keeps its signature. On `p_accept = true`, after locking the group and invitation and validating the recipient and current eligibility, it must call the capacity helper before inserting any membership.
 
-For a forming group, the helper counts the creator as one member. If the invitation would bring the group to two members and the maximum is 2, it is allowed. If another acceptance already filled the group, the second acceptance must raise “Group is full” and leave the invitation pending. A capacity exception must roll back any membership insert, group status update, and invitation status update.
+For a forming group, the helper counts the creator as one member even when the creator has no membership row yet. The capacity check must use the **post-operation net count**, not a naive “current count plus two.” Acceptance inserts the missing creator membership plus the recipient membership; if the creator is already counted as an active member, only the recipient is added. The formula is `current_capacity_count + (1 if creator membership is missing else 0) + 1 for the recipient`; a maximum of 2 must allow the first acceptance. If another acceptance already filled the group, the second acceptance must raise “Group is full” and leave the invitation pending. A capacity exception must roll back any membership insert, group status update, and invitation status update.
 
 ### 5.6 Approve join request
 
@@ -207,6 +209,8 @@ For a forming group, the helper counts the creator as one member. If the invitat
 ### 5.8 Direct join requests — approved as presentation-only
 
 Adam selected **option A** on 2026-11-19. The server behavior does not change: `public.request_to_join_group(p_group_id uuid)` remains callable for an otherwise eligible active group and does not require a recruitment post. This is **not** a server-enforced “recruitment-post-only” rule.
+
+**Implementation hold:** the project-level instruction still says to retain the existing direct-request control and People-page wording until Adam decides, and the Adam-repair task reports that it restored the recruitment-post sentence and will not change the RPC, control, or wording. The lead-task answer is Option A, but the instruction has not been updated and the repair task has not been released. Do not change the UI, RPC, or copy until Adam updates the project instruction and explicitly directs Adam-repair. This is a documented discrepancy, not permission to override the safety hold.
 
 The UI must stop implying that a direct request is available. The authenticated `/my-groups` page currently has a direct “Request to join” control; that control must be removed. The People/coursemate copy must be neutral and must not claim that the server enforces recruitment-post-only requests. Visible self-initiated applications should be offered from open recruitment posts. The existing eligibility, leader review, first-pending-action, and capacity rules still apply to the RPC.
 
@@ -223,41 +227,79 @@ public.remove_group_member(p_group_id uuid, p_profile_id uuid)
 returns text
 ```
 
+#### Canonical lock order for removal
+
+Role 6 identified a real deadlock risk: the earlier draft locked the group row before the target membership, while the existing Stage 6 chat/post paths lock the actor’s membership row before the group. A leader removing a member while that member sends a chat message or creates a post could then deadlock. Do not implement the earlier group-first removal order.
+
+The proposed removal order is:
+
+1. Look up the group, course, and term without taking a row lock; reject a missing group.
+2. Lock the current term and acquire `private.lock_course_profiles(course_id, term_id, actor_id, target_id)` in the existing deterministic order.
+3. Lock the target’s active `group_memberships` row `FOR UPDATE`.
+4. Lock the `study_groups` row `FOR UPDATE`.
+5. Recheck the group status, current term, actor authority, target membership, and target eligibility.
+6. Update the membership and run the existing membership-end triggers.
+
+This order is compatible with the existing paths:
+
+- Stage 5 invitation/request/acceptance paths acquire the course/profile guards before the group lock, so a removal targeting the same profile waits at the profile guard instead of forming a group/membership cycle.
+- Stage 6 chat/post paths lock the actor’s membership row and then the group; removal locks the target membership before the group. The two paths serialize on that membership row and neither holds the group while waiting for the other’s membership.
+- Admission for a different target does not conflict with the target membership; the group lock remains the capacity serialization point.
+
+Database Security must verify the membership-end trigger and every path that locks more than one membership row. If any such path needs multiple membership locks, it must use a deterministic order and the same profile/membership/group protocol; if that requires changing an existing Stage 6 function, the change belongs in the same reviewed migration. Do not mix a group-first removal with membership-first chat/post paths.
+
+#### Function checks and effects
+
 The reviewed function must:
 
 1. Require an authenticated actor.
-2. Lock the group row `FOR UPDATE`; reject a missing group.
-3. Reject a group that is not `forming` or `active`, or whose term is not current.
-4. Require the actor to be the current `study_groups.creator_id` and an active member (or the forming creator where the existing model permits that state).
-5. Require the target to be an active member of the same group and current term.
-6. Reject removing the current leader through this operation until the team decides whether self-removal is allowed and how it interacts with leader succession. Do not silently transfer leadership by removing the leader.
+2. Reject a group that is not `forming` or `active`, or whose term is not current.
+3. Require the actor to be the current `study_groups.creator_id` and an active member (or the forming creator where the existing model permits that state).
+4. Require the target to be an active member of the same group and current term.
+5. Reject removing the current leader through this operation until the team decides whether self-removal is allowed and how it interacts with leader succession. Do not silently transfer leadership by removing the leader.
+6. Reject a removal that would leave the group with zero active members. Use the separate leave/abandon path for that outcome; do not make removal silently abandon the group. This is a proposed boundary for Roy/Adam confirmation.
 7. Mark the target membership with the existing approved removed-state semantics (likely `membership_status = 'removed'` with the existing ended timestamp), not by deleting history. Database Security must verify the live enum and retention behavior before writing the SQL.
 8. Preserve the removed member’s existing read-only chat/history rights under the approved Stage 6 rule; do not delete messages or memberships.
 9. Leave pending invitations and join requests pending. Removal opens a place; it does not auto-accept, auto-approve, or expire anyone.
-10. Return an authoritative status or result that the UI can display.
+10. Run the existing membership-end triggers so approved behavior such as a recruitment post auto-closing when its author leaves or is removed still applies. Do not bypass those triggers or delete the membership history.
+11. Return an authoritative status or result that the UI can display.
 
-The existing membership-end triggers must run after the status change so approved behavior such as a recruitment post auto-closing when its author leaves or is removed still applies. Do not bypass those triggers or delete the membership history.
+A removed member may be invited again only through the existing invitation eligibility and first-pending-action rules, after the removal commits and only if no active membership blocks the invitation. The proposal does not add an automatic re-invite, and Database Security must verify the uniqueness/history constraints before relying on it.
 
-The operation must use the same group-row lock as admission and maximum changes. A leader who wants a maximum below the current count must remove members until the count is at or below the requested value, then save the maximum. A group above 19 must be reduced to 19 or fewer before a maximum can be stored. The UI must not offer a “remove automatically” or bulk-delete shortcut.
+A leader who wants a maximum below the current count must remove members until the count is at or below the requested value, then save the maximum. A group above 19 must be reduced to 19 or fewer before a maximum can be stored. The UI must not offer a “remove automatically” or bulk-delete shortcut.
 
 ## 6. Proposed read contract
 
 The server must return the maximum only where the client needs to explain capacity. All read RPCs remain authenticated-only, current-term/course-eligibility checked, and field-limited.
 
-| Read path                                      | Add                                                                             | UI use                                                      |
-| ---------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `list_course_group_summaries(uuid)`            | `max_members integer` (nullable) alongside existing `group_size`                | Grouped People cards show `current / max` and a full state. |
-| `list_current_term_course_groups(...)`         | `max_members integer` (nullable) alongside `active_member_count`                | Browseable group cards and group details show capacity.     |
-| `list_group_recruitment_posts(...)`            | `max_members integer` (nullable); make `apply_enabled` false when full or unset | Recruitment cards explain why Apply is unavailable.         |
-| Group detail/member view, if it shows capacity | `max_members integer` (nullable)                                                | Show current/max without exposing raw membership rows.      |
+| Read path                              | Add                                                                                                                             | UI use                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `list_course_group_summaries(uuid)`    | `max_members integer`, `capacity_count integer`, `capacity_state text` alongside existing `group_size`                          | Grouped People cards show current/max and an explicit capacity state. |
+| `list_current_term_course_groups(...)` | `max_members integer`, `capacity_count integer`, `capacity_state text` alongside existing `active_member_count`                 | Browseable group cards and group details show capacity.               |
+| `list_group_recruitment_posts(...)`    | `max_members integer`, `capacity_count integer`, `capacity_state text`, `apply_block_reason text`; keep `apply_enabled boolean` | Recruitment cards explain exactly why Apply is unavailable.           |
 
-Client mapper changes must explicitly allow the new keys. Current mappers reject unknown keys, so a server-only change would make the page show a data error.
+`capacity_count` is the single canonical count used for every capacity comparison: active memberships plus a forming creator who does not yet have an active membership row. Existing `group_size` and `active_member_count` must be reconciled with this definition; do not compare `max_members` to a different count on different screens. If keeping the existing fields is necessary for compatibility, document that `group_size`/`active_member_count` must equal `capacity_count` for capacity-bearing groups.
 
-`apply_enabled` should remain true only when the existing eligibility rules pass **and** the group has a configured maximum **and** the active count is below it. A closed post remains closed. A full group must show “Group is full” rather than a generic unavailable message. A post whose group has no maximum should show “maximum not set” and must not silently imply unlimited capacity.
+`capacity_state` must be one of `available`, `full`, `maximum_not_set`, or `over_limit`. A group above 19 with `max_members = NULL` must return `over_limit`, not the generic `maximum_not_set`; the UI must explain that the group is over the upper bound and must shrink before adding anyone. This resolves the missing over-19 People-card state.
+
+`apply_block_reason` must be null when Apply is enabled and one of the following when disabled: `group_full`, `maximum_not_set`, `group_over_limit`, `post_closed`, `group_inactive`, `already_member`, `pending_invitation`, `pending_request`, `profile_unavailable`, or `not_eligible`. The client must show the capacity-specific wording only for `group_full`, `maximum_not_set`, and `group_over_limit`; other reasons may use their existing neutral messages. This is a field-limited reason, not raw membership data.
+
+For archived/abandoned recruitment posts, `max_members`, `capacity_count`, and `capacity_state` must be `NULL` together with the existing redacted group fields (`group_id`, `group_name`, `active_member_count`); `apply_enabled` is false and the reason is `group_inactive`. Do not expose capacity details for a group that is no longer browseable.
+
+Adding these columns changes the `RETURNS TABLE` shape. PostgreSQL will not allow `CREATE OR REPLACE FUNCTION` to change an existing return type. The migration must dependency-check and explicitly drop/recreate each affected function, then restore its grants; the client mappers must explicitly allow every new key. Current mappers reject unknown keys, so a server-only change would make the page show a data error.
+
+`apply_enabled` should remain true only when the existing eligibility rules pass **and** the group has a configured maximum **and** `capacity_count` is below it. A closed post remains closed. A full group must show “Group is full” rather than a generic unavailable message. A post whose group has no maximum should show “Group maximum is not set” and must not silently imply unlimited capacity.
 
 ## 7. Concurrency and transaction contract
 
-All admission paths must use the same lock order: lock the course/profile guards required by the existing functions, then lock the group row `FOR UPDATE`, then read the capacity count, then insert or update. Do not count first and lock later.
+All capacity-mutating paths must follow one documented order; do not count first and lock later, and do not use the earlier group-first removal order. The proposed protocol is:
+
+- **Invitation/request/acceptance/approval:** lock the course/profile guards required by the existing functions, then the group row `FOR UPDATE`, then read the capacity count, then insert or update.
+- **Member removal:** lock the course/profile guards, then the target membership row, then the group row, then recheck and update. See section 5.9.
+- **Maximum edit:** lock the course/profile guards, then the group row, then read the count and update.
+- **Existing chat/post:** retain the actor membership-row lock followed by the group row. Do not change this to group-first without a reviewed migration.
+
+The profile guard is what serializes removal against an admission for the same target; the membership lock serializes removal against that member’s chat/post; the group lock serializes the capacity count and writes. Database Security must verify that no function takes these locks in the reverse order.
 
 The group row lock is the serialization point for:
 
@@ -272,25 +314,36 @@ If two transactions compete for the last place, one obtains the group lock and i
 
 A removal and an admission action must also serialize on the group row. If a leader removes a member while another student accepts an invitation, one transaction commits first; the other re-reads the active count and proceeds or receives the appropriate full/eligibility result. A removal must not partially update the membership or expire a pending action.
 
-The existing Stage 6 chat/post migration uses a membership-row-first/group-row-second lock order in its own paths. Database Security must review any new capacity helper against those paths to avoid a deadlock. The capacity helper itself must not acquire a new lock order; it assumes the caller already holds the group lock.
+The existing Stage 6 chat/post migration uses a membership-row-first/group-row-second lock order in its own paths. The removal path above is deliberately membership-first after the profile guard, not group-first, so it cannot form the deadlock Role 6 identified. Database Security must still review the membership-end trigger and all multi-membership paths against this protocol. The capacity helper itself must not acquire a new lock order; it assumes the caller already holds the required group lock.
 
 ## 8. User experience proposal
 
 These are proposed UI behaviors for review, not an implementation approval:
 
-| Surface                       | Proposed behavior                                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create group                  | Show a required numeric maximum field at the same time as the group name, with `min=2` and `max=19`. Explain that 19 is an upper bound, not a default. Do not submit until a number is chosen.                                                                                                                                                    |
-| My Group settings             | Show `current active members / maximum`. The leader sees an editable number and Save. A member sees the value read-only. If unset, show “Group maximum is not set” and prompt the leader. If over 19 or the requested maximum is below the count, the leader must remove members manually; explain that the group must first become small enough. |
-| Member removal                | The leader sees a clearly labelled remove-member action for other active members. It must be confirmation-protected and must never remove members automatically. The exact self-removal and succession behavior is still under review.                                                                                                            |
-| Invite panel                  | If unset or full, disable the submit button and explain why. The server remains authoritative; a stale screen must still receive the server error.                                                                                                                                                                                                |
-| Join request review           | Keep pending requests visible when full. Approve shows “Group is full”; reject still works.                                                                                                                                                                                                                                                       |
-| My Groups direct request      | Remove the direct “Request to join” control. The server RPC remains callable, but visible self-initiated applications should come from open recruitment posts. Use neutral copy; do not claim the server enforces post-only requests.                                                                                                             |
-| People cards                  | Show `3 / 5 members` (or equivalent clear wording). Show a “Group is full” badge when `group_size >= max_members`. If unset, show `3 members · maximum not set`; never show a fake maximum.                                                                                                                                                       |
-| Browseable groups/recruitment | Show current/max and a full badge. Disable Apply when full or unset. Do not hide the post merely because it is full.                                                                                                                                                                                                                              |
-| Errors                        | Add exact mappings for “Group is full” and the unconfigured-maximum message to `getGroupWorkflowErrorMessage`. Do not turn a capacity error into a generic “try again” message.                                                                                                                                                                   |
+| Surface                       | Proposed behavior                                                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create group                  | Show a required numeric maximum field at the same time as the group name, with `min=2` and `max=19`. Explain that 19 is an upper bound, not a default. Do not submit until a number is chosen.                                                                                                                                                                      |
+| My Group settings             | Show `capacity_count / maximum`. The leader sees an editable number and Save. A member sees the value read-only. If unset, show “Group maximum is not set” and prompt the leader. If over 19 or the requested maximum is below the count, the leader must remove members manually; show the explicit over-limit/full state rather than a generic “maximum not set.” |
+| Member removal                | The leader sees a clearly labelled remove-member action for other active members. It must be confirmation-protected and must never remove members automatically. The exact self-removal and succession behavior is still under review.                                                                                                                              |
+| Invite panel                  | If unset or full, disable the submit button and explain why. The server remains authoritative; a stale screen must still receive the server error.                                                                                                                                                                                                                  |
+| Join request review           | Keep pending requests visible when full. Approve shows “Group is full”; reject still works.                                                                                                                                                                                                                                                                         |
+| My Groups direct request      | Remove the direct “Request to join” control. The server RPC remains callable, but visible self-initiated applications should come from open recruitment posts. Use neutral copy; do not claim the server enforces post-only requests.                                                                                                                               |
+| People cards                  | Show `3 / 5 members` (or equivalent clear wording) using `capacity_count`. Show “Group is full” for `full`; show “Group maximum is not set” for `maximum_not_set`; show the explicit over-limit message for `over_limit`. Never show a fake maximum.                                                                                                                |
+| Browseable groups/recruitment | Show current/max and the explicit capacity state. Disable Apply when `apply_enabled` is false and show the `apply_block_reason` mapping. Do not hide the post merely because it is full.                                                                                                                                                                            |
+| Errors                        | Add exact mappings for “Group is full,” “Group maximum is not set,” and the proposed over-limit/lower-maximum messages to `getGroupWorkflowErrorMessage`. Do not turn a capacity error into a generic “try again” message.                                                                                                                                          |
 
-The existing `GroupWorkflows.tsx` copy “Group size is not limited” must be removed when this feature ships. The existing `AuthenticatedMyGroup.tsx` group-name input currently says 120 characters while the database naming migration enforces 50; that stale copy is a separate cleanup and must not be mixed into the capacity migration without review.
+### Copy cleanup list for Adam-repair
+
+The current `main` still contains contradictory no-limit or server-enforced copy. Adam-repair must update these locations with the UI change; this is a UI/copy task, not a database migration:
+
+- `client/src/pages/citylink/GroupWorkflows.tsx:766` — “No maximum group size.”
+- `client/src/pages/citylink/AuthenticatedMyGroup.tsx:408` — “Groups have no maximum size.”
+- `client/src/pages/citylink/AuthenticatedCoursePeers.tsx:664-669` — “Join requests are available only from recruitment posts … Groups have no maximum size.” Replace with neutral wording, for example: “Join requests are reviewed by the group leader. Apply from an open recruitment post when one is available.”
+- `client/src/pages/citylink/GroupWorkflows.tsx:716-811` — remove the direct “Request to join” control and its `requestToJoinGroup` call; do not leave a dead “Groups you can request to join” section. Either remove it or make it read-only discovery linking to the group’s recruitment-post surface.
+- `client/src/pages/citylink/AuthenticatedMyGroup.tsx:608` — remove copy telling students they can request to join an existing group directly.
+- `docs/stage6/PEOPLE_PAGE_TEST_MIGRATION.md` — correct the “recruitment-post-only join rule” wording to presentation-only; do not describe the RPC as server-enforced.
+
+The existing `AuthenticatedMyGroup.tsx` group-name input currently says 120 characters while the database naming migration enforces 50; that stale copy is a separate cleanup and must not be mixed into the capacity migration without review.
 
 ## 9. Proposed migration and verification plan
 
@@ -302,31 +355,41 @@ The migration should:
 2. Report, without modifying, any groups whose active count is above 19. These groups will be allowed to remain, but cannot set a valid maximum or add members until their size drops.
 3. Add the nullable column and check constraint. Validate the constraint after confirming no invalid non-null values exist (the new column should have none).
 4. Add the private count helper and capacity helper with least-privilege grants.
-5. Replace the admission functions and `set_group_max_members` with reviewed definitions.
-6. Add the leader-only `remove_group_member` function, using the existing removed-membership semantics and preserving history and pending actions.
-7. Replace the read functions that return `max_members`; preserve all existing eligibility, ordering, pagination, and field limits.
-8. Revoke browser execute on private helpers; keep public RPC execute limited to authenticated accounts; do not add direct table writes.
-9. Run a static parse and a catalog verification query for columns, constraints, function signatures, grants, and RLS policies.
+5. Dependency-check and drop the old three-argument `create_group_and_invite(uuid, uuid)` signature; recreate the approved four-argument function. Do not leave the old signature callable.
+6. Replace the admission functions and `set_group_max_members` with reviewed definitions, including the forming-group post-operation net count and the canonical lock order.
+7. Add the leader-only `remove_group_member` function using the profile-guard → target-membership → group lock order, existing removed-membership semantics, membership-end triggers, history, and pending actions.
+8. Dependency-check and explicitly drop/recreate each read function whose `RETURNS TABLE` shape changes (`list_course_group_summaries`, `list_current_term_course_groups`, `list_group_recruitment_posts`) before restoring grants; preserve eligibility, ordering, pagination, field limits, and archived-group redaction.
+9. Revoke browser execute on private helpers; keep public RPC execute limited to authenticated accounts; do not add direct table writes.
+10. Run a static parse and a catalog verification query for columns, constraints, function signatures, grants, RLS policies, and the absence of the old creation signature.
 
 Suggested verification cases after the Test migration is separately authorized:
 
-| Case                                                                | Expected result                                                                                                                    |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| New group with max 2 at creation                                    | Creator counts as one; first invitation can be sent; first acceptance makes two.                                                   |
-| Max 2, group already has two active members                         | New invite, new join request, and another acceptance/approval all fail with “Group is full.”                                       |
-| Max 5, active count 3                                               | Invite/request allowed; accept/approve allowed until count 5; then blocked.                                                        |
-| Max 5, pending invite exists                                        | Pending invite remains pending when a different action fills the group; accepting it fails and remains pending.                    |
-| Leader lowers max to current count                                  | Allowed; group becomes full; pending actions remain pending.                                                                       |
-| Leader lowers max below current count                               | Rejected until the leader removes members manually; no automatic removal; max unchanged until the count is low enough.             |
-| Leader sets max 1, 0, 20, or null                                   | Rejected with a clear validation error.                                                                                            |
-| Non-leader calls set-max                                            | Rejected; no change.                                                                                                               |
-| Group with max null                                                 | New invite/request/accept/approve blocked with “maximum not set”; leader can set a valid max.                                      |
-| Group with 20 active members                                        | Cannot add or set a valid max until the leader manually removes at least one member; no automatic removal.                         |
-| Leader removes another active member                                | Member becomes removed under the existing approved semantics; history remains; pending actions stay pending; capacity count drops. |
-| Non-leader attempts removal, or leader targets an ineligible member | Rejected; no membership or pending row changes.                                                                                    |
-| Leader attempts self-removal                                        | Not implemented until Adam/Roy/Database Security decide how self-removal and leader succession interact.                           |
-| Two simultaneous last-seat accept/approve operations                | Exactly one succeeds; the other receives “Group is full”; count never exceeds max.                                                 |
-| Recruitment list and People cards                                   | Return and display current/max; Apply disabled at full/unset; no raw membership rows exposed.                                      |
+| Case                                                                | Expected result                                                                                                                     |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| New group with max 2 at creation                                    | Creator counts as one; first invitation can be sent; first acceptance makes two.                                                    |
+| Max 2, group already has two active members                         | New invite, new join request, and another acceptance/approval all fail with “Group is full.”                                        |
+| Max 5, active count 3                                               | Invite/request allowed; accept/approve allowed until count 5; then blocked.                                                         |
+| Max 5, pending invite exists                                        | Pending invite remains pending when a different action fills the group; accepting it fails and remains pending.                     |
+| Leader lowers max to current count                                  | Allowed; group becomes full; pending actions remain pending.                                                                        |
+| Leader lowers max below current count                               | Rejected until the leader removes members manually; no automatic removal; max unchanged until the count is low enough.              |
+| Leader sets max 1, 0, 20, or null                                   | Rejected with a clear validation error.                                                                                             |
+| Non-leader calls set-max                                            | Rejected; no change.                                                                                                                |
+| Group with max null                                                 | New invite/request/accept/approve blocked with “maximum not set”; leader can set a valid max.                                       |
+| Group with 20 active members                                        | Cannot add or set a valid max until the leader manually removes at least one member; no automatic removal.                          |
+| Leader removes another active member                                | Member becomes removed under the existing approved semantics; history remains; pending actions stay pending; capacity count drops.  |
+| Non-leader attempts removal, or leader targets an ineligible member | Rejected; no membership or pending row changes.                                                                                     |
+| Leader attempts self-removal                                        | Not implemented until Adam/Roy/Database Security decide how self-removal and leader succession interact.                            |
+| Removal would leave zero active members                             | Rejected; use the separate leave/abandon path; no silent abandonment.                                                               |
+| Removed member is invited again                                     | Existing invitation eligibility and first-pending-action rules apply; no automatic re-invite; uniqueness/history behavior verified. |
+| Reused forming group has null or different maximum                  | Rejected; cannot create an invitation through the old/unconfigured path; no silent overwrite.                                       |
+| Forming group acceptance with max 2                                 | Missing creator membership plus recipient membership is counted as a net two; first acceptance is allowed; later additions blocked. |
+| Removal concurrent with member chat/post                            | Both complete or one receives a safe eligibility error; no deadlock; no orphan membership or message/post.                          |
+| Removal concurrent with same-target invitation acceptance/approval  | Profile guard serializes; one wins; no deadlock; pending action remains correct.                                                    |
+| Archived/abandoned recruitment post                                 | `max_members`, `capacity_count`, and `capacity_state` are NULL with the other redacted group fields; Apply disabled.                |
+| Recruitment Apply with each block reason                            | `apply_enabled` is false and `apply_block_reason` matches the exact condition; capacity wording appears only for capacity reasons.  |
+| Old three-argument create function                                  | Signature is absent; a direct call cannot bypass the maximum.                                                                       |
+| Two simultaneous last-seat accept/approve operations                | Exactly one succeeds; the other receives “Group is full”; count never exceeds max.                                                  |
+| Recruitment list and People cards                                   | Return and display current/max; Apply disabled at full/unset; no raw membership rows exposed.                                       |
 
 Run the normal client checks only after client changes exist: `corepack pnpm check`, `corepack pnpm test`, and `corepack pnpm build` (or `build:static` for the separate Webdev demo). A passing result means types, automated tests, and the production build are consistent; it does not prove live multi-account concurrency or Test integration.
 
@@ -348,16 +411,32 @@ The integration task attempted to message the role tasks, but `manus-tasks/list_
 
 Adam answered the product questions on 2026-11-19:
 
-| Question                  | Adam’s answer                                                      | Contract consequence                                                                                            |
-| ------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
-| New-group maximum         | **1A:** enter it at the same time as the group name.               | New `create_group_and_invite` takes a required 2–19 maximum; no unconfigured new group.                         |
-| Unconfigured wording      | **Yes** to the proposed **“Group maximum is not set”** phrase.     | Use that exact phrase for legacy/unconfigured groups; “Group is full” remains for full groups.                  |
-| Terminal groups           | **No** maximum editing after a group is abandoned/archived.        | Reject the edit; do not reopen a terminal group.                                                                |
-| Over-19 and lower maximum | The leader must **remove members manually**; no automatic removal. | Add a leader-only removal path; reject a maximum below the active count until the count is low enough.          |
-| UI ownership              | Adam is doing UI in the newly created Adam-repair task.            | Adam-repair implements the UI; existing backend/read/QA owners retain their roles.                              |
-| Direct join requests      | **A — presentation-only.**                                         | Keep the server RPC; remove the `/my-groups` direct control; use neutral copy; do not claim server enforcement. |
+| Question                  | Adam’s answer                                                      | Contract consequence                                                                                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New-group maximum         | **1A:** enter it at the same time as the group name.               | New `create_group_and_invite` takes a required 2–19 maximum; no unconfigured new group.                                                                                                                       |
+| Unconfigured wording      | **Yes** to the proposed **“Group maximum is not set”** phrase.     | Use that exact phrase for legacy/unconfigured groups; “Group is full” remains for full groups.                                                                                                                |
+| Terminal groups           | **No** maximum editing after a group is abandoned/archived.        | Reject the edit; do not reopen a terminal group.                                                                                                                                                              |
+| Over-19 and lower maximum | The leader must **remove members manually**; no automatic removal. | Add a leader-only removal path; reject a maximum below the active count until the count is low enough.                                                                                                        |
+| UI ownership              | Adam is doing UI in the newly created Adam-repair task.            | Adam-repair implements the UI; existing backend/read/QA owners retain their roles.                                                                                                                            |
+| Direct join requests      | **A — presentation-only.**                                         | Keep the server RPC; remove the `/my-groups` direct control; use neutral copy; do not claim server enforcement. **UI implementation is held** by the stale project instruction and Adam-repair’s safety hold. |
 
-Remaining before an executable migration is approved: Roy and Database Security must review the exact leader-only removal RPC semantics, including self-removal, leader succession, the existing removed-membership state/timestamp, retention of read-only history, and lock ordering. There are no remaining product questions about the maximum, wording, terminal groups, or direct-request presentation.
+### Review dispositions
+
+- **Jeffery (read/recruitment contract):** the contract now adds `capacity_count`, `capacity_state`, and `apply_block_reason`; defines archived/abandoned redaction; removes the non-executable conditional group-detail row; lists exact copy locations; and requires dependency-checked drop/recreate because the read RPC return types change. Client mappers must be updated in the same release.
+- **Roy (group/API):** the contract now rejects a reused forming group with a null or different maximum, checks the forming-group acceptance post-operation net count, preserves invitation authority for any active member (and the forming creator), explicitly drops the old three-argument creation signature, and defines the removal edge cases. Exact removal state/timestamp and re-invite uniqueness still need Database Security verification.
+- **Role 6 (lock/concurrency):** the earlier group-first removal order is withdrawn. The proposal now uses profile guard → target membership → group for removal, compatible with the existing membership-first chat/post paths and profile-guarded admission paths. Database Security must verify the membership-end trigger and any multi-membership path.
+- **QA:** “Group is full” and “Group maximum is not set” are the approved exact capacity messages. The over-19 and lower-maximum messages below remain **proposed copy**, not approved wording; QA must not report them as approved until Adam confirms them.
+
+Proposed, not approved, copy for the remaining cases:
+
+- Over-19: “This group has more than 19 active members. The leader must remove members before anyone can be added or a maximum can be set.”
+- Lower maximum: “Maximum cannot be lower than the current number of active members. Remove members first.”
+
+The direct-request review found an older handoff/project-instruction statement that still treated the question as unresolved. Adam’s later 2026-11-19 **Option A** answer is authoritative for this contract; the project-instruction replacement in section 12 records the presentation-only rule. That does not change the server RPC.
+
+The Adam-repair task has explicitly reported that it restored the existing People-page recruitment-post sentence and will not change the direct control, RPC, or wording until Adam updates the project instruction and releases the work. This is a live implementation discrepancy: the contract records Option A, but the current UI remains unchanged. Do not tell QA or users that the direct-request UI has been removed.
+
+Remaining before an executable migration is approved: Roy and Database Security must review the exact leader-only removal RPC semantics, including self-removal, leader succession, the existing removed-membership state/timestamp, retention of read-only history, re-invite uniqueness, and the canonical lock order. There are no remaining product questions about the maximum, terminal groups, or direct-request presentation; only the two proposed copy strings above need confirmation.
 
 ## 12. Project-instruction status
 
@@ -365,10 +444,10 @@ The project-level instruction still contains the obsolete “no maximum size” 
 
 > Collaboration sessions are not allowed to modify configuration via `manus-config config`.
 
-The local attempt was not applied project-wide. Adam or the project owner must apply the replacement in the project settings outside this collaboration session. The exact replacement paragraph is:
+The local attempt was not applied project-wide. Adam or the project owner must apply the replacement in the project settings outside this collaboration session. The exact replacement paragraph is below; until it is applied, the old instruction and the Adam-repair hold remain in force.
 
 > Approved group decisions (updated 2026-11-19; this supersedes the earlier no-maximum rule): the current group leader sets a hard maximum of 2–19 active members per group; 19 is an upper bound, not a default. A new group enters the maximum at the same time as the group name. Existing groups must choose a maximum before adding anyone. A leader may lower the maximum below the current active count only after manually removing members; the system must never remove members automatically. A group currently above 19 must be reduced manually to 19 or fewer before a valid maximum can be stored or members can be added. When a group is full, block new invitations and new join applications; existing pending invitations and requests remain pending and cannot be accepted or approved until a place opens. Show “Group is full” when blocked by the maximum, and show current/maximum on grouped people cards; show “Group maximum is not set” when no maximum is configured. Direct join requests are presentation-only: the server RPC remains callable for an eligible active group, but the UI must not expose direct request controls; visible applications come from recruitment posts. The current group leader — `study_groups.creator_id`, inherited after succession using the approved tie order (`joined_at`, then `created_at`, then `id`) — reviews join requests.
 
 ## 13. Next step
 
-Adam’s product answers are recorded. The next step is for Roy and Database Security to review the exact leader-only removal RPC/API and produce the executable migration for separate Test authorization. Adam-repair can implement UI against the approved contract. No SQL should run before the migration review and explicit authorization.
+Adam’s product answers are recorded. The next step is for Roy and Database Security to review the exact leader-only removal RPC/API, the canonical lock order, and the read-function drop/recreate plan, then produce the executable migration for separate Test authorization. Adam-repair can implement UI against the approved contract. No SQL should run before the migration review and explicit authorization.
