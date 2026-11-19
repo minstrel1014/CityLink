@@ -309,11 +309,11 @@ async function callMutationRpc<T>(
   args: object,
   shouldDispatch?: () => boolean
 ) {
-  const { client, accessToken } = await verifyRequestSession(
+  const { client, accessToken, authGeneration } = await verifyRequestSession(
     userId,
     "Your sign-in could not be verified. Sign in again."
   );
-  assertDispatchAllowed(shouldDispatch);
+  assertDispatchAllowed(shouldDispatch, authGeneration);
   const { data, error } = await bindRequestToken(
     client.rpc(name, args as never),
     accessToken

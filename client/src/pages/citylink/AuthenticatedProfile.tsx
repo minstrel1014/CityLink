@@ -19,6 +19,7 @@ import { Avatar, Brand, Status } from "@/components/citylink/Shared";
 import type { Student } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  assertDispatchAllowed,
   bindRequestToken,
   verifyRequestSession,
   type VerifiedRequestSession,
@@ -336,6 +337,7 @@ export default function AuthenticatedProfile({
         );
         if (!isCurrentRequest()) return;
       }
+      assertDispatchAllowed(isCurrentRequest, requestAuth.authGeneration);
       const { data, error } = await bindRequestToken(
         requestAuth.client
           .from("profiles")

@@ -378,7 +378,7 @@ async function verifyCurrentOwner(
     userId,
     "Your sign-in could not be verified. Sign in again before changing courses."
   );
-  assertDispatchAllowed(shouldDispatch);
+  assertDispatchAllowed(shouldDispatch, session.authGeneration);
   return session;
 }
 
@@ -393,10 +393,11 @@ export async function addOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const { client, accessToken } = await verifyCurrentOwner(
+  const { client, accessToken, authGeneration } = await verifyCurrentOwner(
     userId,
     shouldDispatch
   );
+  assertDispatchAllowed(shouldDispatch, authGeneration);
   const { error } = await bindRequestToken(
     client.from("enrolments").insert({
       student_id: userId,
@@ -418,10 +419,11 @@ export async function removeOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const { client, accessToken } = await verifyCurrentOwner(
+  const { client, accessToken, authGeneration } = await verifyCurrentOwner(
     userId,
     shouldDispatch
   );
+  assertDispatchAllowed(shouldDispatch, authGeneration);
   const { data, error } = await bindRequestToken(
     client
       .from("enrolments")

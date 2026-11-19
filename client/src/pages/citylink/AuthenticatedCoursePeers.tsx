@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -42,6 +42,10 @@ import {
   getPeopleInviteErrorMessage,
   PeopleGroupCapacity,
 } from "./PeopleCapacity";
+import {
+  getGroupCapacityState,
+  getVisibleGroupCapacityCount,
+} from "./groupCapacity";
 import "./CourseDetail.css";
 
 type DetailData = {
@@ -105,6 +109,25 @@ function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
     : "Active";
 }
 
+function inviteCapacityMessage(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return maximum !== null && visibleCount !== null
+      ? `Group is full (${visibleCount}/${maximum} members). The leader must open a place before you can invite.`
+      : "Group is full. The leader must open a place before you can invite.";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "Group maximum is not set. The leader must set a maximum from 2 to 19 before anyone can be invited.";
+  }
+  if (capacityState === "over_limit") {
+    return "This group has more than 19 active members. The leader must remove members before anyone can be added.";
+  }
+  return null;
+}
+
 export default function AuthenticatedCoursePeers({
   courseId,
   embedded = false,
@@ -154,7 +177,7 @@ export default function AuthenticatedCoursePeers({
   const [creationError, setCreationError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
   const requestGeneration = useRef(0);
-  useEffect(() => {
+  useLayoutEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -312,6 +335,36 @@ export default function AuthenticatedCoursePeers({
         : [],
     [courseId, ownData, userId]
   );
+  const inviteGroupOptions = useMemo(() => {
+    if (!ownData || !userId) return [];
+    return inviteGroups.map(group => {
+      const visibleCount = getVisibleGroupCapacityCount(
+        group,
+        ownData.groups.memberships,
+        userId
+      );
+      const capacityState =
+        visibleCount === null
+          ? group.max_members === null
+            ? "maximum_not_set"
+            : "unknown"
+          : getGroupCapacityState(visibleCount, group.max_members);
+      return { group, visibleCount, capacityState };
+    });
+  }, [inviteGroups, ownData, userId]);
+  const selectedInviteOption = inviteGroupOptions.find(
+    option => option.group.id === chosenGroupId
+  );
+  const activeInviteOption =
+    selectedInviteOption ??
+    (inviteGroupOptions.length === 1 ? inviteGroupOptions[0] : undefined);
+  const activeInviteBlockedMessage = activeInviteOption
+    ? inviteCapacityMessage(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.group.max_members
+      )
+    : null;
   const splitPeers = useMemo(
     () => splitCoursePeersByGroup(peers, summaries),
     [peers, summaries]
@@ -387,6 +440,22 @@ export default function AuthenticatedCoursePeers({
     const selectedGroupId =
       inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
     if (!creation && !selectedGroupId) return;
+    if (!creation) {
+      const selectedOption = inviteGroupOptions.find(
+        option => option.group.id === selectedGroupId
+      );
+      const blockedMessage = selectedOption
+        ? inviteCapacityMessage(
+            selectedOption.capacityState,
+            selectedOption.visibleCount,
+            selectedOption.group.max_members
+          )
+        : null;
+      if (blockedMessage) {
+        setFeedback({ tone: "error", message: blockedMessage });
+        return;
+      }
+    }
 
     const context = actionContext.current;
     const attempt = Symbol("people-invitation");
@@ -571,16 +640,38 @@ export default function AuthenticatedCoursePeers({
                   onChange={event => setChosenGroupId(event.target.value)}
                 >
                   <option value="">Select a group</option>
-                  {inviteGroups.map(group => (
-                    <option value={group.id} key={group.id}>
-                      {group.name || "Study group"} · {group.status}
-                    </option>
-                  ))}
+                  {inviteGroupOptions.map(option => {
+                    const blockedMessage = inviteCapacityMessage(
+                      option.capacityState,
+                      option.visibleCount,
+                      option.group.max_members
+                    );
+                    return (
+                      <option
+                        value={option.group.id}
+                        key={option.group.id}
+                        disabled={Boolean(blockedMessage)}
+                      >
+                        {option.group.name || "Study group"} ·{" "}
+                        {option.group.status}
+                        {blockedMessage ? ` · ${blockedMessage}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {activeInviteBlockedMessage && (
+                  <p className="course-detail-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="primary invite-compact"
-                  disabled={!chosenGroupId || Boolean(busyPeerId)}
+                  disabled={
+                    !chosenGroupId ||
+                    Boolean(busyPeerId) ||
+                    Boolean(activeInviteBlockedMessage)
+                  }
                   onClick={() => void sendInvite(peer)}
                 >
                   {busyPeerId === peer.profile_id ? "Sending…" : "Send invite"}
@@ -597,26 +688,35 @@ export default function AuthenticatedCoursePeers({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                className="primary invite-compact"
-                disabled={Boolean(busyPeerId)}
-                aria-label={`Invite ${peer.display_name}`}
-                onClick={event => {
-                  if (inviteGroups.length > 1) {
-                    setChoosingPeerId(peer.profile_id);
-                    setChosenGroupId("");
-                  } else {
-                    if (inviteGroups.length === 0) {
-                      createDialogTrigger.current = event.currentTarget;
-                    }
-                    void sendInvite(peer);
+              <>
+                <button
+                  type="button"
+                  className="primary invite-compact"
+                  disabled={
+                    Boolean(busyPeerId) || Boolean(activeInviteBlockedMessage)
                   }
-                }}
-              >
-                <Send size={15} />{" "}
-                {busyPeerId === peer.profile_id ? "Sending…" : "Invite"}
-              </button>
+                  aria-label={`Invite ${peer.display_name}`}
+                  onClick={event => {
+                    if (inviteGroups.length > 1) {
+                      setChoosingPeerId(peer.profile_id);
+                      setChosenGroupId("");
+                    } else {
+                      if (inviteGroups.length === 0) {
+                        createDialogTrigger.current = event.currentTarget;
+                      }
+                      void sendInvite(peer);
+                    }
+                  }}
+                >
+                  <Send size={15} />{" "}
+                  {busyPeerId === peer.profile_id ? "Sending…" : "Invite"}
+                </button>
+                {activeInviteBlockedMessage && (
+                  <p className="course-detail-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
+              </>
             )
           ) : (
             <button

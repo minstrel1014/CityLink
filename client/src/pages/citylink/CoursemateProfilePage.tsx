@@ -36,12 +36,14 @@ export default function CoursemateProfilePage({
 }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? session.user?.id : undefined;
+  const authGeneration = session.authGeneration ?? 0;
   const [profile, setProfile] = useState<CoursemateProfile | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setProfile(null);
     if (!userId) {
       setLoading(false);
       setError("Sign in to view this coursemate profile.");
@@ -67,7 +69,7 @@ export default function CoursemateProfilePage({
     return () => {
       active = false;
     };
-  }, [courseId, profileId, userId]);
+  }, [authGeneration, courseId, profileId, userId]);
 
   return (
     <Stage6Layout title="Coursemate profile">

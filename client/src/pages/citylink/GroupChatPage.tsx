@@ -42,6 +42,9 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
   useEffect(() => {
     const currentGeneration = ++generation.current;
     let active = true;
+    setDraft("");
+    setBusy(false);
+    setOlderBusy(false);
     const isCurrent = () =>
       active &&
       generation.current === currentGeneration &&

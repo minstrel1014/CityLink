@@ -8,6 +8,11 @@ import {
 } from "react";
 import type { AuthChangeEvent, Session, User } from "@supabase/supabase-js";
 import {
+  getLiveAuthGeneration,
+  isAuthBoundary,
+  markLiveAuthBoundary,
+} from "@/lib/authBoundary";
+import {
   supabaseClient,
   supabaseClientConfiguration,
   type SupabaseClientConfiguration,
@@ -47,7 +52,8 @@ const initialState: SupabaseSessionState = {
 
 export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState(initialState);
-  const authGeneration = useRef(0);
+  const authGeneration = useRef(getLiveAuthGeneration());
+  const lastUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!supabaseClient) return;
@@ -59,14 +65,11 @@ export function SupabaseSessionProvider({ children }: { children: ReactNode }) {
       receivedAuthEvent = true;
       if (!isActive) return;
 
-      if (
-        event === "INITIAL_SESSION" ||
-        event === "SIGNED_IN" ||
-        event === "SIGNED_OUT" ||
-        event === "PASSWORD_RECOVERY"
-      ) {
-        authGeneration.current += 1;
+      const nextUserId = session?.user?.id ?? null;
+      if (isAuthBoundary(event, lastUserId.current, nextUserId)) {
+        authGeneration.current = markLiveAuthBoundary();
       }
+      lastUserId.current = nextUserId;
       setState({
         configuration: "ready",
         status: "ready",

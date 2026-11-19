@@ -1,4 +1,5 @@
 import { supabaseClient } from "@/lib/supabaseClient";
+import { getLiveAuthGeneration } from "@/lib/authBoundary";
 
 type SupabaseClient = NonNullable<typeof supabaseClient>;
 
@@ -9,6 +10,7 @@ export interface VerifiedRequestSession {
   client: SupabaseClient;
   userId: string;
   accessToken: string;
+  authGeneration: number;
 }
 
 /**
@@ -24,6 +26,7 @@ export async function verifyRequestSession(
     throw new Error("Supabase is not configured in this environment.");
   }
   if (!userId) throw new Error(errorMessage);
+  const authGeneration = getLiveAuthGeneration();
 
   let accessToken: string;
   try {
@@ -42,11 +45,20 @@ export async function verifyRequestSession(
     throw new Error(errorMessage);
   }
 
-  return { client: supabaseClient, userId, accessToken };
+  return { client: supabaseClient, userId, accessToken, authGeneration };
 }
 
-/** Check the caller's UI context immediately before dispatching a mutation. */
-export function assertDispatchAllowed(shouldDispatch?: () => boolean): void {
+/** Check the live auth boundary and the caller's UI context before dispatch. */
+export function assertDispatchAllowed(
+  shouldDispatch?: () => boolean,
+  expectedAuthGeneration?: number
+): void {
+  if (
+    expectedAuthGeneration !== undefined &&
+    getLiveAuthGeneration() !== expectedAuthGeneration
+  ) {
+    throw new Error(DISPATCH_CONTEXT_CHANGED_MESSAGE);
+  }
   if (shouldDispatch && !shouldDispatch()) {
     throw new Error(DISPATCH_CONTEXT_CHANGED_MESSAGE);
   }

@@ -7,7 +7,6 @@ import React, {
 } from "react";
 import { ArrowRight, Users } from "lucide-react";
 import { Link } from "wouter";
-import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { PageHeading } from "@/components/citylink/Shared";
 import AuthenticatedCoursePeers from "@/pages/citylink/AuthenticatedCoursePeers";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
@@ -136,6 +135,8 @@ export function GroupWorkspaceContent({
   const groupsAttempt = useRef(0);
   const postsAttempt = useRef(0);
   const eligibilityAttempt = useRef(0);
+  const groupsOperation = useRef(false);
+  const postsOperation = useRef(false);
 
   // Recheck the token and attempt inside React's updater too: it may be applied
   // after another retry, refresh, or context change has already begun.
@@ -358,9 +359,11 @@ export function GroupWorkspaceContent({
       !scope.isCurrent(token) ||
       !ownSnapshot.groupsHasMore ||
       !ownSnapshot.groupsCursor ||
-      groupsPageBusy
+      groupsPageBusy ||
+      groupsOperation.current
     )
       return;
+    groupsOperation.current = true;
     setGroupsPageBusy(true);
     setFeedback("");
     await runScoped(
@@ -393,7 +396,10 @@ export function GroupWorkspaceContent({
             };
           }),
         error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
-        finally: () => setGroupsPageBusy(false),
+        finally: () => {
+          groupsOperation.current = false;
+          setGroupsPageBusy(false);
+        },
       }
     );
   }
@@ -405,9 +411,11 @@ export function GroupWorkspaceContent({
       !scope.isCurrent(token) ||
       !ownSnapshot.postsHasMore ||
       !ownSnapshot.postsCursor ||
-      postsPageBusy
+      postsPageBusy ||
+      postsOperation.current
     )
       return;
+    postsOperation.current = true;
     setPostsPageBusy(true);
     setFeedback("");
     await runScoped(
@@ -440,22 +448,94 @@ export function GroupWorkspaceContent({
             };
           }),
         error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
-        finally: () => setPostsPageBusy(false),
+        finally: () => {
+          postsOperation.current = false;
+          setPostsPageBusy(false);
+        },
       }
     );
   }
 
+  async function refreshGroupsForCapacity(token: WorkspaceToken) {
+    if (!scope.isCurrent(token) || groupsOperation.current) return;
+    groupsOperation.current = true;
+    setGroupsPageBusy(true);
+    try {
+      const knownIds = new Set(ownSnapshot?.groups.map(group => group.groupId));
+      const targetCount = Math.max(1, knownIds.size);
+      const refreshed: CourseGroupSummary[] = [];
+      let cursor: CourseGroupCursor | undefined;
+      let hasMore = false;
+      let nextCursor: CourseGroupCursor | null = null;
+      let pages = 0;
+      do {
+        const page = await listCurrentTermCourseGroups(
+          token.userId,
+          token.courseId,
+          cursor
+        );
+        if (!scope.isCurrent(token)) return;
+        refreshed.push(...page.items);
+        hasMore = page.hasMore;
+        nextCursor = page.nextCursor;
+        cursor = page.nextCursor ?? undefined;
+        pages += 1;
+        const refreshedIds = new Set(refreshed.map(group => group.groupId));
+        if (
+          !page.items.length ||
+          !page.hasMore ||
+          !page.nextCursor ||
+          (refreshed.length >= targetCount &&
+            [...knownIds].every(id => refreshedIds.has(id))) ||
+          pages >= 20
+        )
+          break;
+      } while (true);
+      if (!scope.isCurrent(token)) return;
+      setSnapshot(previous => {
+        if (
+          !previous ||
+          !scope.isCurrent(previous.token) ||
+          previous.token.generation !== token.generation ||
+          (previous.token.authGeneration ?? 0) !== (token.authGeneration ?? 0)
+        )
+          return previous;
+        const refreshedIds = new Set(refreshed.map(group => group.groupId));
+        const missing = previous.groups.filter(
+          group => !refreshedIds.has(group.groupId)
+        );
+        return {
+          ...previous,
+          groups: [...refreshed, ...missing],
+          groupsHasMore: hasMore,
+          groupsCursor: nextCursor,
+        };
+      });
+    } catch (refreshError) {
+      if (scope.isCurrent(token)) {
+        setFeedback(getStage6ErrorMessage(refreshError));
+      }
+    } finally {
+      groupsOperation.current = false;
+      if (scope.isCurrent(token)) setGroupsPageBusy(false);
+    }
+  }
+
   async function refreshPostsForCapacity() {
     const token = ownSnapshot?.token;
-    if (!token || !scope.isCurrent(token) || postsRefreshBusy) return;
-    const targetCount = Math.max(1, ownSnapshot.posts.length);
+    if (!token || !scope.isCurrent(token) || postsOperation.current) return;
+    postsOperation.current = true;
     setPostsRefreshBusy(true);
+    setPostsPageBusy(true);
     setFeedback("");
     try {
+      const knownIds = new Set(ownSnapshot.posts.map(post => post.id));
+      const targetCount = Math.max(1, knownIds.size);
       const refreshed: GroupRecruitmentPost[] = [];
       let cursor: RecruitmentPostCursor | undefined;
       let hasMore = false;
       let nextCursor: RecruitmentPostCursor | null = null;
+      let pages = 0;
       do {
         const page = await listGroupRecruitmentPosts(
           token.userId,
@@ -467,8 +547,18 @@ export function GroupWorkspaceContent({
         hasMore = page.hasMore;
         nextCursor = page.nextCursor;
         cursor = page.nextCursor ?? undefined;
-        if (!page.items.length || !page.hasMore || !page.nextCursor) break;
-      } while (refreshed.length < targetCount);
+        pages += 1;
+        const refreshedIds = new Set(refreshed.map(post => post.id));
+        if (
+          !page.items.length ||
+          !page.hasMore ||
+          !page.nextCursor ||
+          (refreshed.length >= targetCount &&
+            [...knownIds].every(id => refreshedIds.has(id))) ||
+          pages >= 20
+        )
+          break;
+      } while (true);
       if (!scope.isCurrent(token)) return;
       setSnapshot(previous => {
         if (
@@ -478,25 +568,34 @@ export function GroupWorkspaceContent({
           (previous.token.authGeneration ?? 0) !== (token.authGeneration ?? 0)
         )
           return previous;
+        const refreshedIds = new Set(refreshed.map(post => post.id));
+        const missing = previous.posts.filter(
+          post => !refreshedIds.has(post.id)
+        );
         return {
           ...previous,
-          posts: refreshed,
+          posts: [...refreshed, ...missing],
           postsHasMore: hasMore,
           postsCursor: nextCursor,
         };
       });
+      await refreshGroupsForCapacity(token);
       // People cards load their own summaries. Revalidate them too so a
       // refreshed post and its People card cannot show contradictory capacity.
       setPeopleRefreshToken(value => value + 1);
       setFeedback(
-        "Group capacity refreshed. Unsaved drafts and loaded posts were kept."
+        "Group capacity refreshed. Unsaved drafts, loaded posts, and loaded group cards were kept."
       );
     } catch (refreshError) {
       if (scope.isCurrent(token)) {
         setFeedback(getStage6ErrorMessage(refreshError));
       }
     } finally {
-      if (scope.isCurrent(token)) setPostsRefreshBusy(false);
+      postsOperation.current = false;
+      if (scope.isCurrent(token)) {
+        setPostsRefreshBusy(false);
+        setPostsPageBusy(false);
+      }
     }
   }
 
@@ -520,10 +619,12 @@ export function GroupWorkspaceContent({
           setBusyAction(`apply:${post.id}`);
           setFeedback("");
         },
-        success: () =>
+        success: () => {
           setFeedback(
             "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
-          ),
+          );
+          void refreshPostsForCapacity();
+        },
         error: applyError =>
           setFeedback(getGroupWorkflowErrorMessage(applyError)),
         finally: () => setBusyAction(null),
@@ -880,14 +981,6 @@ export function GroupWorkspaceContent({
                       server when opened.
                     </p>
                     <div className="stage6-card-actions">
-                      {group.canCreatePost && (
-                        <GroupChatLink
-                          groupId={group.groupId}
-                          className="secondary"
-                        >
-                          Open chat <ArrowRight size={15} />
-                        </GroupChatLink>
-                      )}
                       <Link
                         className="secondary"
                         href={`/groups/${encodeURIComponent(group.groupId)}/members`}

@@ -88,9 +88,25 @@ Mounted jsdom tests now cover a valid stored name, the needs-name form, a profil
 
 Final local checks for the blocker fix: `corepack pnpm check` passed; `corepack pnpm test` passed **27 files / 476 tests**; `corepack pnpm build` passed with **1,748 modules** and the existing configuration-script/chunk advisories; Prettier and `git diff --check` passed. These are mounted test-runtime checks, not a signed-in browser or live Test result. No SQL was executed and neither Test nor Main was changed.
 
+### Post-`dd20e6a` lifecycle and capacity follow-up — 2026-11-19
+
+The independent review is still pinned to `dd20e6a`; this follow-up is not independently reviewed yet. It addresses the later findings without changing SQL, RLS, Test, or Main:
+
+- Same-session `SIGNED_IN` on tab focus no longer increments the auth generation or remounts drafts. `INITIAL_SESSION`, `SIGNED_OUT`, `PASSWORD_RECOVERY`, and a different-user sign-in remain boundaries. A process-local auth marker advances synchronously so a verified old session cannot dispatch after the boundary, even before React commits.
+- Course enrolment writes recheck the captured boundary after `verifyCurrentOwner`; profile saves recheck before the second write. Group, chat, recruitment, and display-name mutations also pass the captured generation to the shared dispatch guard.
+- People action invalidation now runs in `useLayoutEffect`, closing the passive-effect unmount window.
+- Chat clears its draft and busy state when the group or auth generation changes.
+- Coursemate profile state is cleared when the account or auth generation changes.
+- Capacity refresh is serialized against post/group pagination, preserves loaded posts and group cards that were not present in the refreshed range, preserves drafts, and refreshes browseable group cards as well as People summaries.
+- People invites now disable and explain known `full`, `maximum_not_set`, and `over_limit` groups before dispatch. A genuinely unknown forming-creator count remains server-checked.
+- The browse-card `Open chat` branch gated on `canCreatePost` was removed. Private chat remains available from the current-member card in My Group through `Open Group Chat`.
+- A successful Apply now refreshes recruitment posts and group cards so the pending state is not left clickable.
+- Workflow group reads now validate `max_members` as null or a whole number from 2 to 19 instead of accepting an unvalidated cast.
+
+Local checks for this follow-up: `corepack pnpm check` passed; `corepack pnpm test` passed **28 files / 482 tests**; `corepack pnpm build` passed with **1,749 modules** and the existing configuration-script and chunk-size warnings. These are mocked/local checks, not signed-in browser, live RLS, or concurrent-user QA.
+
 ### Remaining pre-existing review risks (not fixed in this follow-up)
 
-- Successful recruitment Apply still does not refresh the post’s pending state; the idempotent server RPC prevents a duplicate request, but the UI can remain clickable until the post list reloads.
 - Profile fields remain editable while a save is pending; a late completion can replace the draft and discard later typing.
 - The installed auth SDK’s `getUser` missing-session error path can remove a newer stored session; this is pre-existing and not unique to this branch. Authorized mounted-browser/account-switch QA must verify it.
 - These are tracked separately from the four addressed review findings and do not imply server authorization is weak; server RLS/RPC checks remain authoritative.

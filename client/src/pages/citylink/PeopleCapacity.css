@@ -19,6 +19,15 @@
   color: #8c5a2d;
 }
 
+.course-detail-page .course-detail-capacity-hint,
+.course-detail-embedded .course-detail-capacity-hint {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+  color: #8c5a2d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .people-create-group-dialog {
   max-height: calc(100dvh - 2rem);
   overflow-y: auto;

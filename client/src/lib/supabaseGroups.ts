@@ -584,7 +584,10 @@ function mapOwnGroup(
       status !== "archived") ||
     typeof value.name !== "string" ||
     (maxMembers !== null &&
-      (typeof maxMembers !== "number" || !Number.isSafeInteger(maxMembers)))
+      (typeof maxMembers !== "number" ||
+        !Number.isSafeInteger(maxMembers) ||
+        maxMembers < 2 ||
+        maxMembers > 19))
   ) {
     return ownGroupReadFailed();
   }
@@ -714,6 +717,54 @@ export async function loadOwnCourseGroupSnapshot(
   return { groups, memberships };
 }
 
+function mapWorkflowGroup(value: unknown): StudyGroupRow {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id",
+      "course_id",
+      "creator_id",
+      "status",
+      "name",
+      "max_members",
+      "created_at",
+    ])
+  ) {
+    throw new Error("The group workflow returned an invalid group record.");
+  }
+  const id = ownGroupId(value.id);
+  const courseId = ownGroupId(value.course_id);
+  const creatorId =
+    value.creator_id === null ? null : ownGroupId(value.creator_id);
+  const status = value.status;
+  const maxMembers = value.max_members;
+  if (
+    (status !== "forming" &&
+      status !== "active" &&
+      status !== "abandoned" &&
+      status !== "archived") ||
+    typeof value.name !== "string" ||
+    typeof value.created_at !== "string" ||
+    !value.created_at.trim() ||
+    (maxMembers !== null &&
+      (typeof maxMembers !== "number" ||
+        !Number.isSafeInteger(maxMembers) ||
+        maxMembers < 2 ||
+        maxMembers > 19))
+  ) {
+    throw new Error("The group workflow returned invalid group data.");
+  }
+  return {
+    id,
+    course_id: courseId,
+    creator_id: creatorId,
+    status,
+    name: value.name,
+    max_members: maxMembers,
+    created_at: value.created_at,
+  };
+}
+
 export async function loadGroupWorkflowSnapshot(
   userId: string
 ): Promise<GroupWorkflowSnapshot> {
@@ -763,7 +814,7 @@ export async function loadGroupWorkflowSnapshot(
   if (requests.error) throw requests.error;
 
   return {
-    groups: (groups.data ?? []) as StudyGroupRow[],
+    groups: (groups.data ?? []).map(mapWorkflowGroup),
     memberships: (memberships.data ?? []) as GroupMembershipRow[],
     incomingInvitations: (incoming.data ?? []) as GroupInvitationRow[],
     outgoingInvitations: (outgoing.data ?? []) as GroupInvitationRow[],
@@ -787,8 +838,9 @@ async function callGroupRpc<T>(
   args: Record<string, unknown>,
   shouldDispatch?: () => boolean
 ): Promise<T> {
-  const { client, accessToken } = await verifyRequestSession(userId);
-  assertDispatchAllowed(shouldDispatch);
+  const { client, accessToken, authGeneration } =
+    await verifyRequestSession(userId);
+  assertDispatchAllowed(shouldDispatch, authGeneration);
   const { data, error } = await bindRequestToken(
     client.rpc(name, args as never),
     accessToken
