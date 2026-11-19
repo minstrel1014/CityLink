@@ -1,8 +1,8 @@
 # Group hard-maximum migration draft
 
-Status: **DRAFT — revised after Adam-repair’s static review; fresh Roy/Role 6 review required; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
+Status: **DRAFT — revised after Role 6’s fresh review at `80a829b`; exact-head re-review required; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
 
-Role 6 found no remaining static blockers at `252e292`, but Adam-repair’s later review found the recruitment Apply regression and other open findings. The SQL has changed since Role 6’s review, so a fresh exact-head review is required. This remains a static draft: it does not validate live catalog state, ownership/RLS, or runtime concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
+Role 6’s fresh review at `80a829b` confirmed the positive Apply fix but found one remaining API-contract mismatch: `profile_unavailable` was checked before `already_member` and the pending-action reasons. That branch has now been moved to the approved position. Because the SQL changed again, a new exact-head re-review is required. This remains a static draft: it does not validate runtime RLS/ownership or concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
 
 ## What the draft contains
 
@@ -56,7 +56,7 @@ A forming group with only its creator and one pending invitation must not appear
 
 Adam-repair’s static review found that `list_group_recruitment_posts` always returned a non-null `apply_block_reason`, so `apply_enabled` was always false. The `ELSE 'not_eligible'` branch is now `WHEN NOT e.apply_enabled THEN 'not_eligible' ELSE NULL`, allowing an eligible viewer of an open post with room to apply.
 
-The verification set must cover an eligible/open/room positive case returning `apply_enabled = true` and `apply_block_reason = NULL`, plus full, unset, over-limit, closed, pending-invitation, pending-request, already-member, and profile-unavailable cases. Overlapping conditions and the intended reason precedence must be confirmed with Roy and Role 6; the current SQL checks profile availability before membership/pending actions, which differs from the proposed contract’s stated order.
+Role 6’s fresh review then found that the profile-availability branch was checked before membership and pending actions. The branch order is now the approved order: group inactive, post closed, capacity, `already_member`, `pending_invitation`, `pending_request`, `profile_unavailable`, `not_eligible`, then null. The verification set must cover an eligible/open/room positive case returning `apply_enabled = true` and `apply_block_reason = NULL`, plus full, unset, over-limit, closed, pending-invitation, pending-request, already-member, and profile-unavailable cases, including overlapping conditions.
 
 ### Additional review findings still open
 
@@ -73,6 +73,7 @@ Adam-repair’s report also flagged these items for owner review; none is change
 ## Static checks performed
 
 - Role 6 static review at `252e292` (historical, before the Apply fix): no remaining blockers; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
+- Fresh Role 6 review at `80a829b`: positive Apply fix confirmed; one precedence mismatch found and now corrected; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
 - `pglast` parsed the migration as 43 top-level SQL statements with no parse error.
 - `git diff --check` passed.
 - `corepack pnpm check` passed.
@@ -82,10 +83,27 @@ Adam-repair’s report also flagged these items for owner review; none is change
 
 These checks do not validate PL/pgSQL runtime semantics, live RLS behavior, function ownership, or concurrency. Role 6’s final SQL review and a separately authorized Test run remain required.
 
+## Fresh Test catalog evidence
+
+Role 6’s fresh review included read-only catalog metadata from the disposable Test project `wkzclgmhrtecnpexfesr`; no application rows were read. At the `80a829b` snapshot:
+
+- There was no `study_groups.max_members` column or `study_groups_max_members_chk` constraint, so there was no same-name object to mask the add-column path.
+- Group tables had RLS enabled; `authenticated` had SELECT only and `anon` had no table privileges.
+- The existing `study_groups` SELECT policy was `private.can_view_group`.
+- There was no non-internal trigger on `group_invitations`; existing membership-end and terminal-group recruitment-post triggers were present.
+- Relevant public RPCs were owned by `postgres`, `SECURITY DEFINER`, and executable by `authenticated` but not `anon`; the invitation guard was not `SECURITY DEFINER` and had no browser EXECUTE grant.
+- The `private` schema had USAGE for `authenticated`, but the proposed helper was explicitly revoked from browser roles; `service_role` lacked private-schema USAGE.
+
+These observations reduce uncertainty but do not replace the exact-head re-review and authorized runtime QA.
+
+## Remaining integration issue
+
+`list_current_term_course_groups` still computes `can_create_post` from active membership while excluding the viewer’s own active group from the browse rows. The field is therefore always false for returned rows, and the checked-in client consumes it for post-creation UI. This is pre-existing and is not silently changed in this capacity migration; the coordinated client/API work must decide whether to remove the flag from this browse RPC and source create capability from My Groups, or explicitly change the RPC audience.
+
 ## Open questions
 
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
-- Fresh Roy/Role 6 review is required for the recruitment Apply positive case and the exact revised head.
+- Fresh Roy/Role 6 review is required for the corrected precedence and the exact revised head.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s separate Test authorization is still required after the final SQL review.

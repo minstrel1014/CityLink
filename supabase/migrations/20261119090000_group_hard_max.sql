@@ -1473,12 +1473,6 @@ begin
           when e.capacity_count > 19 then 'group_over_limit'
           when e.max_members is null then 'maximum_not_set'
           when e.capacity_count >= e.max_members then 'group_full'
-          when not exists (
-            select 1
-            from public.profiles as viewer
-            where viewer.id = (select auth.uid())
-              and viewer.status in ('open', 'considering')
-          ) then 'profile_unavailable'
           when exists (
             select 1
             from public.group_memberships as own_m
@@ -1501,6 +1495,12 @@ begin
               and r.requester_id = (select auth.uid())
               and r.status = 'pending'
           ) then 'pending_request'
+          when not exists (
+            select 1
+            from public.profiles as viewer
+            where viewer.id = (select auth.uid())
+              and viewer.status in ('open', 'considering')
+          ) then 'profile_unavailable'
           when not e.apply_enabled then 'not_eligible'
           else null
         end as apply_block_reason
