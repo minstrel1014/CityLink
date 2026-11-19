@@ -1,8 +1,8 @@
 # Group hard-maximum migration draft
 
-Status: **DRAFT — revised after Role 6’s fresh review at `80a829b`; exact-head re-review required; not execution authorization and not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
+Status: **DRAFT — Role 6 exact-head static review at `eab4335` found no new SQL blockers; client release and Test authorization still pending; not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
 
-Role 6’s fresh review at `80a829b` confirmed the positive Apply fix but found one remaining API-contract mismatch: `profile_unavailable` was checked before `already_member` and the pending-action reasons. That branch has now been moved to the approved position. Because the SQL changed again, a new exact-head re-review is required. This remains a static draft: it does not validate runtime RLS/ownership or concurrency, and it does not authorize Test or Main execution. The coordinated client release and Adam’s separate Test authorization are still required. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
+Role 6’s exact-head review at `eab4335` confirmed the corrected `apply_block_reason` precedence and found no new static SQL blocker. This is not formal database-application approval: it does not validate runtime authorization, concurrency, or application behavior. The coordinated capacity-client release is still absent, and Adam chose to wait for it before Test application. No SQL was executed, no Test or Main database was connected to for this draft, and no migration was applied.
 
 ## What the draft contains
 
@@ -74,6 +74,7 @@ Adam-repair’s report also flagged these items for owner review; none is change
 
 - Role 6 static review at `252e292` (historical, before the Apply fix): no remaining blockers; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
 - Fresh Role 6 review at `80a829b`: positive Apply fix confirmed; one precedence mismatch found and now corrected; 43 top-level statements and 13 complete PL/pgSQL functions parsed offline.
+- Role 6 exact-head review at `eab4335`: no new static SQL blockers; 43 statements and 13 function bodies parsed; runtime authorization/concurrency not tested.
 - `pglast` parsed the migration as 43 top-level SQL statements with no parse error.
 - `git diff --check` passed.
 - `corepack pnpm check` passed.
@@ -103,7 +104,7 @@ These observations reduce uncertainty but do not replace the exact-head re-revie
 ## Open questions
 
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
-- Fresh Roy/Role 6 review is required for the corrected precedence and the exact revised head.
+- Role 6’s exact-head static review is recorded; no formal database-application approval has been given.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s separate Test authorization is still required after the final SQL review.
