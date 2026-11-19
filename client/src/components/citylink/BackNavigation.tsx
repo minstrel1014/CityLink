@@ -1,4 +1,4 @@
-import { useSyncExternalStore, type ReactNode } from "react";
+import React, { useSyncExternalStore, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import { findBackTarget, initialAppHistory } from "@/lib/appHistory";
