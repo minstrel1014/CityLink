@@ -5,6 +5,7 @@
 - **Human owner:** Adam. His base role remains Project, Integration, and Release Lead. Demo repair, signed-in user journey, QA refinements, and capacity-client UI are additional assignments on the existing Adam-repair task; none replaces an earlier role or task.
 - **2026-11-19 instruction:** Adam asked Adam-repair to prepare the coordinated capacity-client pull request and send it to the existing integration-lead task for review and coordination.
 - **Affected existing roles:** Roy — group creation, invitations, join requests and management; Jeffery — recruitment and People read integration; Role 6 — database/security review; Eunice — QA; Adam — product, repair and release coordination. This assignment does not transfer or overwrite their roles.
+- **Review:** [Draft PR #36](https://github.com/minstrel1014/CityLink/pull/36), branch `feature/adam-capacity-client`. Implementation checkpoint `d52c3591e968362672167e19e9a1649d2ebc49d6` was pushed and verified; the PR remains unmerged.
 
 ## Approved product behavior
 
