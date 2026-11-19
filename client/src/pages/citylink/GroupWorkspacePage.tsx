@@ -35,6 +35,7 @@ import {
   Stage6ApplyControl,
   Stage6CapacityCount,
   Stage6CapacityStatus,
+  withLocalPendingState,
 } from "./Stage6Capacity";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 import {
@@ -127,6 +128,9 @@ export function GroupWorkspaceContent({
   const [groupsPageBusy, setGroupsPageBusy] = useState(false);
   const [postsPageBusy, setPostsPageBusy] = useState(false);
   const [postsRefreshBusy, setPostsRefreshBusy] = useState(false);
+  const [locallyPendingPostIds, setLocallyPendingPostIds] = useState<string[]>(
+    []
+  );
   const [peopleRefreshToken, setPeopleRefreshToken] = useState(0);
   const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
@@ -287,6 +291,7 @@ export function GroupWorkspaceContent({
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
     setPostsRefreshBusy(false);
+    setLocallyPendingPostIds([]);
     setCreatingGroupId(null);
     setEditingPostId(null);
     setDraft("");
@@ -349,6 +354,7 @@ export function GroupWorkspaceContent({
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
     setPostsRefreshBusy(false);
+    setLocallyPendingPostIds([]);
     setReloadToken(value => value + 1);
   }
 
@@ -620,6 +626,9 @@ export function GroupWorkspaceContent({
           setFeedback("");
         },
         success: () => {
+          setLocallyPendingPostIds(previous =>
+            previous.includes(post.id) ? previous : [...previous, post.id]
+          );
           setFeedback(
             "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
           );
@@ -1205,8 +1214,15 @@ export function GroupWorkspaceContent({
                             </>
                           )}
                         <Stage6ApplyControl
-                          post={post}
-                          busy={busyAction !== null || postsRefreshBusy}
+                          post={withLocalPendingState(
+                            post,
+                            locallyPendingPostIds.includes(post.id)
+                          )}
+                          busy={
+                            busyAction !== null ||
+                            postsRefreshBusy ||
+                            postsPageBusy
+                          }
                           applying={busyAction === `apply:${post.id}`}
                           onApply={() => void applyToJoin(post)}
                           onRefresh={() => void refreshPostsForCapacity()}

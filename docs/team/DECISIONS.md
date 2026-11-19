@@ -314,3 +314,18 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Authorization:** apply `20261118050000_stage6_chat_recruitment.sql` to the disposable Test project (ref `wkzclgmhrtecnpexfesr`) only, after Role 6 re-checks the exact file. Conditions: forward-only, one migration, no reset/TRUNCATE, no Main access, stop on error, verification queries after apply; Test data writes or accounts need separate approval.
 - **Role 6 items:** 2 (group-row locks and open-status guards) and 3 (clear creator_id on abandonment) applied; 4 verified (private schema not exposed by PostgREST).
 - **Files:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`, `docs/stage6/STAGE6_TEST_MIGRATION.md`.
+
+## 2026-11-20 — PR #37 capacity-integration review dispositions
+
+- **Status:** implementation/QA dispositions, not new product approval. Draft PR #37 remains unmerged and unreleased; no SQL, migration, Test/Main change, publish, or merge is authorized by this entry.
+- **Human approver:** None for the remaining product choices. Adam is the project owner; independent reviews were supplied by Adam-repair, Eunice, Roy, Jeffery, and Role 6.
+- **Decisions implemented on `feature/capacity-integration-20261119-v2`:**
+  1. The Invitations page is keyed, reloaded, and dispatch-guarded by `authGeneration`, so a same-user auth boundary cannot accept an invitation using stale context. Pure identity helpers and a regression test cover this.
+  2. People-page invite controls fail closed while a full roster is pending, failed, or unknown, with a visible retry/explanation. My Groups blocks unknown capacity for active groups; the forming-creator server-checked path remains.
+  3. The visible People precheck uses exactly `Group is full` and `Group maximum is not set`; explanatory text is separate.
+  4. A successful recruitment Apply keeps a durable local pending marker, and Apply is busy while posts paginate.
+  5. The cutover proposal’s creation signature is corrected from five arguments to the actual four-argument `create_group_and_invite`.
+- **Roles affected:** Adam (Project/Integration/Release Lead), Adam-repair (additive capacity-client/UI assignment), Roy (group workflows), Jeffery (recruitment/chat), Eunice (QA/docs), Role 6 (database/security review).
+- **Data/API implications:** client-only changes on the integration branch; no schema, RLS, grant, RPC, table, Test, or Main change. The server remains authoritative for capacity and invitation acceptance.
+- **Open product choices:** (a) whether a forming creator omitted from the roster should count as 1 or be unknown/server-checked; (b) whether refresh during Load more should be queued, rejected, or allowed to preserve the loaded range; (c) whether the portfolio existing-group invite needs a full-roster precheck before release.
+- **Remaining gates:** exact-head review of the final integration PR, fresh review of the exact PR #34 SQL head, client/schema cutover and cached-client recovery approval, separate Test-only authorization, and signed-in multi-account/concurrent-last-place QA.

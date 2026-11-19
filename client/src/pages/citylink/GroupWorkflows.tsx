@@ -375,6 +375,10 @@ export default function GroupWorkflows() {
           : "unknown"
         : getGroupCapacityState(inviteCount, selectedInviteGroup.max_members)
       : null;
+  const allowUnknownInvite =
+    inviteCapacityState === "unknown" &&
+    selectedInviteGroup?.status === "forming" &&
+    selectedInviteGroup.creator_id === userId;
   const otherActiveGroups = groupsInCourse.filter(
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
@@ -483,7 +487,7 @@ export default function GroupWorkflows() {
       !userId ||
       !existingGroupId ||
       !inviteeId ||
-      (inviteCapacityState !== "available" && inviteCapacityState !== "unknown")
+      (inviteCapacityState !== "available" && !allowUnknownInvite)
     )
       return;
     void runAction(
@@ -945,8 +949,18 @@ export default function GroupWorkflows() {
                   )}
                   {inviteCapacityState === "unknown" && (
                     <p className="group-workflow-peek">
-                      The full member count is not available in this view. The
-                      server will check capacity when you send an invitation.
+                      {allowUnknownInvite
+                        ? "The full member count is not available in this view. The server will check capacity when you send an invitation."
+                        : "Group capacity could not be verified. Refresh group status before inviting."}{" "}
+                      {!allowUnknownInvite && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => setRetryToken(value => value + 1)}
+                        >
+                          Refresh group status
+                        </button>
+                      )}
                     </p>
                   )}
                   <label htmlFor="invite-peer">Coursemate</label>
@@ -976,7 +990,7 @@ export default function GroupWorkflows() {
                       !existingGroupId ||
                       !inviteeId ||
                       (inviteCapacityState !== "available" &&
-                        inviteCapacityState !== "unknown") ||
+                        !allowUnknownInvite) ||
                       busyAction !== "" ||
                       peerLoading
                     }

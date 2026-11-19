@@ -6,6 +6,34 @@ export type InvitationFeedback = {
   message: string;
 };
 
+export function invitationViewKey(
+  userId: string | null,
+  authGeneration: number
+): string {
+  return `${userId ?? "signed-out"}:${authGeneration}`;
+}
+
+export function isInvitationViewCurrent({
+  mounted,
+  userId,
+  currentUserId,
+  authGeneration,
+  currentAuthGeneration,
+}: {
+  mounted: boolean;
+  userId: string | null;
+  currentUserId: string | null;
+  authGeneration: number;
+  currentAuthGeneration: number;
+}): boolean {
+  return (
+    mounted &&
+    Boolean(userId) &&
+    currentUserId === userId &&
+    currentAuthGeneration === authGeneration
+  );
+}
+
 export function canAcceptReceivedInvitation(
   invitation: Pick<GroupInvitationRow, "status" | "recipient_id">,
   readyUserId: string | null

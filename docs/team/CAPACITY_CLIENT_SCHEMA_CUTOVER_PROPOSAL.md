@@ -4,7 +4,7 @@ Status: **proposal only.** No SQL execution, Test/Main change, merge, publish, o
 
 ## The compatibility problem
 
-The capacity client calls a new five-argument `create_group_and_invite` and expects capacity fields from the read RPCs. The draft migration removes the old three-argument creation function so an old client cannot bypass the hard maximum. That creates two unavoidable windows:
+The capacity client calls a new four-argument `create_group_and_invite` and expects capacity fields from the read RPCs. The draft migration removes the old three-argument creation function so an old client cannot bypass the hard maximum. That creates two unavoidable windows:
 
 1. **Old client + new schema:** the old client calls a missing RPC, so group creation fails. This is safer than silently bypassing capacity, but the user needs a clear recovery message.
 2. **New client + old schema:** the new client calls a function that does not exist yet. This must not be released before the schema is ready.
@@ -15,7 +15,7 @@ There is no zero-downtime order that makes both old and new clients fully functi
 
 1. **Freeze and review.** Merge the reviewed client and migration PRs only after the lead’s separate approval. Confirm the exact client head, exact migration head, and reviewed SQL are the same artifacts that will be used.
 2. **Preflight and backup.** Take a verified logical backup/snapshot reference of disposable Test (`wkzclgmhrtecnpexfesr`). Record the migration history and preflight counts. Do not reset or delete Test. Confirm no unapproved data writes are in progress.
-3. **Apply a compatibility migration first.** Add the new capacity column, helper functions, five-argument creation RPC, and updated read RPCs. Keep the old three-argument RPC temporarily, but replace its body with a fail-closed stub that raises a clear `group_capacity_upgrade_required` message. This prevents old clients from bypassing the maximum while giving them a recognizable failure instead of a generic missing-function error.
+3. **Apply a compatibility migration first.** Add the new capacity column, helper functions, four-argument creation RPC, and updated read RPCs. Keep the old three-argument RPC temporarily, but replace its body with a fail-closed stub that raises a clear `group_capacity_upgrade_required` message. This prevents old clients from bypassing the maximum while giving them a recognizable failure instead of a generic missing-function error.
 4. **Publish the new client immediately after the migration passes verification.** Use a versioned static build, clear the host/CDN cache for `index.html`, and verify the public bundle hash. The new client must be the only client allowed to create or admit members.
 5. **Keep the stub for the agreed cache window.** During that window, an old cached tab shows “CityLink has been updated. Refresh the page before creating or joining a group.” Do not remove the stub until QA and the lead agree the cache window is over.
 6. **Cleanup migration.** After the cache window, drop the old three-argument overload and the stub. Record the cleanup migration, verification output, and remaining risks.

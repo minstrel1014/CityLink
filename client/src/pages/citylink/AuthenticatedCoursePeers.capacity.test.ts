@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { GroupMembershipRow, StudyGroupRow } from "@/lib/supabaseGroups";
-import { getInviteGroupCapacity } from "./AuthenticatedCoursePeers";
+import {
+  getInviteGroupCapacity,
+  inviteCapacityGuidance,
+  inviteCapacityMessage,
+} from "./AuthenticatedCoursePeers";
 import { getGroupCapacityState } from "./groupCapacity";
 
 const group = (overrides: Partial<StudyGroupRow> = {}): StudyGroupRow => ({
@@ -88,6 +92,28 @@ describe("People invite capacity", () => {
       count: null,
       maximum: 5,
     });
+  });
+
+  it("uses the exact approved strings and keeps guidance separate", () => {
+    expect(inviteCapacityMessage("full", 2, 2)).toBe("Group is full");
+    expect(inviteCapacityMessage("maximum_not_set", 1, null)).toBe(
+      "Group maximum is not set"
+    );
+    expect(inviteCapacityGuidance("full", 2, 2)).toContain(
+      "2/2 active members"
+    );
+    expect(inviteCapacityGuidance("maximum_not_set", 1, null)).toContain(
+      "2 to 19"
+    );
+  });
+
+  it("blocks a pending or failed roster read instead of inviting blindly", () => {
+    expect(inviteCapacityMessage("checking", null, 5)).toMatch(
+      /Checking group capacity/
+    );
+    expect(inviteCapacityMessage("unknown", null, 5)).toMatch(
+      /could not be verified/
+    );
   });
 
   it("evaluates multiple invite groups independently", () => {

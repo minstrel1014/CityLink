@@ -4,7 +4,9 @@ import {
   acceptReceivedInvitation,
   canAcceptReceivedInvitation,
   findAcceptableReceivedInvitation,
+  invitationViewKey,
   invitationAcceptanceFeedback,
+  isInvitationViewCurrent,
   refreshInvitationSnapshot,
 } from "./invitationAcceptance";
 import { createInvitationActionCoordinator } from "./invitationActionCoordinator";
@@ -56,6 +58,30 @@ function actionOptions() {
 }
 
 describe("received invitation eligibility and outcomes", () => {
+  it("treats a same-user auth-generation change as a new page boundary", () => {
+    expect(invitationViewKey("user-1", 1)).not.toBe(
+      invitationViewKey("user-1", 2)
+    );
+    expect(
+      isInvitationViewCurrent({
+        mounted: true,
+        userId: "user-1",
+        currentUserId: "user-1",
+        authGeneration: 1,
+        currentAuthGeneration: 1,
+      })
+    ).toBe(true);
+    expect(
+      isInvitationViewCurrent({
+        mounted: true,
+        userId: "user-1",
+        currentUserId: "user-1",
+        authGeneration: 1,
+        currentAuthGeneration: 2,
+      })
+    ).toBe(false);
+  });
+
   it("only permits a pending invitation belonging to the ready user", () => {
     expect(canAcceptReceivedInvitation(pending, "user-1")).toBe(true);
     expect(canAcceptReceivedInvitation(pending, null)).toBe(false);
@@ -235,26 +261,32 @@ describe("received invitation eligibility and outcomes", () => {
     ).toBeNull();
   });
 
-  it.each(["sign-out", "user change", "unmount"])(
-    "ignores an in-flight response after %s",
-    async change => {
-      const response = deferred<string>();
-      let user: string | null = "user-1";
-      let mounted = true;
-      const options = actionOptions();
-      options.isCurrent.mockImplementation(() => mounted && user === "user-1");
-      options.respond.mockReturnValue(response.promise);
-      const work = acceptReceivedInvitation(options);
-      if (change === "sign-out") user = null;
-      if (change === "user change") user = "user-2";
-      if (change === "unmount") mounted = false;
-      response.resolve("accepted");
-      await work;
-      expect(options.onFeedback.mock.calls).toEqual([[null]]);
-      expect(options.refresh).not.toHaveBeenCalled();
-      expect(options.coordinator.getBusyInvitationId("user-1")).toBeNull();
-    }
-  );
+  it.each([
+    "sign-out",
+    "user change",
+    "same-user generation change",
+    "unmount",
+  ])("ignores an in-flight response after %s", async change => {
+    const response = deferred<string>();
+    let user: string | null = "user-1";
+    let mounted = true;
+    let generation = 1;
+    const options = actionOptions();
+    options.isCurrent.mockImplementation(
+      () => mounted && user === "user-1" && generation === 1
+    );
+    options.respond.mockReturnValue(response.promise);
+    const work = acceptReceivedInvitation(options);
+    if (change === "sign-out") user = null;
+    if (change === "user change") user = "user-2";
+    if (change === "same-user generation change") generation = 2;
+    if (change === "unmount") mounted = false;
+    response.resolve("accepted");
+    await work;
+    expect(options.onFeedback.mock.calls).toEqual([[null]]);
+    expect(options.refresh).not.toHaveBeenCalled();
+    expect(options.coordinator.getBusyInvitationId("user-1")).toBeNull();
+  });
 });
 
 describe("invitation snapshot refresh", () => {

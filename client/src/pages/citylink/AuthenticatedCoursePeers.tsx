@@ -131,21 +131,40 @@ function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
     : "Active";
 }
 
-function inviteCapacityMessage(
+export function inviteCapacityMessage(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return "Group is full";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "Group maximum is not set";
+  }
+  if (capacityState === "over_limit") {
+    return "This group has more than 19 active members. The leader must remove members before anyone can be added.";
+  }
+  if (capacityState === "checking") {
+    return "Checking group capacity…";
+  }
+  if (capacityState === "unknown") {
+    return "Group capacity could not be verified. Refresh the page before inviting.";
+  }
+  return null;
+}
+export function inviteCapacityGuidance(
   capacityState: string,
   visibleCount: number | null,
   maximum: number | null
 ): string | null {
   if (capacityState === "full") {
     return maximum !== null && visibleCount !== null
-      ? `Group is full (${visibleCount}/${maximum} members). The leader must open a place before you can invite.`
-      : "Group is full. The leader must open a place before you can invite.";
+      ? `This group has ${visibleCount}/${maximum} active members. The leader must open a place before you can invite.`
+      : "The leader must open a place before you can invite.";
   }
   if (capacityState === "maximum_not_set") {
-    return "Group maximum is not set. The leader must set a maximum from 2 to 19 before anyone can be invited.";
-  }
-  if (capacityState === "over_limit") {
-    return "This group has more than 19 active members. The leader must remove members before anyone can be added.";
+    return "The leader must set a maximum from 2 to 19 before anyone can be invited.";
   }
   return null;
 }
@@ -506,10 +525,17 @@ function CoursePeersView({
     if (!ownData || !userId) return [];
     return inviteGroups.map(group => {
       // The workflow snapshot contains only the viewer's own membership row.
-      // Use the separately loaded full roster; a failed read stays unknown.
+      // Use the separately loaded full roster. Pending and failed reads both
+      // block the local action; the server remains authoritative only after
+      // the client has a usable roster.
+      const rosterEntry = inviteRosters[group.id];
+      const rosterLoaded = Object.prototype.hasOwnProperty.call(
+        inviteRosters,
+        group.id
+      );
       const capacity = getInviteGroupCapacity(
         group,
-        inviteRosters[group.id] ?? null,
+        rosterEntry ?? null,
         userId
       );
       const visibleCount = capacity.count;
@@ -518,7 +544,9 @@ function CoursePeersView({
         visibleCount === null
           ? maximum === null
             ? "maximum_not_set"
-            : "unknown"
+            : rosterLoaded
+              ? "unknown"
+              : "checking"
           : getGroupCapacityState(visibleCount, maximum);
       return { group, visibleCount, maximum, capacityState };
     });
@@ -531,6 +559,13 @@ function CoursePeersView({
     (inviteGroupOptions.length === 1 ? inviteGroupOptions[0] : undefined);
   const activeInviteBlockedMessage = activeInviteOption
     ? inviteCapacityMessage(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.maximum
+      )
+    : null;
+  const activeInviteGuidance = activeInviteOption
+    ? inviteCapacityGuidance(
         activeInviteOption.capacityState,
         activeInviteOption.visibleCount,
         activeInviteOption.maximum
@@ -857,6 +892,11 @@ function CoursePeersView({
                     {activeInviteBlockedMessage}
                   </p>
                 )}
+                {activeInviteGuidance && (
+                  <p className="course-detail-capacity-hint" role="note">
+                    {activeInviteGuidance}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="primary invite-compact"
@@ -907,6 +947,11 @@ function CoursePeersView({
                 {activeInviteBlockedMessage && (
                   <p className="course-detail-capacity-hint" role="status">
                     {activeInviteBlockedMessage}
+                  </p>
+                )}
+                {activeInviteGuidance && (
+                  <p className="course-detail-capacity-hint" role="note">
+                    {activeInviteGuidance}
                   </p>
                 )}
               </>

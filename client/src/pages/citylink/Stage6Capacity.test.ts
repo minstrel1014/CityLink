@@ -12,6 +12,7 @@ import {
   Stage6ApplyControl,
   Stage6CapacityCount,
   Stage6CapacityStatus,
+  withLocalPendingState,
 } from "./Stage6Capacity";
 
 const availablePost = (): GroupRecruitmentPost => ({
@@ -46,6 +47,23 @@ function getApplyButton(
 }
 
 describe("Stage 6 capacity presentation", () => {
+  it("keeps a successful request visibly pending when refresh is unavailable", () => {
+    const post = withLocalPendingState(availablePost(), true);
+    expect(post.applyEnabled).toBe(false);
+    expect(post.applyBlockReason).toBe("pending_request");
+    expect(canApplyToRecruitmentPost(post)).toBe(false);
+    expect(
+      renderToStaticMarkup(
+        createElement(Stage6ApplyControl, {
+          post,
+          busy: false,
+          applying: false,
+          onApply: vi.fn(),
+        })
+      )
+    ).toContain("pending request");
+  });
+
   it("shows the real current/maximum count and does not invent a maximum", () => {
     expect(
       renderToStaticMarkup(

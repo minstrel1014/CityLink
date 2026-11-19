@@ -64,6 +64,20 @@ export function canApplyToRecruitmentPost(post: GroupRecruitmentPost) {
   );
 }
 
+// Keep a successful request visibly pending even if the follow-up refresh is
+// skipped or fails. The server remains authoritative for the actual request.
+export function withLocalPendingState(
+  post: GroupRecruitmentPost,
+  pending: boolean
+): GroupRecruitmentPost {
+  if (!pending || post.applyBlockReason !== null) return post;
+  return {
+    ...post,
+    applyEnabled: false,
+    applyBlockReason: "pending_request",
+  };
+}
+
 export function Stage6ApplyControl({
   post,
   busy,

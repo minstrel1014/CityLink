@@ -15,6 +15,8 @@ import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
   acceptReceivedInvitation,
   findAcceptableReceivedInvitation,
+  invitationViewKey,
+  isInvitationViewCurrent,
   refreshInvitationSnapshot,
   type InvitationFeedback,
 } from "@/lib/invitationAcceptance";
@@ -154,14 +156,16 @@ function formatDate(value: string) {
 export function AuthenticatedInvitations() {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
+  const authGeneration = session.authGeneration ?? 0;
   const currentUserId = useRef(userId);
   currentUserId.current = userId;
 
   // A new identity gets a fresh state and guard; old async work is ignored.
   return (
     <AuthenticatedInvitationsForUser
-      key={userId ?? "signed-out"}
+      key={invitationViewKey(userId, authGeneration)}
       userId={userId}
+      authGeneration={authGeneration}
       currentUserId={currentUserId}
     />
   );
@@ -169,9 +173,11 @@ export function AuthenticatedInvitations() {
 
 function AuthenticatedInvitationsForUser({
   userId,
+  authGeneration,
   currentUserId,
 }: {
   userId: string | null;
+  authGeneration: number;
   currentUserId: RefObject<string | null>;
 }) {
   const [data, setData] = useState<WorkspaceData | null>(null);
@@ -199,8 +205,16 @@ function AuthenticatedInvitationsForUser({
   const mounted = useRef(false);
   const snapshot = useRef<WorkspaceData | null>(null);
   const loadGeneration = useRef(0);
+  const currentAuthGeneration = useRef(authGeneration);
+  currentAuthGeneration.current = authGeneration;
   const isCurrent = () =>
-    mounted.current && Boolean(userId) && currentUserId.current === userId;
+    isInvitationViewCurrent({
+      mounted: mounted.current,
+      userId,
+      currentUserId: currentUserId.current,
+      authGeneration,
+      currentAuthGeneration: currentAuthGeneration.current,
+    });
 
   useLayoutEffect(() => {
     mounted.current = true;
@@ -214,7 +228,7 @@ function AuthenticatedInvitationsForUser({
       loadGeneration.current += 1;
       unregister();
     };
-  }, [userId]);
+  }, [authGeneration, userId]);
 
   function showLoadError() {
     if (!isCurrent()) return;
@@ -259,7 +273,7 @@ function AuthenticatedInvitationsForUser({
       return;
     }
     void reload().catch(showLoadError);
-  }, [userId]);
+  }, [authGeneration, userId]);
 
   function accept(invitation: GroupInvitationRow) {
     const currentInvitation = findAcceptableReceivedInvitation(
@@ -274,7 +288,13 @@ function AuthenticatedInvitationsForUser({
       busy,
       coordinator: invitationActionCoordinator,
       isCurrent,
-      respond: respondToGroupInvitation,
+      respond: (currentUserId, invitationId, accept) =>
+        respondToGroupInvitation(
+          currentUserId,
+          invitationId,
+          accept,
+          isCurrent
+        ),
       errorMessage: getGroupWorkflowErrorMessage,
       onFeedback: setFeedback,
     });
