@@ -52,3 +52,15 @@ Verification results and remaining blockers are recorded below after checks are 
 - `pnpm seedance:example` with all Higgsfield credential variables absent: stopped with `Set HF_CREDENTIALS ...` and exit 1 before submission. No generation was submitted, and no video URL was returned. Live authentication, model access, billing, completion and output are **not verified**.
 
 **Next step:** Adam must choose how to supply the credential privately. If it stays only on Adam's computer, follow the local setup steps and run the billable example there; the cloud task cannot independently verify that run. If Adam authorizes a protected cloud input instead, run the example once with the supplied server-side credential and record the actual terminal result and URL before claiming success. The protected-input option stores a project environment secret and is not the same as filling a local `.env.local` file. Do not put the real credential in this handoff, a test fixture, Git, logs, or chat.
+
+## 2026-11-19 — Scope clarification from Adam
+
+**Status:** The earlier integration proposal is superseded; do not merge it into CityLink. Adam clarified that the goal is to generate a demo advertising video, not to add a Higgsfield function to the app. This record captures the scope clarification, not a decision to deploy software.
+
+**Human approver:** Adam, CityLink project owner and integration lead.
+
+**Roles affected:** Project/integration lead; the human owner of this example remains TBD. No existing role or feature assignment is replaced.
+
+**Data/API implications:** Do not add the SDK, example command, Higgsfield credential, or an API endpoint to the application or its production configuration for this request. The earlier example exists only on its unmerged feature branch. No Supabase access or changes were made. No Higgsfield generation was submitted. The previously proposed protected input would store a project-level secret, so do not open it for this standalone video without reconfirming that storage choice.
+
+**Open questions and next step:** Adam has not specified the content or format of the ad, or chosen between a standalone Higgsfield API request and the built-in Manus video tool after learning the billing distinction. Clarify those details before starting a billable generation. The earlier generic sunset test prompt is not an approved CityLink ad brief.
