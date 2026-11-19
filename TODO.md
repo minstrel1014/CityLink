@@ -107,7 +107,7 @@ Status: implementation and local checks are complete; feature-code commit `b3eb7
 
 Route clarification (2026-11-17): the course catalogue/browse page where students can add courses is authenticated `/my-courses`. Add total current-term Test enrolment counts there; leave the fictional `/courses`, `/demo`, and `/demo/courses/:courseId` surfaces unchanged.
 
-Group-size display clarification: count active memberships plus the forming group creator when the creator is not already an active member; this recognizes the establishing student and does not add a capacity limit.
+Group-size display clarification (updated 2026-11-19): count active memberships plus the forming group creator when the creator is not already an active member. This remains the display-count rule, but the earlier “no capacity limit” conclusion is superseded by Adam’s hard 2–19 group-maximum decision. The data/API/migration work is blocked pending Adam’s answers and Database Security review; see `docs/team/DECISIONS.md` and `docs/team/GROUP_CAPACITY_CONTRACT_PROPOSAL.md`. Do not add a UI-only limit or assume a default maximum.
 
 ## PR #5 join-request integration decision (2026-11-17)
 

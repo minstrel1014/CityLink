@@ -4,9 +4,24 @@ This file records explicit human-approved decisions that affect more than one ro
 
 ## Approved decisions
 
+### 2026-11-19 — Groups have a hard leader-set maximum of 2–19
+
+- **Status:** Approved as product behavior. The data model, RPC/API signatures, migration, and UI implementation are **not yet approved**; see the proposal linked below.
+- **Human approver:** Adam, CityLink project lead and project owner.
+- **Decision:** The current group leader sets and may edit a hard maximum for the group. The valid maximum is an integer from 2 through 19 inclusive. 19 is the upper bound, not a default. The system must not invent a default maximum.
+- **Existing groups:** A group without a configured maximum must choose one before anyone can be added. A group currently above 19 active members cannot choose a valid maximum or add members until its active size is 19 or fewer. Do not remove members automatically to make a maximum valid.
+- **Changing the maximum:** The leader may raise the maximum. The leader may lower it only to a number that is at least the current active membership count. Lowering it to exactly the current count makes the group full; it does not remove anyone.
+- **When full:** Block new invitations and new join applications. Existing pending invitations and join requests remain pending; they must not be cancelled, expired, or silently converted. A pending invitation cannot be accepted and a pending request cannot be approved while the group is full. When a place opens, the normal accept/approve path may proceed, subject to the other existing eligibility and first-pending-action rules.
+- **User-facing message:** Show **“Group is full”** when an invitation, join application, invitation acceptance, or join-request approval is blocked by the maximum. Show the current count and the configured maximum on grouped people cards. If the maximum is not configured, show that state plainly and do not imply a default.
+- **Roles affected:** Adam (lead/owner); Roy (group creation, management, invitations, join requests and membership); Jeffery (group chat, recruitment posts, People/recruitment cards); Database Security owner (schema/RPC/RLS review); Eunice (QA/live testing/documentation); Kayk only where shared room/file behavior is affected. This is additional capacity work on the existing role assignments; it does not create replacement tasks or remove any earlier feature assignment.
+- **Data/API implications:** The current Test schema has no group-maximum column, and the current group-summary and recruitment RPCs return active member counts without a maximum. A reviewed forward-only migration, server-side admission checks, concurrency-safe row locking, and field-limited read-contract changes are required before implementation. Do not implement a UI-only limit or trust a browser count. Existing direct table grants remain read-only and must not be broadened.
+- **Concurrency and atomicity:** Every admission path must lock the group row before counting active members. The count must use the same transaction as the membership insert/update. If two people compete for the last place, exactly one may succeed; the other must fail with “Group is full” and leave its pending row unchanged. A capacity rejection must roll back the whole operation, not partially add a member or change a request/invitation status.
+- **Open questions before an executable migration is approved:** (1) Must a newly created group provide a maximum at creation, or may it exist with no maximum and require the leader to set one before the first acceptance? (2) What exact wording should appear for an unconfigured maximum, distinct from the required “Group is full”? (3) Should the leader be allowed to edit the maximum on abandoned/archived groups? The proposal recommends no. (4) How can an existing group above 19 reduce its active size when no membership-removal workflow exists in the current version? This is a known product gap, not permission to remove members automatically.
+- **Detailed proposal:** [Group hard-maximum contract proposal](./GROUP_CAPACITY_CONTRACT_PROPOSAL.md). The proposal is not approval to execute SQL or change Test/Main.
+
 ### 2026-11-14 — Study groups have no maximum size
 
-- **Status:** Approved.
+- **Status:** **Superseded on 2026-11-19 by Adam’s hard 2–19 group-maximum decision above.** Retained for history only; do not use this entry for new implementation.
 - **Human approver:** CityLink project lead (name not supplied; owner ledger remains TBD).
 - **Decision:** Study groups have no maximum size. Do not add a capacity limit, capacity-based rejection, or invented default capacity.
 - **Roles affected:** Project/integration lead; study-group creation and management (Roy); join requests and membership (Roy); group invitation (Roy); QA/live testing/documentation (Eunice); group chat and recruitment posts (Jeffery); AI and project-room file upload (Kayk).
