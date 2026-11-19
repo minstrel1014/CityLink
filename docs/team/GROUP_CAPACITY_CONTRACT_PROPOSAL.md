@@ -236,6 +236,8 @@ The reviewed function must:
 9. Leave pending invitations and join requests pending. Removal opens a place; it does not auto-accept, auto-approve, or expire anyone.
 10. Return an authoritative status or result that the UI can display.
 
+The existing membership-end triggers must run after the status change so approved behavior such as a recruitment post auto-closing when its author leaves or is removed still applies. Do not bypass those triggers or delete the membership history.
+
 The operation must use the same group-row lock as admission and maximum changes. A leader who wants a maximum below the current count must remove members until the count is at or below the requested value, then save the maximum. A group above 19 must be reduced to 19 or fewer before a maximum can be stored. The UI must not offer a “remove automatically” or bulk-delete shortcut.
 
 ## 6. Proposed read contract
