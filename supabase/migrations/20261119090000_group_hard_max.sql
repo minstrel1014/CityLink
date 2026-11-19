@@ -10,9 +10,9 @@
 --   * leader-only manual member removal;
 --   * private transaction-keyed removal context and invitation-cancellation
 --     helper;
---   * replacement of the currently unattached invitation-integrity guard so a
---     future trigger attachment cannot block the removal path. This migration
---     intentionally does NOT attach that trigger.
+--   * no change to the currently unattached invitation-integrity guard; a
+--     complete guard/trigger change is deferred until it can authorize every
+--     existing lifecycle path, including expiry and profile-deletion cleanup.
 --   * capacity fields in the three read RPCs whose return shapes change.
 --
 -- This is forward-only and targets the disposable Test project only after the
@@ -1090,94 +1090,19 @@ grant execute on function public.remove_group_member(uuid, uuid)
   to authenticated;
 
 -- ---------------------------------------------------------------------------
--- 6. Guard compatibility (no trigger is attached by this migration)
+-- 6. Invitation guard: intentionally unchanged in this migration
 -- ---------------------------------------------------------------------------
 
--- The checked-in function is currently unattached on Test. Replacing it now
--- keeps a future reviewed trigger from blocking the approved removal path.
--- Do not attach the trigger in this migration.
-create or replace function public.enforce_invitation_integrity()
-returns trigger
-language plpgsql
-set search_path to ''
-as $function$
-begin
-  if tg_op = 'INSERT' then
-    if new.status is distinct from 'pending' then
-      raise exception 'new invitations must be pending';
-    end if;
-    if new.sender_id is not distinct from new.recipient_id then
-      raise exception 'an invitation cannot target its sender';
-    end if;
-    if not private.both_enrolled_in_course(new.sender_id, new.recipient_id, new.course_id) then
-      raise exception 'both invitation participants must be enrolled in the course';
-    end if;
-    if not private.recipient_can_receive_invitation(new.recipient_id) then
-      raise exception 'the recipient is not accepting group invitations';
-    end if;
-    new.id := gen_random_uuid();
-    new.created_at := clock_timestamp();
-    new.updated_at := new.created_at;
-    new.responded_at := null;
-    new.cancelled_at := null;
-    return new;
-  end if;
-
-  if new.id is distinct from old.id
-     or new.sender_id is distinct from old.sender_id
-     or new.recipient_id is distinct from old.recipient_id
-     or new.course_id is distinct from old.course_id
-     or new.created_at is distinct from old.created_at then
-    raise exception 'invitation identity fields are immutable';
-  end if;
-  if old.status <> 'pending' then
-    raise exception 'a final invitation cannot be changed';
-  end if;
-
-  if new.status in ('accepted', 'declined') then
-    if auth.uid() is distinct from old.recipient_id then
-      raise exception 'only the invitation recipient may accept or decline';
-    end if;
-    new.responded_at := clock_timestamp();
-    new.cancelled_at := null;
-  elsif new.status = 'cancelled' then
-    if auth.uid() is distinct from old.sender_id then
-      -- Narrow removal exception: current leader, sender no longer active,
-      -- and a matching transaction-scoped context row written by the private
-      -- removal helper. No caller-supplied GUC is accepted.
-      if not exists (
-        select 1
-        from private.group_removal_context as c
-        join public.study_groups as g on g.id = c.group_id
-        where c.transaction_id = txid_current()
-          and c.group_id = old.group_id
-          and c.profile_id = old.sender_id
-          and g.creator_id = auth.uid()
-          and g.status in ('forming', 'active')
-          and not exists (
-            select 1
-            from public.group_memberships as m
-            where m.group_id = old.group_id
-              and m.profile_id = old.sender_id
-              and m.membership_status = 'active'
-          )
-      ) then
-        raise exception 'only the invitation sender may cancel';
-      end if;
-    end if;
-    new.responded_at := null;
-    new.cancelled_at := clock_timestamp();
-  else
-    raise exception 'pending invitations may only be accepted, declined, or cancelled';
-  end if;
-
-  new.updated_at := clock_timestamp();
-  return new;
-end;
-$function$;
-
-revoke all on function public.enforce_invitation_integrity()
-  from public, anon, authenticated;
+-- The checked-in public.enforce_invitation_integrity() guard is currently
+-- unattached. Role 6's review found that replacing it here would conflict with
+-- legitimate existing transitions (expired invitations on abandoned groups or
+-- ineligible acceptance) and profile-deletion anonymization. This migration
+-- therefore does NOT replace or attach the guard.
+--
+-- A future complete guard/trigger migration must explicitly authorize all
+-- existing lifecycle paths, including expiry and profile-deletion cleanup, and
+-- the leader-removal cancellation context. Until that review, the removal helper
+-- below remains safe while the guard is unattached.
 
 -- ---------------------------------------------------------------------------
 -- 7. Read RPCs with capacity fields

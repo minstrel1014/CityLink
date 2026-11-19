@@ -17,12 +17,12 @@ The migration is forward-only and targets the disposable Test project only after
 - `public.remove_group_member(uuid, uuid)` with the approved membership-first lock order;
 - `private.group_removal_context`, a transaction-keyed context table with no browser grants;
 - `private.cancel_pending_invitations_from_removed_member(uuid, uuid)`;
-- a replacement of the currently unattached `public.enforce_invitation_integrity()` guard that recognizes the private removal context. **The migration does not attach the guard trigger.**
+- no change to the currently unattached `public.enforce_invitation_integrity()` guard. A complete guard/trigger change is deferred until it can authorize every existing lifecycle path, including expiry and profile-deletion cleanup, plus the removal context.
 - new capacity fields and `apply_block_reason` in the three affected read RPCs.
 
 ## Deliberately outside this draft
 
-- No invitation trigger is attached. Attaching it remains a separate decision.
+- No invitation guard replacement or trigger attachment is included. Attaching it remains a separate decision.
 - No client mapper, UI, or service change is included. The current client still calls the old three-argument `create_group_and_invite` and must be updated in the same release before this SQL is applied.
 - No Main access, reset, truncation, data deletion, or Auth/secret change.
 - No automatic member removal; the leader must invoke `remove_group_member`.
@@ -43,14 +43,14 @@ Role 6 should specifically verify:
 2. `group_active_member_count` and `assert_group_has_capacity` semantics, especially forming-group creator counting and the full/unset/over-limit precedence.
 3. The capacity checks in `create_group_and_invite`, `send_group_invitation`, `request_to_join_group`, `respond_to_group_invitation`, and `review_group_join_request`.
 4. The membership-first lock order in `remove_group_member` and interaction with existing membership-end/chat/post locks.
-5. The private context table, helper ACLs, and whether the guard replacement is acceptable without attaching its trigger.
+5. The private context table and helper ACLs. The invitation guard is intentionally unchanged; a future complete guard/trigger migration must handle expiry and profile-deletion cleanup before attachment.
 6. The exact `apply_block_reason` precedence and null redaction for archived/abandoned groups.
 7. The dependency-checked drop/recreate of the three read RPCs and restored grants.
 8. Whether the canonical count should replace the existing `active_member_count` value on browseable and recruitment cards; this draft uses the canonical capacity count there.
 
 ## Static checks performed
 
-- `pglast` parsed the migration as 45 top-level SQL statements with no parse error.
+- `pglast` parsed the migration as 43 top-level SQL statements with no parse error.
 - `git diff --check` passed.
 - `corepack pnpm check` passed.
 - `corepack pnpm test` passed: 13 files, 99 tests.
@@ -61,7 +61,7 @@ These checks do not validate PL/pgSQL runtime semantics, live RLS behavior, func
 
 ## Open questions
 
-- Role 6 must confirm that replacing the unattached guard function is useful, or require it to be split into a later trigger migration.
+- Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
 - Role 6 must confirm the exact context-table privileges and transaction-ID behavior.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s separate Test authorization is still required after the final SQL review.
