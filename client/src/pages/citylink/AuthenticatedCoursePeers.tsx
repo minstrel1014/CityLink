@@ -795,8 +795,8 @@ function CoursePeersView({
               <div className="course-detail-invite-rule" role="note">
                 Invite actions follow the existing server eligibility rules. Any
                 active member may invite to a group; the creator may also send
-                the first invitation while a group is forming. Join requests are
-                available only from recruitment posts for active groups.
+                the first invitation while a group is forming. To find groups
+                seeking members, browse the course’s recruitment posts.
               </div>
               {feedback && (
                 <p

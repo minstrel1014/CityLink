@@ -16,7 +16,6 @@ import {
   listCourseGroupPeers,
   loadGroupWorkflowSnapshot,
   renameStudyGroup,
-  requestToJoinGroup,
   respondToGroupInvitation,
   reviewGroupJoinRequest,
   sendGroupInvitation,
@@ -26,6 +25,7 @@ import {
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { PageHeading } from "@/components/citylink/Shared";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
+import { ActiveGroupsPanel } from "@/pages/citylink/ActiveGroupsPanel";
 import "./GroupWorkflows.css";
 
 type Feedback = { tone: "success" | "error"; message: string };
@@ -245,7 +245,7 @@ export default function GroupWorkflows() {
       activeMembershipGroupIds.has(group.id) ||
       (group.status === "forming" && group.creator_id === userId)
   );
-  const requestableGroups = groupsInCourse.filter(
+  const otherActiveGroups = groupsInCourse.filter(
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
   );
@@ -366,7 +366,7 @@ export default function GroupWorkflows() {
         <PageHeading
           eyebrow="SUPABASE GROUP WORKFLOWS"
           title="Find your group"
-          description="Create a group, invite coursemates, or request to join an active group. These actions use your signed-in Supabase account."
+          description="Create a group, invite coursemates, and manage invitations and requests using your signed-in Supabase account."
         />
         <div className="group-workflows-intro" role="note">
           Group size is not limited. Invitations and join requests follow the
@@ -717,120 +717,22 @@ export default function GroupWorkflows() {
               )}
             </section>
 
-            <section className="group-workflow-panel wide">
-              <h2>Groups you can request to join</h2>
-              <p>
-                Active groups in the selected course are listed from Supabase.
-                If an invitation is already pending for you, respond to it
-                rather than sending a second action.
-              </p>
-              {requestableGroups.length ? (
-                <div className="group-workflow-list">
-                  {requestableGroups.map(group => {
-                    const pendingRequest = joinRequests.find(
-                      request =>
-                        request.group_id === group.id &&
-                        request.requester_id === userId &&
-                        request.status === "pending"
-                    );
-                    const pendingInvitation = incomingInvitations.find(
-                      invitation =>
-                        invitation.group_id === group.id &&
-                        invitation.status === "pending"
-                    );
-                    const alreadyGrouped = memberships.some(
-                      membership =>
-                        membership.course_id === group.course_id &&
-                        membership.membership_status === "active"
-                    );
-                    return (
-                      <article className="group-workflow-item" key={group.id}>
-                        <div className="group-workflow-item-top">
-                          <div>
-                            <h3>{group.name || "Study group"}</h3>
-                            <p>{selectedCourse?.code} · Active group</p>
-                          </div>
-                          <span className="group-workflow-status">Active</span>
-                        </div>
-                        <div className="group-workflow-item-bottom">
-                          {pendingRequest ? (
-                            <span className="member-note">
-                              Your join request is pending.
-                            </span>
-                          ) : pendingInvitation ? (
-                            <span className="member-note">
-                              You have an invitation to this group; respond to
-                              it below.
-                            </span>
-                          ) : alreadyGrouped ? (
-                            <span className="member-note">
-                              You already belong to a group for this course.
-                            </span>
-                          ) : (
-                            <span className="group-workflow-peek">
-                              No maximum group size.
-                            </span>
-                          )}
-                          <div className="group-workflow-actions">
-                            {pendingRequest ? (
-                              <button
-                                type="button"
-                                className="secondary"
-                                disabled={busyAction !== ""}
-                                onClick={() =>
-                                  void runAction(
-                                    `cancel-request-${pendingRequest.id}`,
-                                    () =>
-                                      cancelGroupJoinRequest(
-                                        userId,
-                                        pendingRequest.id
-                                      ),
-                                    "Your join request was cancelled."
-                                  )
-                                }
-                              >
-                                {busyAction ===
-                                `cancel-request-${pendingRequest.id}`
-                                  ? "Cancelling…"
-                                  : "Cancel request"}
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="primary"
-                                disabled={
-                                  Boolean(pendingInvitation) ||
-                                  alreadyGrouped ||
-                                  busyAction !== ""
-                                }
-                                onClick={() =>
-                                  void runAction(
-                                    `request-${group.id}`,
-                                    () => requestToJoinGroup(userId, group.id),
-                                    "Your request to join has been sent."
-                                  )
-                                }
-                              >
-                                {busyAction === `request-${group.id}`
-                                  ? "Sending…"
-                                  : "Request to join"}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="group-workflow-empty">
-                  <strong>
-                    No active groups are available in this course.
-                  </strong>
-                  When an eligible group is active, it will appear here.
-                </div>
-              )}
-            </section>
+            <ActiveGroupsPanel
+              groups={otherActiveGroups}
+              courseCode={selectedCourse?.code}
+              userId={userId}
+              joinRequests={joinRequests}
+              incomingInvitations={incomingInvitations}
+              memberships={memberships}
+              busyAction={busyAction}
+              onCancelRequest={requestId =>
+                void runAction(
+                  `cancel-request-${requestId}`,
+                  () => cancelGroupJoinRequest(userId, requestId),
+                  "Your join request was cancelled."
+                )
+              }
+            />
 
             <section className="group-workflow-panel">
               <h2>Received invitations</h2>
