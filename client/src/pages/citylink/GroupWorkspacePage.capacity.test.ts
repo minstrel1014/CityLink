@@ -292,7 +292,11 @@ describe("workspace capacity integration (isolated mocks)", () => {
     await vi.waitFor(() =>
       expect(mocks.groupError).toHaveBeenCalledWith(raceError)
     );
-    expect(mocks.request).toHaveBeenCalledWith("user-1", "group-1");
+    expect(mocks.request).toHaveBeenCalledWith(
+      "user-1",
+      "group-1",
+      expect.any(Function)
+    );
     expect(mocks.setters[4]).toHaveBeenCalledWith("Group is full");
   });
 

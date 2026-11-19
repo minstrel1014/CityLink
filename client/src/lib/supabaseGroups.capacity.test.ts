@@ -583,3 +583,10 @@ describe("safe capacity feedback", () => {
     ).toMatch(/not permitted/i);
   });
 });
+
+it("blocks a group mutation when its initiating context is stale", async () => {
+  await expect(
+    requestToJoinGroup("actor", groupId, () => false)
+  ).rejects.toThrow(/workspace changed before the action could be sent/i);
+  expect(mocks.rpc).not.toHaveBeenCalled();
+});

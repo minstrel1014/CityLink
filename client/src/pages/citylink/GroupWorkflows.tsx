@@ -376,7 +376,7 @@ export default function GroupWorkflows() {
 
   async function runAction(
     key: string,
-    action: () => Promise<unknown>,
+    action: (isCurrent: () => boolean) => Promise<unknown>,
     success: string | ((result: unknown) => string)
   ) {
     if (!userId || actionBusy.current) return;
@@ -391,7 +391,7 @@ export default function GroupWorkflows() {
     setBusyAction(key);
     setFeedback(null);
     try {
-      const result = await action();
+      const result = await action(isCurrent);
       if (!isCurrent()) return;
       setFeedback({
         tone: "success",
@@ -434,13 +434,14 @@ export default function GroupWorkflows() {
     }
     void runAction(
       "create",
-      () =>
+      guard =>
         createGroupAndInvite(
           userId,
           selectedCourseId,
           firstInviteeId,
           name,
-          maximum.value!
+          maximum.value!,
+          guard
         ),
       "Your group is created and the first invitation has been sent."
     );
@@ -457,7 +458,7 @@ export default function GroupWorkflows() {
       return;
     void runAction(
       "invite",
-      () => sendGroupInvitation(userId, existingGroupId, inviteeId),
+      guard => sendGroupInvitation(userId, existingGroupId, inviteeId, guard),
       "Your group invitation has been sent."
     );
   }
@@ -765,8 +766,8 @@ export default function GroupWorkflows() {
                                 }
                                 void runAction(
                                   `rename-${group.id}`,
-                                  () =>
-                                    renameStudyGroup(userId, group.id, name),
+                                  guard =>
+                                    renameStudyGroup(userId, group.id, name, guard),
                                   "Your group name was updated."
                                 );
                               }}
@@ -872,16 +873,39 @@ export default function GroupWorkflows() {
                   )}
                   {inviteCapacityState === "over_limit" && (
                     <p className="group-workflow-peek">
-                      {GROUP_MAXIMUM_OVER_LIMIT_MESSAGE}
+                      {GROUP_MAXIMUM_OVER_LIMIT_MESSAGE}{" "}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setRetryToken(value => value + 1)}
+                      >
+                        Refresh group status
+                      </button>
                     </p>
                   )}
                   {inviteCapacityState === "maximum_not_set" && (
                     <p className="group-workflow-peek">
-                      Group maximum is not set
+                      Group maximum is not set{" "}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setRetryToken(value => value + 1)}
+                      >
+                        Refresh group status
+                      </button>
                     </p>
                   )}
                   {inviteCapacityState === "full" && (
-                    <p className="group-workflow-peek">Group is full</p>
+                    <p className="group-workflow-peek">
+                      Group is full{" "}
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => setRetryToken(value => value + 1)}
+                      >
+                        Refresh group status
+                      </button>
+                    </p>
                   )}
                   {inviteCapacityState === "unknown" && (
                     <p className="group-workflow-peek">
@@ -945,7 +969,7 @@ export default function GroupWorkflows() {
               onCancelRequest={requestId =>
                 void runAction(
                   `cancel-request-${requestId}`,
-                  () => cancelGroupJoinRequest(userId, requestId),
+                  guard => cancelGroupJoinRequest(userId, requestId, guard),
                   "Your join request was cancelled."
                 )
               }
@@ -987,11 +1011,12 @@ export default function GroupWorkflows() {
                               onClick={() =>
                                 void runAction(
                                   `decline-${invitation.id}`,
-                                  () =>
+                                  guard =>
                                     respondToGroupInvitation(
                                       userId,
                                       invitation.id,
-                                      false
+                                      false,
+                                      guard
                                     ),
                                   "You declined the group invitation."
                                 )
@@ -1012,11 +1037,12 @@ export default function GroupWorkflows() {
                               onClick={() =>
                                 void runAction(
                                   `accept-${invitation.id}`,
-                                  () =>
+                                  guard =>
                                     respondToGroupInvitation(
                                       userId,
                                       invitation.id,
-                                      true
+                                      true,
+                                      guard
                                     ),
                                   result => {
                                     if (result === "accepted")
@@ -1088,10 +1114,11 @@ export default function GroupWorkflows() {
                               onClick={() =>
                                 void runAction(
                                   `cancel-invite-${invitation.id}`,
-                                  () =>
+                                  guard =>
                                     cancelGroupInvitation(
                                       userId,
-                                      invitation.id
+                                      invitation.id,
+                                      guard
                                     ),
                                   "Your group invitation was cancelled."
                                 )
@@ -1161,10 +1188,11 @@ export default function GroupWorkflows() {
                                 onClick={() =>
                                   void runAction(
                                     `cancel-request-${request.id}`,
-                                    () =>
+                                    guard =>
                                       cancelGroupJoinRequest(
                                         userId,
-                                        request.id
+                                        request.id,
+                                        guard
                                       ),
                                     "Your join request was cancelled."
                                   )
@@ -1184,11 +1212,12 @@ export default function GroupWorkflows() {
                                   onClick={() =>
                                     void runAction(
                                       `reject-${request.id}`,
-                                      () =>
+                                      guard =>
                                         reviewGroupJoinRequest(
                                           userId,
                                           request.id,
-                                          false
+                                          false,
+                                          guard
                                         ),
                                       "The join request was rejected."
                                     )
@@ -1205,11 +1234,12 @@ export default function GroupWorkflows() {
                                   onClick={() =>
                                     void runAction(
                                       `approve-${request.id}`,
-                                      () =>
+                                      guard =>
                                         reviewGroupJoinRequest(
                                           userId,
                                           request.id,
-                                          true
+                                          true,
+                                          guard
                                         ),
                                       result => {
                                         if (result === "approved")

@@ -2,6 +2,9 @@ import { supabaseClient } from "@/lib/supabaseClient";
 
 type SupabaseClient = NonNullable<typeof supabaseClient>;
 
+export const DISPATCH_CONTEXT_CHANGED_MESSAGE =
+  "The workspace changed before the action could be sent. Refresh and try again.";
+
 export interface VerifiedRequestSession {
   client: SupabaseClient;
   userId: string;
@@ -40,6 +43,13 @@ export async function verifyRequestSession(
   }
 
   return { client: supabaseClient, userId, accessToken };
+}
+
+/** Check the caller's UI context immediately before dispatching a mutation. */
+export function assertDispatchAllowed(shouldDispatch?: () => boolean): void {
+  if (shouldDispatch && !shouldDispatch()) {
+    throw new Error(DISPATCH_CONTEXT_CHANGED_MESSAGE);
+  }
 }
 
 /** Bind a Supabase request builder to the already-verified request token. */

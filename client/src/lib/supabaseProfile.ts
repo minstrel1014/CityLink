@@ -1,6 +1,7 @@
 import type { GroupStatus } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  assertDispatchAllowed,
   bindRequestToken,
   verifyRequestSession,
   type VerifiedRequestSession,
@@ -179,7 +180,8 @@ export function getProfileInitials(displayName: string) {
 export async function updateOwnDisplayName(
   userId: string,
   displayName: string,
-  verifiedSession?: VerifiedRequestSession
+  verifiedSession?: VerifiedRequestSession,
+  shouldDispatch?: () => boolean
 ) {
   if (!supabaseClient) throw new Error("Supabase is not configured.");
   const value = displayName.trim();
@@ -192,6 +194,7 @@ export async function updateOwnDisplayName(
   if (session.userId !== userId) {
     throw new Error("Your sign-in could not be verified.");
   }
+  assertDispatchAllowed(shouldDispatch);
   const { client, accessToken } = session;
   const { data, error } = await bindRequestToken(
     client.rpc("update_own_display_name", {

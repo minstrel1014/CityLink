@@ -1,5 +1,6 @@
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  assertDispatchAllowed,
   bindRequestToken,
   verifyRequestSession,
 } from "@/lib/supabaseRequestAuth";
@@ -783,9 +784,11 @@ async function callGroupRpc<T>(
     | "rename_study_group"
     | "set_group_max_members"
     | "remove_group_member",
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  shouldDispatch?: () => boolean
 ): Promise<T> {
   const { client, accessToken } = await verifyRequestSession(userId);
+  assertDispatchAllowed(shouldDispatch);
   const { data, error } = await bindRequestToken(
     client.rpc(name, args as never),
     accessToken
@@ -804,7 +807,8 @@ export async function createGroupAndInvite(
   courseId: string,
   recipientId: string,
   name: string,
-  maxMembers: number
+  maxMembers: number,
+  shouldDispatch?: () => boolean
 ): Promise<CreatedGroupAndInvitation> {
   validateGroupMaxMembers(maxMembers);
   const rows = await callGroupRpc<CreatedGroupAndInvitation[]>(
@@ -815,7 +819,8 @@ export async function createGroupAndInvite(
       p_recipient_id: recipientId,
       p_name: name.trim(),
       p_max_members: maxMembers,
-    }
+    },
+    shouldDispatch
   );
   const created = rows?.[0];
   if (!created?.group_id || !created?.invitation_id) {
@@ -835,58 +840,78 @@ function validateGroupMaxMembers(maxMembers: number): void {
 export async function setGroupMaxMembers(
   userId: string,
   groupId: string,
-  maxMembers: number
+  maxMembers: number,
+  shouldDispatch?: () => boolean
 ): Promise<number> {
   validateGroupMaxMembers(maxMembers);
-  return callGroupRpc<number>(userId, "set_group_max_members", {
-    p_group_id: groupId,
-    p_max_members: maxMembers,
-  });
+  return callGroupRpc<number>(
+    userId,
+    "set_group_max_members",
+    { p_group_id: groupId, p_max_members: maxMembers },
+    shouldDispatch
+  );
 }
 
 export function removeGroupMember(
   userId: string,
   groupId: string,
-  profileId: string
+  profileId: string,
+  shouldDispatch?: () => boolean
 ): Promise<string> {
-  return callGroupRpc<string>(userId, "remove_group_member", {
-    p_group_id: groupId,
-    p_profile_id: profileId,
-  });
+  return callGroupRpc<string>(
+    userId,
+    "remove_group_member",
+    { p_group_id: groupId, p_profile_id: profileId },
+    shouldDispatch
+  );
 }
 
 export function sendGroupInvitation(
   userId: string,
   groupId: string,
-  recipientId: string
+  recipientId: string,
+  shouldDispatch?: () => boolean
 ) {
-  return callGroupRpc<string>(userId, "send_group_invitation", {
-    p_group_id: groupId,
-    p_recipient_id: recipientId,
-  });
+  return callGroupRpc<string>(
+    userId,
+    "send_group_invitation",
+    { p_group_id: groupId, p_recipient_id: recipientId },
+    shouldDispatch
+  );
 }
 
 export function respondToGroupInvitation(
   userId: string,
   invitationId: string,
-  accept: boolean
+  accept: boolean,
+  shouldDispatch?: () => boolean
 ) {
-  return callGroupRpc<string>(userId, "respond_to_group_invitation", {
-    p_invitation_id: invitationId,
-    p_accept: accept,
-  });
+  return callGroupRpc<string>(
+    userId,
+    "respond_to_group_invitation",
+    { p_invitation_id: invitationId, p_accept: accept },
+    shouldDispatch
+  );
 }
 
-export function cancelGroupInvitation(userId: string, invitationId: string) {
-  return callGroupRpc<void>(userId, "cancel_group_invitation", {
-    p_invitation_id: invitationId,
-  });
+export function cancelGroupInvitation(
+  userId: string,
+  invitationId: string,
+  shouldDispatch?: () => boolean
+) {
+  return callGroupRpc<void>(
+    userId,
+    "cancel_group_invitation",
+    { p_invitation_id: invitationId },
+    shouldDispatch
+  );
 }
 
 export function renameStudyGroup(
   userId: string,
   groupId: string,
-  name: string
+  name: string,
+  shouldDispatch?: () => boolean
 ) {
   const normalizedName = name.trim();
   if (!normalizedName || normalizedName.length > 50) {
@@ -894,33 +919,52 @@ export function renameStudyGroup(
       new Error("Group names must contain between 1 and 50 characters.")
     );
   }
-  return callGroupRpc<void>(userId, "rename_study_group", {
-    p_group_id: groupId,
-    p_name: normalizedName,
-  });
+  return callGroupRpc<void>(
+    userId,
+    "rename_study_group",
+    { p_group_id: groupId, p_name: normalizedName },
+    shouldDispatch
+  );
 }
 
-export function requestToJoinGroup(userId: string, groupId: string) {
-  return callGroupRpc<string>(userId, "request_to_join_group", {
-    p_group_id: groupId,
-  });
+export function requestToJoinGroup(
+  userId: string,
+  groupId: string,
+  shouldDispatch?: () => boolean
+) {
+  return callGroupRpc<string>(
+    userId,
+    "request_to_join_group",
+    { p_group_id: groupId },
+    shouldDispatch
+  );
 }
 
 export function reviewGroupJoinRequest(
   userId: string,
   requestId: string,
-  approve: boolean
+  approve: boolean,
+  shouldDispatch?: () => boolean
 ) {
-  return callGroupRpc<string>(userId, "review_group_join_request", {
-    p_request_id: requestId,
-    p_approve: approve,
-  });
+  return callGroupRpc<string>(
+    userId,
+    "review_group_join_request",
+    { p_request_id: requestId, p_approve: approve },
+    shouldDispatch
+  );
 }
 
-export function cancelGroupJoinRequest(userId: string, requestId: string) {
-  return callGroupRpc<void>(userId, "cancel_group_join_request", {
-    p_request_id: requestId,
-  });
+export function cancelGroupJoinRequest(
+  userId: string,
+  requestId: string,
+  shouldDispatch?: () => boolean
+) {
+  return callGroupRpc<void>(
+    userId,
+    "cancel_group_join_request",
+    { p_request_id: requestId },
+    shouldDispatch
+  );
 }
 
 export function getGroupWorkflowErrorMessage(error: unknown): string {

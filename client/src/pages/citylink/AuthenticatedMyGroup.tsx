@@ -283,7 +283,7 @@ export default function AuthenticatedMyGroup({
 
   async function runAction(
     key: string,
-    action: () => Promise<unknown>,
+    action: (isCurrent: () => boolean) => Promise<unknown>,
     success: string
   ) {
     if (!userId || actionBusy.current) return;
@@ -299,7 +299,7 @@ export default function AuthenticatedMyGroup({
     setBusyAction(key);
     setNotice(null);
     try {
-      await action();
+      await action(isCurrent);
       if (!isCurrent()) return;
       setNotice({ tone: "success", message: success });
       setRetryToken(value => value + 1);
@@ -322,7 +322,7 @@ export default function AuthenticatedMyGroup({
     if (data.group.creator_id !== userId) return;
     await runAction(
       "rename",
-      () => renameStudyGroup(userId, data.group!.id, groupName),
+      guard => renameStudyGroup(userId, data.group!.id, groupName, guard),
       "The group name was updated."
     );
   }
@@ -331,7 +331,7 @@ export default function AuthenticatedMyGroup({
     if (!userId) return;
     await runAction(
       `cancel-${invitationId}`,
-      () => cancelGroupInvitation(userId, invitationId),
+      guard => cancelGroupInvitation(userId, invitationId, guard),
       "The pending invitation was cancelled."
     );
   }
@@ -357,11 +357,12 @@ export default function AuthenticatedMyGroup({
     const maximum = validation.value;
     await runAction(
       "maximum",
-      async () => {
+      async guard => {
         const saved: unknown = await setGroupMaxMembers(
           userId,
           group.id,
-          maximum
+          maximum,
+          guard
         );
         if (saved !== maximum)
           throw new Error("The saved maximum was not confirmed.");
@@ -388,11 +389,12 @@ export default function AuthenticatedMyGroup({
     const profileId = member.profile_id;
     await runAction(
       `remove-${member.id}`,
-      async () => {
+      async guard => {
         const result: unknown = await removeGroupMember(
           userId,
           group.id,
-          profileId
+          profileId,
+          guard
         );
         if (result !== "removed")
           throw new Error("The member removal was not confirmed.");

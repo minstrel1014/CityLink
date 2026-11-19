@@ -69,11 +69,13 @@ export function Stage6ApplyControl({
   busy,
   applying,
   onApply,
+  onRefresh,
 }: {
   post: GroupRecruitmentPost;
   busy: boolean;
   applying: boolean;
   onApply: () => void;
+  onRefresh?: () => void;
 }) {
   const canApply = canApplyToRecruitmentPost(post);
   const reasonId = `apply-block-reason-${post.id}`;
@@ -95,6 +97,19 @@ export function Stage6ApplyControl({
       >
         {applying ? "Sending request…" : "Apply to join"}
       </button>
+      {onRefresh &&
+        (post.applyBlockReason === "group_full" ||
+          post.applyBlockReason === "maximum_not_set" ||
+          post.applyBlockReason === "group_over_limit") && (
+          <button
+            type="button"
+            className="text-button"
+            disabled={busy}
+            onClick={onRefresh}
+          >
+            Refresh group status
+          </button>
+        )}
     </div>
   );
 }

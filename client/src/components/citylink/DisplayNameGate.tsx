@@ -1,4 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
@@ -17,6 +23,13 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const saveGeneration = useRef(0);
+  useEffect(() => {
+    saveGeneration.current += 1;
+    setSaving(false);
+  }, [session.status, userId]);
 
   useEffect(() => {
     let active = true;
@@ -101,15 +114,26 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
       setError("Please choose your own display name.");
       return;
     }
+    const saveUserId = userId;
+    const generation = saveGeneration.current;
+    const isCurrentSave = () =>
+      saveGeneration.current === generation && userIdRef.current === saveUserId;
     setSaving(true);
     setError("");
     try {
-      await updateOwnDisplayName(userId, value);
+      await updateOwnDisplayName(
+        saveUserId,
+        value,
+        undefined,
+        isCurrentSave
+      );
+      if (!isCurrentSave()) return;
       setState("ready");
     } catch {
+      if (!isCurrentSave()) return;
       setError("Your name was not saved. Check your connection and try again.");
     } finally {
-      setSaving(false);
+      if (isCurrentSave()) setSaving(false);
     }
   }
 

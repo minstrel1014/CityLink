@@ -328,7 +328,13 @@ export default function AuthenticatedProfile({
       if (!isCurrentRequest()) return;
 
       if (draft.displayName.trim() !== (profile?.displayName ?? "")) {
-        await updateOwnDisplayName(saveUserId, draft.displayName, requestAuth);
+        await updateOwnDisplayName(
+          saveUserId,
+          draft.displayName,
+          requestAuth,
+          isCurrentRequest
+        );
+        if (!isCurrentRequest()) return;
       }
       const { data, error } = await bindRequestToken(
         requestAuth.client

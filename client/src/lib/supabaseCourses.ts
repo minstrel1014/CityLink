@@ -1,6 +1,7 @@
 import type { Course } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  assertDispatchAllowed,
   bindRequestToken,
   verifyRequestSession,
 } from "@/lib/supabaseRequestAuth";
@@ -369,16 +370,22 @@ export async function hasCurrentTermCourseEnrollment(
   return hasEnrolment && count !== undefined && count >= 1;
 }
 
-async function verifyCurrentOwner(userId: string) {
-  return verifyRequestSession(
+async function verifyCurrentOwner(
+  userId: string,
+  shouldDispatch?: () => boolean
+) {
+  const session = await verifyRequestSession(
     userId,
     "Your sign-in could not be verified. Sign in again before changing courses."
   );
+  assertDispatchAllowed(shouldDispatch);
+  return session;
 }
 
 export async function addOwnCourseEnrolment(
   userId: string,
-  courseId: string
+  courseId: string,
+  shouldDispatch?: () => boolean
 ): Promise<void> {
   if (!COURSE_ENROLMENT_WRITES_ENABLED) {
     throw new Error(COURSE_ENROLMENT_WRITE_GATE_MESSAGE);
@@ -386,7 +393,10 @@ export async function addOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const { client, accessToken } = await verifyCurrentOwner(userId);
+  const { client, accessToken } = await verifyCurrentOwner(
+    userId,
+    shouldDispatch
+  );
   const { error } = await bindRequestToken(
     client.from("enrolments").insert({
       student_id: userId,
@@ -399,7 +409,8 @@ export async function addOwnCourseEnrolment(
 
 export async function removeOwnCourseEnrolment(
   userId: string,
-  courseId: string
+  courseId: string,
+  shouldDispatch?: () => boolean
 ): Promise<void> {
   if (!COURSE_ENROLMENT_WRITES_ENABLED) {
     throw new Error(COURSE_ENROLMENT_WRITE_GATE_MESSAGE);
@@ -407,7 +418,10 @@ export async function removeOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const { client, accessToken } = await verifyCurrentOwner(userId);
+  const { client, accessToken } = await verifyCurrentOwner(
+    userId,
+    shouldDispatch
+  );
   const { data, error } = await bindRequestToken(
     client
       .from("enrolments")

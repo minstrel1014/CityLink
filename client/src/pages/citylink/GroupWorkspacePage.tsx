@@ -427,7 +427,7 @@ export function GroupWorkspaceContent({
     await runScopedAction(
       scope,
       token,
-      () => requestToJoinGroup(userId, post.groupId!),
+      () => requestToJoinGroup(userId, post.groupId!, () => scope.isCurrent(token)),
       {
         start: () => {
           setBusyAction(`apply:${post.id}`);
@@ -499,7 +499,14 @@ export function GroupWorkspaceContent({
     await runScopedAction(
       scope,
       token,
-      () => editGroupRecruitmentPost(token.userId, post.id, postSubject, draft),
+      () =>
+        editGroupRecruitmentPost(
+          token.userId,
+          post.id,
+          postSubject,
+          draft,
+          () => scope.isCurrent(token)
+        ),
       {
         start: () => {
           setBusyAction(`edit:${post.id}`);
@@ -524,7 +531,10 @@ export function GroupWorkspaceContent({
     await runScopedAction(
       scope,
       token,
-      () => closeGroupRecruitmentPost(token.userId, post.id),
+      () =>
+        closeGroupRecruitmentPost(token.userId, post.id, () =>
+          scope.isCurrent(token)
+        ),
       {
         start: () => {
           setBusyAction(`close:${post.id}`);
@@ -1012,6 +1022,7 @@ export function GroupWorkspaceContent({
                           busy={busyAction !== null}
                           applying={busyAction === `apply:${post.id}`}
                           onApply={() => void applyToJoin(post)}
+                          onRefresh={() => reload(renderToken)}
                         />
                       </div>
                     )}

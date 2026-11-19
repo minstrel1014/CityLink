@@ -61,7 +61,7 @@ describe("Option A presentation-only contract", () => {
     const recruitment = pageSource("./GroupWorkspacePage.tsx");
     const control = pageSource("./Stage6Capacity.tsx");
     expect(recruitment).toMatch(
-      /requestToJoinGroup\(userId,\s*post\.groupId!?\)/
+      /requestToJoinGroup\(userId,\s*post\.groupId!?,\s*\(\)\s*=>\s*scope\.isCurrent\(token\)\)/
     );
     expect(recruitment).toContain("<Stage6ApplyControl");
     expect(control).toContain("post.applyEnabled");

@@ -136,7 +136,14 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     setBusy(true);
     setFeedback("");
     try {
-      await sendGroupChatMessage(userId, groupId, text);
+      await sendGroupChatMessage(
+        userId,
+        groupId,
+        text,
+        () =>
+          generation.current === expectedGeneration &&
+          userIdRef.current === userId
+      );
       if (
         generation.current !== expectedGeneration ||
         userIdRef.current !== userId

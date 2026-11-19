@@ -1,5 +1,6 @@
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  assertDispatchAllowed,
   bindRequestToken,
   verifyRequestSession,
 } from "@/lib/supabaseRequestAuth";
@@ -302,11 +303,17 @@ async function callRpc<T>(userId: string, name: RpcName, args: object) {
   return data as T;
 }
 
-async function callMutationRpc<T>(userId: string, name: RpcName, args: object) {
+async function callMutationRpc<T>(
+  userId: string,
+  name: RpcName,
+  args: object,
+  shouldDispatch?: () => boolean
+) {
   const { client, accessToken } = await verifyRequestSession(
     userId,
     "Your sign-in could not be verified. Sign in again."
   );
+  assertDispatchAllowed(shouldDispatch);
   const { data, error } = await bindRequestToken(
     client.rpc(name, args as never),
     accessToken
@@ -679,7 +686,8 @@ export async function listGroupChatMessages(
 export async function sendGroupChatMessage(
   userId: string,
   groupId: string,
-  body: string
+  body: string,
+  shouldDispatch?: () => boolean
 ) {
   const text = body.trim();
   if (!text || text.length > MAX_CHAT_MESSAGE_LENGTH) {
@@ -687,10 +695,12 @@ export async function sendGroupChatMessage(
       `Messages must be 1–${MAX_CHAT_MESSAGE_LENGTH} characters.`
     );
   }
-  const id = await callMutationRpc<unknown>(userId, "send_group_chat_message", {
-    p_group_id: groupId,
-    p_body: text,
-  });
+  const id = await callMutationRpc<unknown>(
+    userId,
+    "send_group_chat_message",
+    { p_group_id: groupId, p_body: text },
+    shouldDispatch
+  );
   if (typeof id !== "string" || !id.trim()) {
     throw new Error("The message was not confirmed. Refresh before retrying.");
   }
@@ -775,7 +785,8 @@ export async function editGroupRecruitmentPost(
   userId: string,
   postId: string,
   subject: string,
-  body: string
+  body: string,
+  shouldDispatch?: () => boolean
 ) {
   const title = subject.trim();
   const text = body.trim();
@@ -787,20 +798,25 @@ export async function editGroupRecruitmentPost(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
     );
   }
-  await callMutationRpc(userId, "edit_group_recruitment_post", {
-    p_post_id: postId,
-    p_subject: title,
-    p_body: text,
-  });
+  await callMutationRpc(
+    userId,
+    "edit_group_recruitment_post",
+    { p_post_id: postId, p_subject: title, p_body: text },
+    shouldDispatch
+  );
 }
 
 export async function closeGroupRecruitmentPost(
   userId: string,
-  postId: string
+  postId: string,
+  shouldDispatch?: () => boolean
 ) {
-  await callMutationRpc(userId, "close_group_recruitment_post", {
-    p_post_id: postId,
-  });
+  await callMutationRpc(
+    userId,
+    "close_group_recruitment_post",
+    { p_post_id: postId },
+    shouldDispatch
+  );
 }
 
 export function getStage6ErrorMessage(error: unknown) {

@@ -364,6 +364,8 @@ export default function AuthenticatedCoursePeers({
 
     const context = actionContext.current;
     const attempt = Symbol("people-invitation");
+    const isCurrent = () =>
+      actionContext.current === context && pendingInvite.current === attempt;
     pendingInvite.current = attempt;
     setBusyPeerId(peer.profile_id);
     setFeedback(null);
@@ -375,7 +377,8 @@ export default function AuthenticatedCoursePeers({
           courseId,
           peer.profile_id,
           creation.name,
-          creation.maxMembers
+          creation.maxMembers,
+          isCurrent
         );
         if (actionContext.current !== context) return;
         setCreatingPeer(null);
@@ -385,7 +388,12 @@ export default function AuthenticatedCoursePeers({
             "Your first invitation was sent. A forming group has been created with you as its leader; it becomes active when the invitee accepts.",
         });
       } else {
-        await sendGroupInvitation(userId, selectedGroupId, peer.profile_id);
+        await sendGroupInvitation(
+          userId,
+          selectedGroupId,
+          peer.profile_id,
+          isCurrent
+        );
         if (actionContext.current !== context) return;
         setFeedback({
           tone: "success",

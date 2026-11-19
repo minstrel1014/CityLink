@@ -285,9 +285,9 @@ export default function MyCourses({
     setNotice(null);
     try {
       if (wasEnrolled) {
-        await removeOwnCourseEnrolment(expectedUserId, courseId);
+        await removeOwnCourseEnrolment(expectedUserId, courseId, isCurrent);
       } else {
-        await addOwnCourseEnrolment(expectedUserId, courseId);
+        await addOwnCourseEnrolment(expectedUserId, courseId, isCurrent);
       }
       if (!isCurrent()) return;
 
