@@ -1,4 +1,8 @@
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  bindRequestToken,
+  verifyRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export interface GroupCoursePeer {
   profile_id: string;
@@ -781,8 +785,11 @@ async function callGroupRpc<T>(
     | "remove_group_member",
   args: Record<string, unknown>
 ): Promise<T> {
-  const client = await verifyCurrentUser(userId);
-  const { data, error } = await client.rpc(name, args as never);
+  const { client, accessToken } = await verifyRequestSession(userId);
+  const { data, error } = await bindRequestToken(
+    client.rpc(name, args as never),
+    accessToken
+  );
   if (error) throw error;
   return data as T;
 }

@@ -1,4 +1,8 @@
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  bindRequestToken,
+  verifyRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export const CHAT_PAGE_SIZE = 50;
 export const COURSE_GROUPS_PAGE_SIZE = 25;
@@ -294,6 +298,19 @@ async function authenticatedClient(userId: string) {
 async function callRpc<T>(userId: string, name: RpcName, args: object) {
   const client = await authenticatedClient(userId);
   const { data, error } = await client.rpc(name, args as never);
+  if (error) throw error;
+  return data as T;
+}
+
+async function callMutationRpc<T>(userId: string, name: RpcName, args: object) {
+  const { client, accessToken } = await verifyRequestSession(
+    userId,
+    "Your sign-in could not be verified. Sign in again."
+  );
+  const { data, error } = await bindRequestToken(
+    client.rpc(name, args as never),
+    accessToken
+  );
   if (error) throw error;
   return data as T;
 }
@@ -670,7 +687,7 @@ export async function sendGroupChatMessage(
       `Messages must be 1–${MAX_CHAT_MESSAGE_LENGTH} characters.`
     );
   }
-  const id = await callRpc<unknown>(userId, "send_group_chat_message", {
+  const id = await callMutationRpc<unknown>(userId, "send_group_chat_message", {
     p_group_id: groupId,
     p_body: text,
   });
@@ -770,7 +787,7 @@ export async function editGroupRecruitmentPost(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
     );
   }
-  await callRpc(userId, "edit_group_recruitment_post", {
+  await callMutationRpc(userId, "edit_group_recruitment_post", {
     p_post_id: postId,
     p_subject: title,
     p_body: text,
@@ -781,7 +798,9 @@ export async function closeGroupRecruitmentPost(
   userId: string,
   postId: string
 ) {
-  await callRpc(userId, "close_group_recruitment_post", { p_post_id: postId });
+  await callMutationRpc(userId, "close_group_recruitment_post", {
+    p_post_id: postId,
+  });
 }
 
 export function getStage6ErrorMessage(error: unknown) {

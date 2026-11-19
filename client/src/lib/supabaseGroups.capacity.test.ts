@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
   getUser: vi.fn(),
   rpc: vi.fn(),
   from: vi.fn(),
@@ -8,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabaseClient", () => ({
   supabaseClient: {
-    auth: { getUser: mocks.getUser },
+    auth: { getSession: mocks.getSession, getUser: mocks.getUser },
     rpc: mocks.rpc,
     from: mocks.from,
   },
@@ -42,13 +43,30 @@ const baseRow = {
   capacity_state: "available",
 };
 
+function rpcResult(result: { data: unknown; error: unknown }) {
+  const builder = {
+    setHeader: vi.fn(() => builder),
+    then(
+      resolve: (value: typeof result) => unknown,
+      reject: (reason: unknown) => unknown
+    ) {
+      return Promise.resolve(result).then(resolve, reject);
+    },
+  };
+  return builder;
+}
+
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.getSession.mockResolvedValue({
+    data: { session: { access_token: "token-a" } },
+    error: null,
+  });
   mocks.getUser.mockResolvedValue({
     data: { user: { id: "actor" } },
     error: null,
   });
-  mocks.rpc.mockResolvedValue({ data: null, error: null });
+  mocks.rpc.mockReturnValue(rpcResult({ data: null, error: null }));
 });
 
 describe("active member roster pagination", () => {
@@ -294,7 +312,7 @@ describe("capacity-bearing course group summaries", () => {
   });
 
   it("maps the authenticated summary RPC response", async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: [baseRow], error: null });
+    mocks.rpc.mockReturnValueOnce(rpcResult({ data: [baseRow], error: null }));
     await expect(listCourseGroupSummaries("actor", "course")).resolves.toEqual([
       baseRow,
     ]);
@@ -308,11 +326,17 @@ describe("capacity-bearing course group summaries", () => {
 describe("capacity service RPCs", () => {
   it("sends the explicitly selected maximum and trimmed name when creating a group", async () => {
     const created = { group_id: "g", invitation_id: "i" };
-    mocks.rpc.mockResolvedValueOnce({ data: [created], error: null });
+    const request = rpcResult({ data: [created], error: null });
+    mocks.rpc.mockReturnValueOnce(request);
     await expect(
       createGroupAndInvite("actor", "course", "recipient", "  Team  ", 2)
     ).resolves.toEqual(created);
     expect(mocks.getUser).toHaveBeenCalledOnce();
+    expect(mocks.getSession).toHaveBeenCalledOnce();
+    expect(request.setHeader).toHaveBeenCalledWith(
+      "Authorization",
+      "Bearer token-a"
+    );
     expect(mocks.rpc).toHaveBeenCalledOnce();
     expect(mocks.rpc).toHaveBeenCalledWith("create_group_and_invite", {
       p_course_id: "course",
@@ -323,7 +347,7 @@ describe("capacity service RPCs", () => {
   });
 
   it("reports a malformed creation response without retrying an old overload", async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: [], error: null });
+    mocks.rpc.mockReturnValueOnce(rpcResult({ data: [], error: null }));
     await expect(
       createGroupAndInvite("actor", "course", "recipient", "Team", 19)
     ).rejects.toThrow(/did not return/i);
@@ -336,7 +360,7 @@ describe("capacity service RPCs", () => {
 
   it("propagates a missing new RPC without retrying an old overload", async () => {
     const error = { code: "PGRST202", message: "function not found" };
-    mocks.rpc.mockResolvedValueOnce({ data: null, error });
+    mocks.rpc.mockReturnValueOnce(rpcResult({ data: null, error }));
     await expect(
       createGroupAndInvite("actor", "course", "recipient", "Team", 2)
     ).rejects.toBe(error);
@@ -366,7 +390,7 @@ describe("capacity service RPCs", () => {
   it.each([2, 19])(
     "sets a valid maximum %i with the exact draft argument names",
     async maximum => {
-      mocks.rpc.mockResolvedValueOnce({ data: maximum, error: null });
+      mocks.rpc.mockReturnValueOnce(rpcResult({ data: maximum, error: null }));
       await expect(setGroupMaxMembers("actor", "group", maximum)).resolves.toBe(
         maximum
       );
@@ -379,7 +403,7 @@ describe("capacity service RPCs", () => {
   );
 
   it("removes one specified member only through the draft RPC", async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: "removed", error: null });
+    mocks.rpc.mockReturnValueOnce(rpcResult({ data: "removed", error: null }));
     await expect(removeGroupMember("actor", "group", "member")).resolves.toBe(
       "removed"
     );
@@ -406,7 +430,9 @@ describe("capacity service RPCs", () => {
   );
 
   it("keeps the direct request_to_join_group RPC and exact argument unchanged", async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: "request-id", error: null });
+    mocks.rpc.mockReturnValueOnce(
+      rpcResult({ data: "request-id", error: null })
+    );
     await expect(requestToJoinGroup("actor", "group")).resolves.toBe(
       "request-id"
     );
@@ -430,7 +456,7 @@ describe("capacity service RPCs", () => {
     "propagates a full error from $rpc without issuing another write",
     async ({ operation, rpc, args }) => {
       const error = { message: "Group is full" };
-      mocks.rpc.mockResolvedValueOnce({ data: null, error });
+      mocks.rpc.mockReturnValueOnce(rpcResult({ data: null, error }));
       await expect(operation()).rejects.toBe(error);
       expect(mocks.rpc).toHaveBeenCalledOnce();
       expect(mocks.rpc).toHaveBeenCalledWith(rpc, args);

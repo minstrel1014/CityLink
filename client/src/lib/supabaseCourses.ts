@@ -1,5 +1,9 @@
 import type { Course } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  bindRequestToken,
+  verifyRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export type CourseDirectoryScope = "catalogue" | "mine";
 
@@ -366,16 +370,10 @@ export async function hasCurrentTermCourseEnrollment(
 }
 
 async function verifyCurrentOwner(userId: string) {
-  if (!supabaseClient) {
-    throw new Error("Supabase is not configured in this environment.");
-  }
-  const { data, error } = await supabaseClient.auth.getUser();
-  if (error || data.user?.id !== userId) {
-    throw new Error(
-      "Your sign-in could not be verified. Sign in again before changing courses."
-    );
-  }
-  return data.user.id;
+  return verifyRequestSession(
+    userId,
+    "Your sign-in could not be verified. Sign in again before changing courses."
+  );
 }
 
 export async function addOwnCourseEnrolment(
@@ -388,11 +386,14 @@ export async function addOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const ownerId = await verifyCurrentOwner(userId);
-  const { error } = await supabaseClient.from("enrolments").insert({
-    student_id: ownerId,
-    course_id: courseId,
-  });
+  const { client, accessToken } = await verifyCurrentOwner(userId);
+  const { error } = await bindRequestToken(
+    client.from("enrolments").insert({
+      student_id: userId,
+      course_id: courseId,
+    }),
+    accessToken
+  );
   if (error) throw error;
 }
 
@@ -406,14 +407,17 @@ export async function removeOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const ownerId = await verifyCurrentOwner(userId);
-  const { data, error } = await supabaseClient
-    .from("enrolments")
-    .delete()
-    .eq("student_id", ownerId)
-    .eq("course_id", courseId)
-    .select("student_id, course_id")
-    .maybeSingle();
+  const { client, accessToken } = await verifyCurrentOwner(userId);
+  const { data, error } = await bindRequestToken(
+    client
+      .from("enrolments")
+      .delete()
+      .eq("student_id", userId)
+      .eq("course_id", courseId)
+      .select("student_id, course_id")
+      .maybeSingle(),
+    accessToken
+  );
   if (error) throw error;
   if (!data) throw new Error("No matching course enrolment was found.");
 }

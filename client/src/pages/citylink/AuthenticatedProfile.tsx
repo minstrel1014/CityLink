@@ -19,10 +19,14 @@ import { Avatar, Brand, Status } from "@/components/citylink/Shared";
 import type { Student } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
+  bindRequestToken,
+  verifyRequestSession,
+  type VerifiedRequestSession,
+} from "@/lib/supabaseRequestAuth";
+import {
   buildOwnProfileUpdate,
   classifyOwnProfileResult,
   getProfileInitials,
-  isAuthenticatedProfileOwner,
   isCurrentProfileOperation,
   MAX_PROFILE_BIO_LENGTH,
   MAX_DISPLAY_NAME_LENGTH,
@@ -306,34 +310,35 @@ export default function AuthenticatedProfile({
     }
 
     try {
-      const {
-        data: { user: authenticatedUser },
-        error: authenticationError,
-      } = await supabaseClient.auth.getUser();
-      if (!isCurrentRequest()) return;
-      if (
-        !isAuthenticatedProfileOwner(
+      let requestAuth: VerifiedRequestSession;
+      try {
+        requestAuth = await verifyRequestSession(
           saveUserId,
-          authenticatedUser?.id,
-          authenticationError
-        )
-      ) {
-        setFeedback({
-          tone: "error",
-          text: "Your sign-in could not be verified. Sign in again before saving your profile.",
-        });
+          "Your sign-in could not be verified. Sign in again before saving your profile."
+        );
+      } catch {
+        if (isCurrentRequest()) {
+          setFeedback({
+            tone: "error",
+            text: "Your sign-in could not be verified. Sign in again before saving your profile.",
+          });
+        }
         return;
       }
+      if (!isCurrentRequest()) return;
 
       if (draft.displayName.trim() !== (profile?.displayName ?? "")) {
-        await updateOwnDisplayName(saveUserId, draft.displayName);
+        await updateOwnDisplayName(saveUserId, draft.displayName, requestAuth);
       }
-      const { data, error } = await supabaseClient
-        .from("profiles")
-        .update(payload)
-        .eq("id", saveUserId)
-        .select(OWN_PROFILE_COLUMNS)
-        .maybeSingle();
+      const { data, error } = await bindRequestToken(
+        requestAuth.client
+          .from("profiles")
+          .update(payload)
+          .eq("id", saveUserId)
+          .select(OWN_PROFILE_COLUMNS)
+          .maybeSingle(),
+        requestAuth.accessToken
+      );
       if (!isCurrentRequest()) return;
 
       if (error) {

@@ -21,7 +21,9 @@ vi.mock("@/lib/supabaseClient", () => ({
 }));
 
 import {
+  closeGroupRecruitmentPost,
   createGroupRecruitmentPost,
+  editGroupRecruitmentPost,
   getGroupChatAccess,
   getStage6ErrorMessage,
   listCurrentTermCourseGroups,
@@ -568,8 +570,40 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       p_group_id: groupId,
       p_body: "Hello",
     });
+    expect(supabaseMocks.getSession).toHaveBeenCalledTimes(1);
+    expect(supabaseMocks.getUser).toHaveBeenLastCalledWith(tokenA);
+    expect(supabaseMocks.requests.at(-1)?.supplied.get("Authorization")).toBe(
+      `Bearer ${tokenA}`
+    );
     await expect(sendGroupChatMessage(userId, groupId, "   ")).rejects.toThrow(
       /1–4000 characters/i
+    );
+  });
+  it("binds post edit and close to the captured request token", async () => {
+    supabaseMocks.response.mockResolvedValueOnce({ data: null, error: null });
+    await editGroupRecruitmentPost(userId, "post-1", "  Subject  ", "  Body  ");
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "edit_group_recruitment_post",
+      {
+        p_post_id: "post-1",
+        p_subject: "Subject",
+        p_body: "Body",
+      }
+    );
+    expect(supabaseMocks.requests.at(-1)?.supplied.get("Authorization")).toBe(
+      `Bearer ${tokenA}`
+    );
+
+    supabaseMocks.response.mockResolvedValueOnce({ data: null, error: null });
+    await closeGroupRecruitmentPost(userId, "post-1");
+    expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
+      "close_group_recruitment_post",
+      { p_post_id: "post-1" }
+    );
+    expect(supabaseMocks.getSession).toHaveBeenCalledTimes(2);
+    expect(supabaseMocks.getUser).toHaveBeenLastCalledWith(tokenA);
+    expect(supabaseMocks.requests.at(-1)?.supplied.get("Authorization")).toBe(
+      `Bearer ${tokenA}`
     );
   });
 

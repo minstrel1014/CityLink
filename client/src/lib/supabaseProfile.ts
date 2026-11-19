@@ -1,5 +1,10 @@
 import type { GroupStatus } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  bindRequestToken,
+  verifyRequestSession,
+  type VerifiedRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export const OWN_PROFILE_COLUMNS =
   "id,student_id,display_name,major,year,bio,skills,status";
@@ -173,21 +178,27 @@ export function getProfileInitials(displayName: string) {
 
 export async function updateOwnDisplayName(
   userId: string,
-  displayName: string
+  displayName: string,
+  verifiedSession?: VerifiedRequestSession
 ) {
   if (!supabaseClient) throw new Error("Supabase is not configured.");
   const value = displayName.trim();
   if (!value || value.length > MAX_DISPLAY_NAME_LENGTH) {
     throw new Error(`Names must be 1-${MAX_DISPLAY_NAME_LENGTH} characters.`);
   }
-  const { data: userData, error: userError } =
-    await supabaseClient.auth.getUser();
-  if (userError || userData.user?.id !== userId) {
+  const session =
+    verifiedSession ??
+    (await verifyRequestSession(userId, "Your sign-in could not be verified."));
+  if (session.userId !== userId) {
     throw new Error("Your sign-in could not be verified.");
   }
-  const { data, error } = await supabaseClient.rpc("update_own_display_name", {
-    p_display_name: value,
-  });
+  const { client, accessToken } = session;
+  const { data, error } = await bindRequestToken(
+    client.rpc("update_own_display_name", {
+      p_display_name: value,
+    }),
+    accessToken
+  );
   if (error) throw error;
   if (data !== value) throw new Error("Your name was not confirmed.");
   return value;
