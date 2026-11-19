@@ -1,10 +1,17 @@
-import React, { useEffect, useRef, useState, type FormEvent } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import { ArrowRight, Users } from "lucide-react";
 import { Link } from "wouter";
 import { GroupChatLink } from "@/components/citylink/GroupNavigationLinks";
 import { PageHeading } from "@/components/citylink/Shared";
 import AuthenticatedCoursePeers from "@/pages/citylink/AuthenticatedCoursePeers";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import { hasCurrentTermCourseEnrollment } from "@/lib/supabaseCourses";
 import {
   closeGroupRecruitmentPost,
   createGroupRecruitmentPost,
@@ -20,7 +27,7 @@ import {
 } from "@/lib/supabaseStage6";
 import {
   getGroupWorkflowErrorMessage,
-  loadGroupWorkflowSnapshot,
+  loadOwnCourseGroupSnapshot,
   requestToJoinGroup,
   type StudyGroupRow,
 } from "@/lib/supabaseGroups";
@@ -31,26 +38,68 @@ import {
   Stage6CapacityStatus,
 } from "./Stage6Capacity";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
+import {
+  GroupWorkspaceScope,
+  recruitmentEligibility,
+  runScoped,
+  runScopedAction,
+  type WorkspaceToken,
+} from "./GroupWorkspaceScope";
 
 type LoadState = "loading" | "ready" | "error";
 type Snapshot = {
   groups: CourseGroupSummary[];
+  groupsState: LoadState;
+  groupsError: string;
   groupsHasMore: boolean;
   groupsCursor: CourseGroupCursor | null;
   posts: GroupRecruitmentPost[];
+  postsState: LoadState;
+  postsError: string;
   postsHasMore: boolean;
   postsCursor: RecruitmentPostCursor | null;
-  ownGroups: StudyGroupRow[];
-  activeGroupIds: string[];
-  userId: string;
-  generation: number;
+  eligibility: {
+    status: "checking" | "complete";
+    verified: boolean;
+    groups: StudyGroupRow[];
+  };
+  token: WorkspaceToken;
 };
 
+// A new keyed content tree resets both creation and editing drafts when the
+// account, session readiness or course changes. The commit-phase layout effect
+// invalidates old callbacks before the browser can interact with the new tree.
 export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
-  const currentUserId = useRef(userId);
-  currentUserId.current = userId;
+  const context = { status: session.status, userId, courseId };
+  const scope = useRef(new GroupWorkspaceScope(context)).current;
+  useLayoutEffect(() => {
+    scope.updateContext({ status: session.status, userId, courseId });
+    return () => scope.invalidate();
+  }, [scope, session.status, userId, courseId]);
+  return (
+    <GroupWorkspaceContent
+      key={JSON.stringify([session.status, userId, courseId])}
+      courseId={courseId}
+      userId={userId}
+      sessionStatus={session.status}
+      scope={scope}
+    />
+  );
+}
+
+export function GroupWorkspaceContent({
+  courseId,
+  userId,
+  sessionStatus,
+  scope,
+}: {
+  courseId: string;
+  userId: string | null;
+  sessionStatus: string;
+  scope: GroupWorkspaceScope;
+}) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
@@ -63,217 +112,381 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [postSubject, setPostSubject] = useState("");
-  const loadGeneration = useRef(0);
+  const groupsAttempt = useRef(0);
+  const postsAttempt = useRef(0);
+  const eligibilityAttempt = useRef(0);
+
+  // Recheck the token and attempt inside React's updater too: it may be applied
+  // after another retry, refresh, or context change has already begun.
+  function updateSnapshot(
+    token: WorkspaceToken,
+    isLatest: () => boolean,
+    update: (previous: Snapshot) => Snapshot
+  ) {
+    setSnapshot(previous =>
+      previous &&
+      scope.isCurrent(token) &&
+      previous.token.generation === token.generation &&
+      isLatest()
+        ? update(previous)
+        : previous
+    );
+  }
+
+  function loadGroups(token: WorkspaceToken) {
+    if (!scope.isCurrent(token)) return;
+    const attempt = ++groupsAttempt.current;
+    const isLatest = () => groupsAttempt.current === attempt;
+    updateSnapshot(token, isLatest, previous => ({
+      ...previous,
+      groupsState: "loading",
+      groupsError: "",
+    }));
+    void runScoped(
+      scope,
+      token,
+      () => listCurrentTermCourseGroups(token.userId, token.courseId),
+      {
+        success: page =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            groups: page.items,
+            groupsHasMore: page.hasMore,
+            groupsCursor: page.nextCursor,
+            groupsState: "ready",
+          })),
+        error: loadError =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            groupsState: "error",
+            groupsError: getStage6ErrorMessage(loadError),
+          })),
+      }
+    );
+  }
+
+  function loadPosts(token: WorkspaceToken) {
+    if (!scope.isCurrent(token)) return;
+    const attempt = ++postsAttempt.current;
+    const isLatest = () => postsAttempt.current === attempt;
+    updateSnapshot(token, isLatest, previous => ({
+      ...previous,
+      postsState: "loading",
+      postsError: "",
+    }));
+    void runScoped(
+      scope,
+      token,
+      () => listGroupRecruitmentPosts(token.userId, token.courseId),
+      {
+        success: page =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            posts: page.items,
+            postsHasMore: page.hasMore,
+            postsCursor: page.nextCursor,
+            postsState: "ready",
+          })),
+        error: loadError =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            postsState: "error",
+            postsError: getStage6ErrorMessage(loadError),
+          })),
+      }
+    );
+  }
+
+  function loadEligibility(token: WorkspaceToken) {
+    if (!scope.isCurrent(token)) return;
+    const attempt = ++eligibilityAttempt.current;
+    const isLatest = () => eligibilityAttempt.current === attempt;
+    updateSnapshot(token, isLatest, previous => ({
+      ...previous,
+      eligibility: { status: "checking", verified: false, groups: [] },
+    }));
+    void runScoped(
+      scope,
+      token,
+      () => {
+        // Start both reads independently, and fail immediately on a rejection
+        // or false course evidence even if the other read never settles.
+        const ownGroups = Promise.resolve().then(() =>
+          loadOwnCourseGroupSnapshot(token.userId, token.courseId)
+        );
+        const course = Promise.resolve()
+          .then(() =>
+            hasCurrentTermCourseEnrollment(token.userId, token.courseId)
+          )
+          .then(eligible => {
+            if (eligible !== true)
+              throw new Error("Course eligibility not confirmed");
+            return eligible;
+          });
+        return Promise.all([ownGroups, course]);
+      },
+      {
+        success: ([ownGroups, currentCourseEligible]) =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            eligibility: {
+              status: "complete",
+              ...recruitmentEligibility(
+                token.userId,
+                token.courseId,
+                currentCourseEligible,
+                ownGroups.groups,
+                ownGroups.memberships
+              ),
+            },
+          })),
+        error: () =>
+          updateSnapshot(token, isLatest, previous => ({
+            ...previous,
+            eligibility: { status: "complete", verified: false, groups: [] },
+          })),
+      }
+    );
+  }
 
   useEffect(() => {
-    const generation = ++loadGeneration.current;
-    let active = true;
-    const isCurrent = () =>
-      active &&
-      loadGeneration.current === generation &&
-      currentUserId.current === userId;
-    if (session.status === "loading") {
+    if (!scope.matchesContext({ status: sessionStatus, userId, courseId }))
+      return;
+    const token = scope.startLoad();
+    setSnapshot(null);
+    setBusyAction(null);
+    setGroupsPageBusy(false);
+    setPostsPageBusy(false);
+    setCreatingGroupId(null);
+    setEditingPostId(null);
+    setDraft("");
+    setPostSubject("");
+    if (sessionStatus === "loading") {
       setState("loading");
-      return () => {
-        active = false;
-      };
-    }
-    if (!userId) {
-      setSnapshot(null);
+    } else if (!token) {
       setState("error");
       setError(
         "Sign in with a Supabase account to browse current-term groups."
       );
-      return () => {
-        active = false;
-      };
-    }
-
-    setSnapshot(null);
-    setState("loading");
-    setError("");
-    setFeedback("");
-    void Promise.all([
-      listCurrentTermCourseGroups(userId, courseId),
-      listGroupRecruitmentPosts(userId, courseId),
-      loadGroupWorkflowSnapshot(userId),
-    ])
-      .then(([groupsPage, postsPage, ownSnapshot]) => {
-        if (!isCurrent()) return;
-        setSnapshot({
-          groups: groupsPage.items,
-          groupsHasMore: groupsPage.hasMore,
-          groupsCursor: groupsPage.nextCursor,
-          posts: postsPage.items,
-          postsHasMore: postsPage.hasMore,
-          postsCursor: postsPage.nextCursor,
-          ownGroups: ownSnapshot.groups,
-          activeGroupIds: ownSnapshot.memberships
-            .filter(membership => membership.membership_status === "active")
-            .map(membership => membership.group_id),
-          userId,
-          generation,
-        });
-        setState("ready");
-      })
-      .catch(loadError => {
-        if (!isCurrent()) return;
-        setError(getStage6ErrorMessage(loadError));
-        setState("error");
+    } else {
+      setError("");
+      setSnapshot({
+        groups: [],
+        groupsState: "loading",
+        groupsError: "",
+        groupsHasMore: false,
+        groupsCursor: null,
+        posts: [],
+        postsState: "loading",
+        postsError: "",
+        postsHasMore: false,
+        postsCursor: null,
+        eligibility: { status: "checking", verified: false, groups: [] },
+        token,
       });
-
+      setState("ready");
+      loadGroups(token);
+      loadPosts(token);
+      loadEligibility(token);
+    }
     return () => {
-      active = false;
-      if (loadGeneration.current === generation) loadGeneration.current += 1;
+      if (token && scope.isCurrent(token)) scope.invalidate();
     };
-  }, [courseId, reloadToken, session.status, userId]);
+  }, [courseId, reloadToken, sessionStatus, userId, scope]);
 
-  async function reload() {
+  const ownSnapshot =
+    sessionStatus === "ready" &&
+    snapshot &&
+    snapshot.token.userId === userId &&
+    snapshot.token.courseId === courseId &&
+    scope.isCurrent(snapshot.token)
+      ? snapshot
+      : null;
+  const renderToken = scope.matchesContext({
+    status: sessionStatus,
+    userId,
+    courseId,
+  })
+    ? scope.currentToken()
+    : null;
+
+  function reload(expectedToken: WorkspaceToken | null = renderToken) {
+    if (!expectedToken || !scope.isCurrent(expectedToken)) return;
+    scope.invalidate();
+    setSnapshot(null);
+    setBusyAction(null);
+    setGroupsPageBusy(false);
+    setPostsPageBusy(false);
     setReloadToken(value => value + 1);
   }
 
   async function loadMoreGroups() {
+    const token = ownSnapshot?.token;
     if (
-      !userId ||
-      !ownSnapshot?.groupsHasMore ||
+      !token ||
+      !scope.isCurrent(token) ||
+      !ownSnapshot.groupsHasMore ||
       !ownSnapshot.groupsCursor ||
       groupsPageBusy
     )
       return;
     setGroupsPageBusy(true);
     setFeedback("");
-    const expectedGeneration = loadGeneration.current;
-    try {
-      const page = await listCurrentTermCourseGroups(
-        userId,
-        courseId,
-        ownSnapshot.groupsCursor
-      );
-      if (
-        currentUserId.current !== userId ||
-        loadGeneration.current !== expectedGeneration
-      )
-        return;
-      setSnapshot(previous => {
-        if (
-          !previous ||
-          previous.userId !== userId ||
-          previous.generation !== expectedGeneration
-        )
-          return previous;
-        const known = new Set(previous.groups.map(group => group.groupId));
-        return {
-          ...previous,
-          groups: [
-            ...previous.groups,
-            ...page.items.filter(group => !known.has(group.groupId)),
-          ],
-          groupsHasMore: page.hasMore,
-          groupsCursor: page.nextCursor,
-        };
-      });
-    } catch (pageError) {
-      setFeedback(getStage6ErrorMessage(pageError));
-    } finally {
-      setGroupsPageBusy(false);
-    }
+    await runScoped(
+      scope,
+      token,
+      () =>
+        listCurrentTermCourseGroups(
+          token.userId,
+          token.courseId,
+          ownSnapshot.groupsCursor!
+        ),
+      {
+        success: page =>
+          setSnapshot(previous => {
+            if (
+              !previous ||
+              !scope.isCurrent(previous.token) ||
+              previous.token.generation !== token.generation
+            )
+              return previous;
+            const known = new Set(previous.groups.map(group => group.groupId));
+            return {
+              ...previous,
+              groups: [
+                ...previous.groups,
+                ...page.items.filter(group => !known.has(group.groupId)),
+              ],
+              groupsHasMore: page.hasMore,
+              groupsCursor: page.nextCursor,
+            };
+          }),
+        error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
+        finally: () => setGroupsPageBusy(false),
+      }
+    );
   }
 
   async function loadMorePosts() {
+    const token = ownSnapshot?.token;
     if (
-      !userId ||
-      !ownSnapshot?.postsHasMore ||
+      !token ||
+      !scope.isCurrent(token) ||
+      !ownSnapshot.postsHasMore ||
       !ownSnapshot.postsCursor ||
       postsPageBusy
     )
       return;
     setPostsPageBusy(true);
     setFeedback("");
-    const expectedGeneration = loadGeneration.current;
-    try {
-      const page = await listGroupRecruitmentPosts(
-        userId,
-        courseId,
-        ownSnapshot.postsCursor
-      );
-      if (
-        currentUserId.current !== userId ||
-        loadGeneration.current !== expectedGeneration
-      )
-        return;
-      setSnapshot(previous => {
-        if (
-          !previous ||
-          previous.userId !== userId ||
-          previous.generation !== expectedGeneration
-        )
-          return previous;
-        const known = new Set(previous.posts.map(post => post.id));
-        return {
-          ...previous,
-          posts: [
-            ...previous.posts,
-            ...page.items.filter(post => !known.has(post.id)),
-          ],
-          postsHasMore: page.hasMore,
-          postsCursor: page.nextCursor,
-        };
-      });
-    } catch (pageError) {
-      setFeedback(getStage6ErrorMessage(pageError));
-    } finally {
-      setPostsPageBusy(false);
-    }
+    await runScoped(
+      scope,
+      token,
+      () =>
+        listGroupRecruitmentPosts(
+          token.userId,
+          token.courseId,
+          ownSnapshot.postsCursor!
+        ),
+      {
+        success: page =>
+          setSnapshot(previous => {
+            if (
+              !previous ||
+              !scope.isCurrent(previous.token) ||
+              previous.token.generation !== token.generation
+            )
+              return previous;
+            const known = new Set(previous.posts.map(post => post.id));
+            return {
+              ...previous,
+              posts: [
+                ...previous.posts,
+                ...page.items.filter(post => !known.has(post.id)),
+              ],
+              postsHasMore: page.hasMore,
+              postsCursor: page.nextCursor,
+            };
+          }),
+        error: pageError => setFeedback(getStage6ErrorMessage(pageError)),
+        finally: () => setPostsPageBusy(false),
+      }
+    );
   }
 
   async function applyToJoin(post: GroupRecruitmentPost) {
+    const token = ownSnapshot?.token;
     if (
+      !token ||
       !userId ||
       !post.groupId ||
       !canApplyToRecruitmentPost(post) ||
       busyAction
     )
       return;
-    setBusyAction(`apply:${post.id}`);
-    setFeedback("");
-    try {
-      await requestToJoinGroup(userId, post.groupId);
-      setFeedback(
-        "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
-      );
-    } catch (applyError) {
-      const message = getGroupWorkflowErrorMessage(applyError);
-      setFeedback(message);
-    } finally {
-      setBusyAction(null);
-    }
+    await runScopedAction(
+      scope,
+      token,
+      () => requestToJoinGroup(userId, post.groupId!),
+      {
+        start: () => {
+          setBusyAction(`apply:${post.id}`);
+          setFeedback("");
+        },
+        success: () =>
+          setFeedback(
+            "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
+          ),
+        error: applyError =>
+          setFeedback(getGroupWorkflowErrorMessage(applyError)),
+        finally: () => setBusyAction(null),
+      }
+    );
   }
 
   async function createPost(
     event: FormEvent<HTMLFormElement>,
-    group: CourseGroupSummary
+    group: StudyGroupRow
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
-    setBusyAction(`create:${group.groupId}`);
-    setFeedback("");
-    try {
-      await createGroupRecruitmentPost(
-        userId,
-        group.groupId,
-        postSubject,
-        draft
-      );
-      setDraft("");
-      setPostSubject("");
-      setCreatingGroupId(null);
-      setFeedback("Recruitment post created.");
-      await reload();
-    } catch (createError) {
-      setFeedback(getStage6ErrorMessage(createError));
-    } finally {
-      setBusyAction(null);
-    }
+    const token = ownSnapshot?.token;
+    if (
+      !token ||
+      !ownSnapshot.eligibility.verified ||
+      !ownSnapshot.eligibility.groups.some(item => item.id === group.id) ||
+      creatingGroupId !== group.id ||
+      busyAction ||
+      !draft.trim() ||
+      !postSubject.trim()
+    )
+      return;
+    await runScopedAction(
+      scope,
+      token,
+      () =>
+        createGroupRecruitmentPost(
+          token.userId,
+          group.id,
+          postSubject,
+          draft,
+          () => scope.isCurrent(token)
+        ),
+      {
+        start: () => {
+          setBusyAction(`create:${group.id}`);
+          setFeedback("");
+        },
+        success: () => {
+          setDraft("");
+          setPostSubject("");
+          setCreatingGroupId(null);
+          setFeedback("Recruitment post created.");
+          reload(token);
+        },
+        error: createError => setFeedback(getStage6ErrorMessage(createError)),
+        finally: () => setBusyAction(null),
+      }
+    );
   }
 
   async function savePost(
@@ -281,41 +494,54 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
     post: GroupRecruitmentPost
   ) {
     event.preventDefault();
-    if (!userId || busyAction || !draft.trim() || !postSubject.trim()) return;
-    setBusyAction(`edit:${post.id}`);
-    setFeedback("");
-    try {
-      await editGroupRecruitmentPost(userId, post.id, postSubject, draft);
-      setEditingPostId(null);
-      setDraft("");
-      setPostSubject("");
-      setFeedback("Recruitment post updated.");
-      await reload();
-    } catch (editError) {
-      setFeedback(getStage6ErrorMessage(editError));
-    } finally {
-      setBusyAction(null);
-    }
+    const token = ownSnapshot?.token;
+    if (!token || busyAction || !draft.trim() || !postSubject.trim()) return;
+    await runScopedAction(
+      scope,
+      token,
+      () => editGroupRecruitmentPost(token.userId, post.id, postSubject, draft),
+      {
+        start: () => {
+          setBusyAction(`edit:${post.id}`);
+          setFeedback("");
+        },
+        success: () => {
+          setEditingPostId(null);
+          setDraft("");
+          setPostSubject("");
+          setFeedback("Recruitment post updated.");
+          reload(token);
+        },
+        error: editError => setFeedback(getStage6ErrorMessage(editError)),
+        finally: () => setBusyAction(null),
+      }
+    );
   }
 
   async function closePost(post: GroupRecruitmentPost) {
-    if (!userId || busyAction) return;
-    setBusyAction(`close:${post.id}`);
-    setFeedback("");
-    try {
-      await closeGroupRecruitmentPost(userId, post.id);
-      setFeedback(
-        "Recruitment post closed. It remains visible but can no longer receive applications."
-      );
-      await reload();
-    } catch (closeError) {
-      setFeedback(getStage6ErrorMessage(closeError));
-    } finally {
-      setBusyAction(null);
-    }
+    const token = ownSnapshot?.token;
+    if (!token || busyAction) return;
+    await runScopedAction(
+      scope,
+      token,
+      () => closeGroupRecruitmentPost(token.userId, post.id),
+      {
+        start: () => {
+          setBusyAction(`close:${post.id}`);
+          setFeedback("");
+        },
+        success: () => {
+          setFeedback(
+            "Recruitment post closed. It remains visible but can no longer receive applications."
+          );
+          reload(token);
+        },
+        error: closeError => setFeedback(getStage6ErrorMessage(closeError)),
+        finally: () => setBusyAction(null),
+      }
+    );
   }
 
-  const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
   return (
     <Stage6Layout title="Study groups and recruitment">
       <PageHeading
@@ -335,7 +561,9 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
       )}
       <AuthenticatedCoursePeers embedded courseId={courseId} />
 
-      {session.status === "loading" || state === "loading" ? (
+      {sessionStatus === "loading" ||
+      state === "loading" ||
+      (state === "ready" && !ownSnapshot) ? (
         <Stage6Status
           kind="loading"
           title="Loading current-term groups…"
@@ -351,10 +579,136 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
         <Stage6Status
           title="Group discovery is unavailable"
           message={error}
-          retry={() => void reload()}
+          retry={() => reload()}
         />
       ) : (
         <>
+          <section
+            className="stage6-section"
+            aria-labelledby="stage6-your-group-heading"
+          >
+            <div className="stage6-section-heading">
+              <div>
+                <p className="eyebrow">YOUR GROUP</p>
+                <h2 id="stage6-your-group-heading">
+                  Create a recruitment post
+                </h2>
+              </div>
+            </div>
+            {ownSnapshot?.eligibility.status === "checking" ? (
+              <Stage6Status
+                kind="loading"
+                title="Checking posting eligibility…"
+                message="Your group membership and current-term course enrolment are being checked. You can keep browsing or retry the check."
+                retry={() => loadEligibility(ownSnapshot.token)}
+              />
+            ) : !ownSnapshot?.eligibility.verified ? (
+              <Stage6Status
+                title="Posting eligibility could not be verified"
+                message="Your group membership, current-term course, or enrolment could not be confirmed. Check your connection and enrolment, then retry."
+                retry={() => ownSnapshot && loadEligibility(ownSnapshot.token)}
+              />
+            ) : !ownSnapshot.eligibility.groups.length ? (
+              <Stage6Status
+                kind="empty"
+                title="No eligible group found in this view"
+                message="An active member of an active group can create a recruitment post. If your group is missing, check your course enrolment and retry."
+                retry={() => loadEligibility(ownSnapshot.token)}
+              />
+            ) : (
+              <div className="stage6-group-grid">
+                {ownSnapshot.eligibility.groups.map(group => (
+                  <article className="stage6-group-card" key={group.id}>
+                    <span className="stage6-group-status active">Active</span>
+                    <h3>{group.name || "Study group"}</h3>
+                    <p className="stage6-group-caption">
+                      You are an active member of this group. The server checks
+                      your eligibility when you publish.
+                    </p>
+                    {creatingGroupId === group.id ? (
+                      <form
+                        className="stage6-post-form"
+                        onSubmit={event => void createPost(event, group)}
+                      >
+                        <label htmlFor={`new-post-subject-${group.id}`}>
+                          Subject
+                        </label>
+                        <input
+                          id={`new-post-subject-${group.id}`}
+                          value={postSubject}
+                          maxLength={120}
+                          onChange={event => setPostSubject(event.target.value)}
+                          placeholder="e.g. Looking for a frontend teammate"
+                          required
+                          disabled={busyAction !== null}
+                        />
+                        <label htmlFor={`new-post-${group.id}`}>
+                          Recruitment post
+                        </label>
+                        <textarea
+                          id={`new-post-${group.id}`}
+                          rows={4}
+                          maxLength={MAX_RECRUITMENT_POST_LENGTH}
+                          value={draft}
+                          onChange={event => setDraft(event.target.value)}
+                          placeholder="Describe the project and the type of teammate you are looking for."
+                          disabled={busyAction !== null}
+                        />
+                        <div className="stage6-form-footer">
+                          <span>
+                            {draft.trim().length}/{MAX_RECRUITMENT_POST_LENGTH}{" "}
+                            characters
+                          </span>
+                          <button
+                            className="primary"
+                            type="submit"
+                            disabled={
+                              !draft.trim() ||
+                              !postSubject.trim() ||
+                              busyAction !== null
+                            }
+                          >
+                            {busyAction === `create:${group.id}`
+                              ? "Publishing…"
+                              : "Publish post"}
+                          </button>
+                        </div>
+                        <button
+                          className="text-button"
+                          type="button"
+                          disabled={busyAction !== null}
+                          onClick={() => {
+                            setCreatingGroupId(null);
+                            setDraft("");
+                            setPostSubject("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <button
+                        type="button"
+                        className="stage6-create-post"
+                        disabled={busyAction !== null}
+                        onClick={() => {
+                          if (busyAction !== null || scope.hasPendingAction())
+                            return;
+                          setCreatingGroupId(group.id);
+                          setEditingPostId(null);
+                          setDraft("");
+                          setPostSubject("");
+                        }}
+                      >
+                        Create recruitment post
+                      </button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
           <section
             className="stage6-section"
             aria-labelledby="stage6-groups-heading"
@@ -368,11 +722,39 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                 {ownSnapshot?.groups.length ?? 0}
               </span>
             </div>
-            {!ownSnapshot?.groups.length ? (
+            {ownSnapshot?.groupsState === "loading" ? (
               <Stage6Status
-                kind="empty"
-                title="No browseable groups yet"
-                message="There are no forming or active groups with at least two active members available in this course’s current term. Pending invitations do not count as members."
+                kind="loading"
+                title="Loading browseable groups…"
+                message="CityLink is loading current-term groups for this course."
+              />
+            ) : ownSnapshot?.groupsState === "error" ? (
+              <Stage6Status
+                title="Group discovery is unavailable"
+                message={ownSnapshot.groupsError}
+                retry={() => loadGroups(ownSnapshot.token)}
+              />
+            ) : !ownSnapshot?.groups.length ? (
+              <Stage6Status
+                kind={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "loading"
+                    : "empty"
+                }
+                title={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "Checking browseable group availability…"
+                    : ownSnapshot?.eligibility.verified
+                      ? "No browseable groups yet"
+                      : "Browseable groups could not be confirmed"
+                }
+                message={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "The group list is empty; course and group information is still being checked."
+                    : ownSnapshot?.eligibility.verified
+                      ? "There are no forming or active groups with at least two active members available in this course’s current term. Pending invitations do not count as members."
+                      : "Course or group information could not be confirmed, so group availability may be incomplete. Check your connection and enrolment, then retry."
+                }
               />
             ) : (
               <div className="stage6-group-grid">
@@ -412,91 +794,21 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                         View members
                       </Link>
                     </div>
-                    {group.canCreatePost &&
-                      (creatingGroupId === group.groupId ? (
-                        <form
-                          className="stage6-post-form"
-                          onSubmit={event => void createPost(event, group)}
-                        >
-                          <label htmlFor={`new-post-subject-${group.groupId}`}>
-                            Subject
-                          </label>
-                          <input
-                            id={`new-post-subject-${group.groupId}`}
-                            value={postSubject}
-                            maxLength={120}
-                            onChange={event =>
-                              setPostSubject(event.target.value)
-                            }
-                            placeholder="e.g. Looking for a frontend teammate"
-                            required
-                            disabled={busyAction !== null}
-                          />
-                          <label htmlFor={`new-post-${group.groupId}`}>
-                            Recruitment post
-                          </label>
-                          <textarea
-                            id={`new-post-${group.groupId}`}
-                            rows={4}
-                            maxLength={MAX_RECRUITMENT_POST_LENGTH}
-                            value={draft}
-                            onChange={event => setDraft(event.target.value)}
-                            placeholder="Describe the project and the type of teammate you are looking for."
-                            disabled={busyAction !== null}
-                          />
-                          <div className="stage6-form-footer">
-                            <span>
-                              {draft.trim().length}/
-                              {MAX_RECRUITMENT_POST_LENGTH} characters
-                            </span>
-                            <button
-                              className="primary"
-                              type="submit"
-                              disabled={!draft.trim() || busyAction !== null}
-                            >
-                              {busyAction === `create:${group.groupId}`
-                                ? "Publishing…"
-                                : "Publish post"}
-                            </button>
-                          </div>
-                          <button
-                            className="text-button"
-                            type="button"
-                            onClick={() => {
-                              setCreatingGroupId(null);
-                              setDraft("");
-                              setPostSubject("");
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </form>
-                      ) : (
-                        <button
-                          type="button"
-                          className="stage6-create-post"
-                          onClick={() => {
-                            setCreatingGroupId(group.groupId);
-                            setDraft("");
-                          }}
-                        >
-                          Create recruitment post
-                        </button>
-                      ))}
                   </article>
                 ))}
               </div>
             )}
-            {ownSnapshot?.groupsHasMore && (
-              <button
-                className="secondary"
-                type="button"
-                disabled={groupsPageBusy}
-                onClick={() => void loadMoreGroups()}
-              >
-                {groupsPageBusy ? "Loading more groups…" : "Load more groups"}
-              </button>
-            )}
+            {ownSnapshot?.groupsState === "ready" &&
+              ownSnapshot.groupsHasMore && (
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={groupsPageBusy}
+                  onClick={() => void loadMoreGroups()}
+                >
+                  {groupsPageBusy ? "Loading more groups…" : "Load more groups"}
+                </button>
+              )}
           </section>
 
           <section
@@ -512,11 +824,39 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                 {ownSnapshot?.posts.length ?? 0}
               </span>
             </div>
-            {!ownSnapshot?.posts.length ? (
+            {ownSnapshot?.postsState === "loading" ? (
               <Stage6Status
-                kind="empty"
-                title="No recruitment posts yet"
-                message="When an eligible active group member publishes a post, it will appear here."
+                kind="loading"
+                title="Loading recruitment posts…"
+                message="CityLink is loading recruitment posts for this course."
+              />
+            ) : ownSnapshot?.postsState === "error" ? (
+              <Stage6Status
+                title="Recruitment posts are unavailable"
+                message={ownSnapshot.postsError}
+                retry={() => loadPosts(ownSnapshot.token)}
+              />
+            ) : !ownSnapshot?.posts.length ? (
+              <Stage6Status
+                kind={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "loading"
+                    : "empty"
+                }
+                title={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "Checking recruitment post availability…"
+                    : ownSnapshot?.eligibility.verified
+                      ? "No recruitment posts yet"
+                      : "Recruitment posts could not be confirmed"
+                }
+                message={
+                  ownSnapshot?.eligibility.status === "checking"
+                    ? "The recruitment post list is empty; course and group information is still being checked."
+                    : ownSnapshot?.eligibility.verified
+                      ? "When an eligible active group member publishes a post, it will appear here."
+                      : "Course or group information could not be confirmed, so post availability may be incomplete. Check your connection and enrolment, then retry."
+                }
               />
             ) : (
               <div className="stage6-post-list">
@@ -640,8 +980,15 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                               <button
                                 type="button"
                                 className="secondary"
+                                disabled={busyAction !== null}
                                 onClick={() => {
+                                  if (
+                                    busyAction !== null ||
+                                    scope.hasPendingAction()
+                                  )
+                                    return;
                                   setEditingPostId(post.id);
+                                  setCreatingGroupId(null);
                                   setDraft(post.body);
                                   setPostSubject(post.subject);
                                 }}
@@ -672,16 +1019,17 @@ export default function GroupWorkspacePage({ courseId }: { courseId: string }) {
                 ))}
               </div>
             )}
-            {ownSnapshot?.postsHasMore && (
-              <button
-                className="secondary"
-                type="button"
-                disabled={postsPageBusy}
-                onClick={() => void loadMorePosts()}
-              >
-                {postsPageBusy ? "Loading more posts…" : "Load more posts"}
-              </button>
-            )}
+            {ownSnapshot?.postsState === "ready" &&
+              ownSnapshot.postsHasMore && (
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={postsPageBusy}
+                  onClick={() => void loadMorePosts()}
+                >
+                  {postsPageBusy ? "Loading more posts…" : "Load more posts"}
+                </button>
+              )}
           </section>
         </>
       )}

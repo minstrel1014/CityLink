@@ -461,6 +461,254 @@ export async function listActiveGroupMembers(
   }
 }
 
+export interface OwnCourseGroupSnapshot {
+  groups: StudyGroupRow[];
+  memberships: GroupMembershipRow[];
+}
+
+// Both the row count and the total request count are bounded. A server-side
+// row limit may make a page shorter than requested, so advance by actual rows.
+const OWN_GROUP_PAGE_SIZE = 50;
+const OWN_GROUP_BATCH_SIZE = 50;
+const OWN_GROUP_MAX_ROWS = 500;
+const OWN_GROUP_MAX_REQUESTS = 64;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const OWN_GROUP_RETRY_MESSAGE =
+  "Your group membership could not be verified. Refresh and try again.";
+
+function ownGroupReadFailed(): never {
+  throw new Error(OWN_GROUP_RETRY_MESSAGE);
+}
+
+function ownGroupId(value: unknown): string {
+  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+    return ownGroupReadFailed();
+  }
+  return value;
+}
+
+function ownGroupTimestamp(value: unknown): string {
+  if (typeof value !== "string" || !Number.isFinite(Date.parse(value))) {
+    return ownGroupReadFailed();
+  }
+  return value;
+}
+
+function hasExactKeys(row: Record<string, unknown>, keys: readonly string[]) {
+  return (
+    Object.keys(row).length === keys.length &&
+    keys.every(key => Object.hasOwn(row, key))
+  );
+}
+
+function mapOwnMembership(
+  value: unknown,
+  userId: string,
+  courseId: string
+): GroupMembershipRow {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id",
+      "group_id",
+      "course_id",
+      "profile_id",
+      "display_name_snapshot",
+      "membership_status",
+      "joined_at",
+    ])
+  ) {
+    return ownGroupReadFailed();
+  }
+  const id = ownGroupId(value.id);
+  const groupId = ownGroupId(value.group_id);
+  const rowCourseId = ownGroupId(value.course_id);
+  const profileId = ownGroupId(value.profile_id);
+  if (
+    profileId !== userId ||
+    rowCourseId !== courseId ||
+    value.membership_status !== "active" ||
+    typeof value.display_name_snapshot !== "string" ||
+    !value.display_name_snapshot.length
+  ) {
+    return ownGroupReadFailed();
+  }
+  return {
+    id,
+    group_id: groupId,
+    course_id: rowCourseId,
+    profile_id: profileId,
+    display_name_snapshot: value.display_name_snapshot,
+    membership_status: "active",
+    joined_at: ownGroupTimestamp(value.joined_at),
+  };
+}
+
+function mapOwnGroup(
+  value: unknown,
+  courseId: string,
+  expectedIds: ReadonlySet<string>
+): StudyGroupRow {
+  if (
+    !isRecord(value) ||
+    !hasExactKeys(value, [
+      "id",
+      "course_id",
+      "creator_id",
+      "status",
+      "name",
+      "max_members",
+      "created_at",
+    ])
+  ) {
+    return ownGroupReadFailed();
+  }
+  const id = ownGroupId(value.id);
+  const rowCourseId = ownGroupId(value.course_id);
+  const creatorId =
+    value.creator_id === null ? null : ownGroupId(value.creator_id);
+  const status = value.status;
+  const maxMembers = value.max_members;
+  if (
+    !expectedIds.has(id) ||
+    rowCourseId !== courseId ||
+    (status !== "forming" &&
+      status !== "active" &&
+      status !== "abandoned" &&
+      status !== "archived") ||
+    typeof value.name !== "string" ||
+    (maxMembers !== null &&
+      (typeof maxMembers !== "number" || !Number.isSafeInteger(maxMembers)))
+  ) {
+    return ownGroupReadFailed();
+  }
+  return {
+    id,
+    course_id: rowCourseId,
+    creator_id: creatorId,
+    status,
+    name: value.name,
+    max_members: maxMembers,
+    created_at: ownGroupTimestamp(value.created_at),
+  };
+}
+
+/**
+ * Load only the viewer's active memberships in one course and their groups.
+ * These RLS-protected reads are UI evidence, not authorization: the server
+ * remains responsible for checking eligibility when a write is attempted.
+ */
+export async function loadOwnCourseGroupSnapshot(
+  userId: string,
+  courseId: string
+): Promise<OwnCourseGroupSnapshot> {
+  const client = await verifyCurrentUser(userId);
+  ownGroupId(userId);
+  ownGroupId(courseId);
+  let requests = 0;
+
+  async function readPages<T extends { id: string }>(
+    readPage: (
+      from: number,
+      to: number
+    ) => PromiseLike<{ data: unknown; error: unknown; count: number | null }>,
+    mapRow: (value: unknown) => T,
+    requiredCount?: number
+  ): Promise<T[]> {
+    const rows: T[] = [];
+    let expectedCount: number | undefined;
+    let previousId: string | undefined;
+    while (true) {
+      if (++requests > OWN_GROUP_MAX_REQUESTS) return ownGroupReadFailed();
+      let response: unknown;
+      try {
+        response = await readPage(
+          rows.length,
+          rows.length + OWN_GROUP_PAGE_SIZE - 1
+        );
+      } catch {
+        return ownGroupReadFailed();
+      }
+      if (!isRecord(response)) return ownGroupReadFailed();
+      const { data, error, count } = response;
+      if (
+        error !== null ||
+        typeof count !== "number" ||
+        !Number.isSafeInteger(count) ||
+        count < 0 ||
+        count > OWN_GROUP_MAX_ROWS ||
+        (requiredCount !== undefined && count !== requiredCount) ||
+        (expectedCount !== undefined && count !== expectedCount) ||
+        !Array.isArray(data) ||
+        data.length > OWN_GROUP_PAGE_SIZE ||
+        rows.length + data.length > count
+      ) {
+        return ownGroupReadFailed();
+      }
+      expectedCount = count;
+      for (const value of data) {
+        const row = mapRow(value);
+        // UUID order is deterministic and unique, including across pages.
+        const id = row.id.toLowerCase();
+        if (previousId !== undefined && id <= previousId) {
+          return ownGroupReadFailed();
+        }
+        previousId = id;
+        rows.push(row);
+      }
+      if (rows.length === expectedCount) return rows;
+      if (data.length === 0) return ownGroupReadFailed();
+    }
+  }
+
+  const memberships = await readPages(
+    (from, to) =>
+      client
+        .from("group_memberships")
+        .select(
+          "id, group_id, course_id, profile_id, display_name_snapshot, membership_status, joined_at",
+          { count: "exact" }
+        )
+        .eq("profile_id", userId)
+        .eq("course_id", courseId)
+        .eq("membership_status", "active")
+        .order("id", { ascending: true })
+        .range(from, to),
+    row => mapOwnMembership(row, userId, courseId)
+  );
+
+  const groupIds = memberships.map(membership => membership.group_id);
+  if (new Set(groupIds.map(id => id.toLowerCase())).size !== groupIds.length) {
+    return ownGroupReadFailed();
+  }
+  const groups: StudyGroupRow[] = [];
+  for (let i = 0; i < groupIds.length; i += OWN_GROUP_BATCH_SIZE) {
+    const batch = groupIds.slice(i, i + OWN_GROUP_BATCH_SIZE);
+    const expectedIds = new Set(batch);
+    const groupPage = await readPages(
+      (from, to) =>
+        client
+          .from("study_groups")
+          .select(
+            "id, course_id, creator_id, status, name, max_members, created_at",
+            { count: "exact" }
+          )
+          .eq("course_id", courseId)
+          .in("id", batch)
+          .order("id", { ascending: true })
+          .range(from, to),
+      row => mapOwnGroup(row, courseId, expectedIds),
+      batch.length
+    );
+    groups.push(...groupPage);
+  }
+
+  // Do not return a snapshot if the signed-in account changed during the read.
+  await verifyCurrentUser(userId);
+  return { groups, memberships };
+}
+
 export async function loadGroupWorkflowSnapshot(
   userId: string
 ): Promise<GroupWorkflowSnapshot> {

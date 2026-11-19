@@ -28,6 +28,7 @@ describe("People group capacity", () => {
     [3, 5, "available", "3 / 5 members", "Places available"],
     [5, 5, "full", "5 / 5 members", "Group is full"],
     [1, null, "maximum_not_set", "1 member", "Group maximum is not set"],
+    [1, 5, "available", "1 member / 5 max", "Places available"],
     [20, null, "over_limit", "20 members", "over the 19-member limit"],
     [20, 19, "over_limit", "20 / 19 members", "over the 19-member limit"],
   ] as const)(

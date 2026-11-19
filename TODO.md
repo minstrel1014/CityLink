@@ -159,3 +159,10 @@ Validation commands and exact results, file inventory, API boundaries, assumptio
 - [ ] Reconcile the overlapping QA PR #33 and profile-invitation PR #31; the latter adds a group-creation path that also needs the explicit maximum. Preserve their user-facing work and rerun checks on the combined result.
 - [x] Commit and push `feature/adam-capacity-client`; [draft PR #36](https://github.com/minstrel1014/CityLink/pull/36) is open for lead review and is not merged.
 - [ ] Coordinate an explicit safe client/schema cutover, old and cached clients, and the exact final migration head with the lead and Role 6. No SQL, migration, Test schema/data, RLS/grants, Main access, merge, or publish is authorized by this client task. Commit and push only the feature branch and open a review PR; tell the existing lead task when ready.
+
+### PR #36 review follow-up — 2026-11-19
+
+- [x] Repair the unreachable own-group recruitment-post entry point using existing authorized reads and post service. Scope it to the viewer’s active group and current course/enrolment, bind the post request to the verified account, and prevent stale-context dispatch and draft overwrite. Replace the misleading mock and cover eligible own groups, unrelated groups, empty states, pagination, and account changes. RPCs, database, and recruitment-post rules remain unchanged.
+- [x] Correct the singular member label when a maximum is set, and align My Group’s name input and guidance with the existing 50-character service limit. Add focused regression coverage.
+- [x] Run the full type, test, build, format, and whitespace checks: typecheck passed; 24 test files / 464 tests passed; Test-configured build passed with the documented warnings. Signed-in multi-account/Test concurrency QA and PR #31/#33 integration remain outstanding.
+- [ ] Update draft PR #36 and notify the existing lead task; do not apply SQL, change Test/Main, merge, or publish.

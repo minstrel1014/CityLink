@@ -699,7 +699,8 @@ export async function createGroupRecruitmentPost(
   userId: string,
   groupId: string,
   subject: string,
-  body: string
+  body: string,
+  shouldDispatch: () => boolean = () => true
 ) {
   const title = subject.trim();
   const text = body.trim();
@@ -711,11 +712,42 @@ export async function createGroupRecruitmentPost(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
     );
   }
-  const id = await callRpc<unknown>(userId, "create_group_recruitment_post", {
-    p_group_id: groupId,
-    p_subject: title,
-    p_body: text,
-  });
+  if (!supabaseClient) {
+    throw new Error("Supabase is not configured in this environment.");
+  }
+  if (!userId) {
+    throw new Error("Sign in with your CityLink account to use this feature.");
+  }
+
+  // Verify the captured token, not the shared client's potentially newer session.
+  let accessToken: string;
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    const token = data.session?.access_token;
+    if (error || typeof token !== "string" || !token.trim()) throw new Error();
+    accessToken = token;
+    const verified = await supabaseClient.auth.getUser(accessToken);
+    if (verified.error || verified.data.user?.id !== userId) throw new Error();
+  } catch {
+    // Do not surface authentication errors that might contain sensitive data.
+    throw new Error("Your sign-in could not be verified. Sign in again.");
+  }
+
+  if (!shouldDispatch()) {
+    throw new Error(
+      "The workspace changed before the post could be published."
+    );
+  }
+  // This per-request header prevents a later account switch from changing the
+  // authorized user. Once dispatched, the request cannot be undone by a switch.
+  const { data: id, error } = await supabaseClient
+    .rpc("create_group_recruitment_post", {
+      p_group_id: groupId,
+      p_subject: title,
+      p_body: text,
+    })
+    .setHeader("Authorization", `Bearer ${accessToken}`);
+  if (error) throw error;
   if (typeof id !== "string" || !id.trim()) {
     throw new Error("The post was not confirmed. Refresh before retrying.");
   }

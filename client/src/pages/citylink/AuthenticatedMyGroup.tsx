@@ -628,7 +628,7 @@ export default function AuthenticatedMyGroup({
                       id="course-group-name"
                       value={groupName}
                       onChange={event => setGroupName(event.target.value)}
-                      maxLength={120}
+                      maxLength={50}
                       disabled={
                         ownData.group.creator_id !== userId || busyAction !== ""
                       }
@@ -636,7 +636,7 @@ export default function AuthenticatedMyGroup({
                     />
                     <p id="group-name-help">
                       {ownData.group.creator_id === userId
-                        ? "Only the current group leader can rename this group. Names may contain up to 120 characters."
+                        ? "Only the current group leader can rename this group. Names may contain up to 50 characters."
                         : "Only the current group leader can rename this group."}
                     </p>
                     {ownData.group.creator_id === userId && (

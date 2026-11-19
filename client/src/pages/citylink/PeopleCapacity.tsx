@@ -24,7 +24,12 @@ export function PeopleGroupCapacity({
   maximum: number | null;
   state: PeopleCapacityState;
 }) {
-  const countLabel = maximum === null ? `${count}` : `${count} / ${maximum}`;
+  const countLabel =
+    maximum === null
+      ? `${count} ${count === 1 ? "member" : "members"}`
+      : count === 1
+        ? `1 member / ${maximum} max`
+        : `${count} / ${maximum} members`;
   const stateLabel = {
     available: "Places available",
     full: "Group is full",
@@ -35,9 +40,7 @@ export function PeopleGroupCapacity({
 
   return (
     <>
-      <span>
-        {countLabel} {count === 1 && maximum === null ? "member" : "members"}
-      </span>
+      <span>{countLabel}</span>
       <span className={`people-capacity-state ${state}`}>{stateLabel}</span>
     </>
   );

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -21,6 +23,22 @@ const group = {
   status: "active",
 } satisfies Pick<StudyGroupRow, "id" | "creator_id" | "status">;
 afterEach(() => vi.unstubAllGlobals());
+
+describe("group name input guidance", () => {
+  it("matches the existing 50-character rename service limit", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("./AuthenticatedMyGroup.tsx", import.meta.url)),
+      "utf8"
+    );
+    const start = source.indexOf('id="course-group-name"');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end = source.indexOf("/>", start);
+    expect(end).toBeGreaterThan(start);
+    expect(source.slice(start, end)).toContain("maxLength={50}");
+    expect(source).toContain("Names may contain up to 50 characters.");
+    expect(source).not.toContain("Names may contain up to 120 characters.");
+  });
+});
 
 function member(
   profileId: string | null,
