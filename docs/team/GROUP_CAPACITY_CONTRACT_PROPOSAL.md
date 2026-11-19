@@ -30,6 +30,7 @@ Relevant current functions are:
 | Invite                        | `public.send_group_invitation(uuid, uuid)`                              | No capacity check before inserting a new invitation.                                              |
 | Accept invite                 | `public.respond_to_group_invitation(uuid, boolean)`                     | Inserts membership without checking a maximum.                                                    |
 | Request to join               | `public.request_to_join_group(uuid)`                                    | No capacity check before inserting a new request.                                                 |
+| Direct request UI             | `/my-groups` “Request to join” control                                  | Calls the request RPC directly; the RPC has no recruitment-post check.                            |
 | Approve/reject request        | `public.review_group_join_request(uuid, boolean)`                       | Approval inserts membership without checking a maximum.                                           |
 | Rename group                  | `public.rename_study_group(uuid, text)`                                 | Separate naming concern; no capacity behavior.                                                    |
 | Course-detail summaries       | `public.list_course_group_summaries(uuid)`                              | Returns `group_size`, but no configured maximum.                                                  |
@@ -207,6 +208,24 @@ For a forming group, the helper counts the creator as one member. If the invitat
 
 `cancel_group_invitation`, `cancel_group_join_request`, and `rename_study_group` do not need capacity checks. They must continue to preserve their existing ownership and terminal-state rules.
 
+### 5.8 Recruitment-post-only join requests are unresolved
+
+This is a separate product/API authorization question, not a capacity rule. It must be resolved before implementation because the current UI and server behavior do not match.
+
+The checked-in `public.request_to_join_group(p_group_id uuid)` accepts an eligible active group without checking for a recruitment post. The authenticated `/my-groups` page still renders a direct “Request to join” action. The People/coursemate copy says requests are available only from recruitment posts. That sentence is therefore not a server-enforced statement today.
+
+Adam must choose one of these meanings:
+
+| Option                        | Server behavior                                                                                                                                                                                 | UI behavior                                                                                                                   | Consequence                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| A — presentation only         | Keep the current RPC; eligible direct calls remain possible.                                                                                                                                    | Remove direct request controls from `/my-groups` and People; expose Apply only from open recruitment posts; use neutral copy. | Simplest, but “only from recruitment posts” is not a security boundary.                                    |
+| B — server-enforced post-only | `request_to_join_group` must reject a new request unless an open recruitment post for the same group/course/current term exists. Decide whether the request must be tied to a specific post ID. | Remove or redirect every direct request control; Apply remains the visible path.                                              | Requires reviewed API/migration and UI changes; direct API calls are blocked.                              |
+| C — keep direct requests      | Keep the current RPC and direct `/my-groups` control.                                                                                                                                           | Correct the copy to say requests can be made from `/my-groups` as well as recruitment posts.                                  | Matches current behavior but conflicts with the earlier “joining only from posts” presentation preference. |
+
+If Adam chooses B, these additional questions must be answered: whether the RPC needs a `post_id` parameter or merely any open post; whether a request may remain pending after its post closes; whether an existing pending request is returned idempotently when no post is open; and whether the leader can still approve a pending request after the post closes. Do not invent those behaviors.
+
+This question does not override capacity. Even when a post is open, a full group or an unconfigured maximum must still block a new request and must leave an existing pending request pending.
+
 ## 6. Proposed read contract
 
 The server must return the maximum only where the client needs to explain capacity. All read RPCs remain authenticated-only, current-term/course-eligibility checked, and field-limited.
@@ -248,6 +267,7 @@ These are proposed UI behaviors for review, not an implementation approval:
 | My Group settings             | Show `current active members / maximum`. The leader sees an editable number and Save. A member sees the value read-only. If unset, show “Maximum not set” and prompt the leader. If over 19, explain that the group must become 19 or smaller before a maximum can be set. |
 | Invite panel                  | If unset or full, disable the submit button and explain why. The server remains authoritative; a stale screen must still receive the server error.                                                                                                                         |
 | Join request review           | Keep pending requests visible when full. Approve shows “Group is full”; reject still works.                                                                                                                                                                                |
+| My Groups direct request      | If Adam chooses presentation-only or server-enforced post-only, remove the direct control and do not leave copy claiming “only from posts” while the control remains. If Adam keeps direct requests, correct the copy instead.                                             |
 | People cards                  | Show `3 / 5 members` (or equivalent clear wording). Show a “Group is full” badge when `group_size >= max_members`. If unset, show `3 members · maximum not set`; never show a fake maximum.                                                                                |
 | Browseable groups/recruitment | Show current/max and a full badge. Disable Apply when full or unset. Do not hide the post merely because it is full.                                                                                                                                                       |
 | Errors                        | Add exact mappings for “Group is full” and the unconfigured-maximum message to `getGroupWorkflowErrorMessage`. Do not turn a capacity error into a generic “try again” message.                                                                                            |
@@ -310,6 +330,7 @@ Adam should answer these before Database Security turns this into an executable 
 3. **Terminal groups:** Should the leader be able to edit the maximum after a group is abandoned or archived? The proposal recommends no.
 4. **Over-19 groups:** The current product has no membership-removal workflow. How should a group above 19 reduce its active size? This is a known gap; do not remove members automatically and do not silently allow adding.
 5. **Implementation split:** Confirm that Roy owns the group write/UI work, Jeffery owns the recruitment/People read/UI work, Database Security owns the migration, and Eunice owns QA. This proposal does not reassign anyone.
+6. **Direct join requests:** Should the server require an open recruitment post for `request_to_join_group`, or is the requirement only presentation? If server-enforced, must the request be tied to a specific post, and what happens to pending requests when that post closes? See section 5.8.
 
 ## 12. Project-instruction status
 
