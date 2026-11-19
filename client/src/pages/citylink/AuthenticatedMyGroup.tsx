@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
   BookOpen,
   MessageCircle,
@@ -533,7 +532,8 @@ export default function AuthenticatedMyGroup({
           <p className="my-group-rules-note">
             Choose a maximum from 2 to 19 when starting a group. The first
             invite creates a forming group with you as leader; active members
-            may invite, and only the current leader may review join requests.
+            may invite, and only the current group leader may review join
+            requests.
           </p>
         </div>
         <Link
@@ -550,7 +550,7 @@ export default function AuthenticatedMyGroup({
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
         <Link href="/my-courses" className="back-link">
-          <ArrowLeft size={17} /> Back to My Courses
+          View My Courses
         </Link>
         {loading && (
           <div className="course-directory-state" role="status">
@@ -757,8 +757,9 @@ export default function AuthenticatedMyGroup({
                   </span>
                   <h2>You do not have a group for this course yet</h2>
                   <p>
-                    Browse your coursemates and invite someone, or browse
-                    recruitment posts to find a group seeking members.
+                    Browse your coursemates, see who is looking for a group, and
+                    invite someone, or browse recruitment posts to find a group
+                    seeking members.
                   </p>
                   <div className="authenticated-courses-state-actions">
                     <Link

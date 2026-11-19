@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ArrowRight, Check, RefreshCw, Send, Users, X } from "lucide-react";
 import { Link } from "wouter";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import { invitationAcceptanceFeedback } from "@/lib/invitationAcceptance";
 import { supabaseClient } from "@/lib/supabaseClient";
 import {
   loadCourseDirectory,
@@ -374,7 +375,7 @@ export default function GroupWorkflows() {
           : "unknown"
         : getGroupCapacityState(inviteCount, selectedInviteGroup.max_members)
       : null;
-  const requestableGroups = groupsInCourse.filter(
+  const otherActiveGroups = groupsInCourse.filter(
     group =>
       group.status === "active" && !activeMembershipGroupIds.has(group.id)
   );
@@ -398,7 +399,7 @@ export default function GroupWorkflows() {
   async function runAction(
     key: string,
     action: (isCurrent: () => boolean) => Promise<unknown>,
-    success: string | ((result: unknown) => string)
+    success: string | ((result: unknown) => Feedback | string)
   ) {
     if (!userId || actionBusy.current) return;
     const context = {
@@ -420,10 +421,12 @@ export default function GroupWorkflows() {
     try {
       const result = await action(isCurrent);
       if (!isCurrent()) return;
-      setFeedback({
-        tone: "success",
-        message: typeof success === "function" ? success(result) : success,
-      });
+      const outcome = typeof success === "function" ? success(result) : success;
+      setFeedback(
+        typeof outcome === "string"
+          ? { tone: "success", message: outcome }
+          : outcome
+      );
       setNewGroupName("");
       if (key === "create") setNewGroupMaximum("");
       setRenameName("");
@@ -532,13 +535,14 @@ export default function GroupWorkflows() {
         <PageHeading
           eyebrow="SUPABASE GROUP WORKFLOWS"
           title="Find your group"
-          description="Create a group, invite coursemates, and review your invitations and requests. These actions use your signed-in Supabase account."
+          description="Create a group, invite coursemates, and manage invitations and requests using your signed-in Supabase account."
         />
         <div className="group-workflows-intro" role="note">
           Choose a maximum from 2 to 19 when creating a group. Pending
           invitations do not reserve a place. Invitations and join requests
           follow the rule “first pending action wins.” Only the current group
-          leader reviews join requests.
+          leader reviews join requests in this screen; server-side review
+          permissions are still under review.
         </div>
 
         {prefill.inviteeId &&
@@ -991,7 +995,7 @@ export default function GroupWorkflows() {
             </section>
 
             <ActiveGroupsPanel
-              groups={requestableGroups}
+              groups={otherActiveGroups}
               courseCode={selectedCourse?.code}
               userId={userId}
               joinRequests={joinRequests}
@@ -1076,15 +1080,7 @@ export default function GroupWorkflows() {
                                       true,
                                       guard
                                     ),
-                                  result => {
-                                    if (result === "accepted")
-                                      return "You accepted the invitation and joined the group.";
-                                    if (result === "expired")
-                                      return "This invitation expired and you did not join the group.";
-                                    throw new Error(
-                                      "The invitation response was not confirmed."
-                                    );
-                                  }
+                                  invitationAcceptanceFeedback
                                 )
                               }
                             >
@@ -1177,8 +1173,9 @@ export default function GroupWorkflows() {
             <section className="group-workflow-panel wide">
               <h2>Join requests</h2>
               <p>
-                Requests shown depend on current server access rules. Only the
-                current group leader may review requests in this view.
+                Requests shown depend on current server access rules. On this
+                screen, the current group leader reviews requests; server-side
+                review permissions are still under review.
               </p>
               <div className="group-workflow-list">
                 {joinRequests.length ? (

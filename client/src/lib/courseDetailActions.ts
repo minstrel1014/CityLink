@@ -65,6 +65,27 @@ export function isCoursePeerInviteable(
   return status === "open" || status === "considering";
 }
 
+export function filterCoursePeers(
+  peers: GroupCoursePeer[],
+  search: string,
+  filter: "all" | GroupCoursePeer["status"],
+  summaryByProfile: ReadonlyMap<string, CourseGroupSummary>
+): GroupCoursePeer[] {
+  const query = search.trim().toLocaleLowerCase();
+  return peers.filter(peer => {
+    if (
+      filter !== "all" &&
+      (summaryByProfile.has(peer.profile_id) || peer.status !== filter)
+    )
+      return false;
+    if (!query) return true;
+    return [peer.display_name, peer.student_id ?? "", peer.major ?? ""]
+      .join(" ")
+      .toLocaleLowerCase()
+      .includes(query);
+  });
+}
+
 export function splitCoursePeersByGroup(
   peers: GroupCoursePeer[],
   summaries: CourseGroupSummary[]
@@ -79,6 +100,45 @@ export function splitCoursePeersByGroup(
     ),
     summaryByProfile,
   };
+}
+
+export type ViewerGroupRelationship = "member" | "requested" | null;
+
+export function getViewerGroupRelationship({
+  userId,
+  courseId,
+  groupId,
+  memberships,
+  joinRequests,
+}: {
+  userId: string;
+  courseId: string;
+  groupId: string;
+  memberships: GroupMembershipRow[];
+  joinRequests: GroupJoinRequestRow[];
+}): ViewerGroupRelationship {
+  if (!userId || !courseId || !groupId) return null;
+  if (
+    memberships.some(
+      row =>
+        row.profile_id === userId &&
+        row.course_id === courseId &&
+        row.group_id === groupId &&
+        row.membership_status === "active"
+    )
+  )
+    return "member";
+  if (
+    joinRequests.some(
+      row =>
+        row.requester_id === userId &&
+        row.course_id === courseId &&
+        row.group_id === groupId &&
+        row.status === "pending"
+    )
+  )
+    return "requested";
+  return null;
 }
 
 export type JoinActionState =

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import {
-  ArrowLeft,
   ArrowRight,
   ArrowUpRight,
   BookOpen,
@@ -39,7 +38,7 @@ export function Classmates({ courseId }: { courseId: string }) {
   return (
     <Shell title={course.code}>
       <Link href="/demo/courses" className="back-link">
-        <ArrowLeft size={17} /> Back to courses
+        View demo courses
       </Link>
       <div className="course-page-heading">
         <CourseIcon course={course} size={28} />
@@ -190,7 +189,7 @@ export function StudentProfile({
   return (
     <Shell title="Student profile">
       <Link href={`/demo/courses/${course.id}`} className="back-link">
-        <ArrowLeft size={17} /> Back to {course.code} classmates
+        View {course.code} classmates
       </Link>
       <div className="profile-layout">
         <div className="profile-main">

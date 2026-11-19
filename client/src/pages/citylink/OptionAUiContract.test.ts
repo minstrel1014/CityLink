@@ -25,9 +25,7 @@ describe("Option A presentation-only contract", () => {
       /\s+/g,
       " "
     );
-    expect(people).toMatch(
-      /browse recruitment posts to find groups seeking members/i
-    );
+    expect(people).toContain("browse the course’s recruitment posts");
     expect(people).not.toMatch(
       /join requests are available only from recruitment posts/i
     );

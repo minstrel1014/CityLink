@@ -251,7 +251,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               </p>
             </div>
             <Link className="secondary" href="/my-courses">
-              Back to courses
+              View My Courses
             </Link>
           </header>
 
