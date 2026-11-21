@@ -28,6 +28,16 @@ const applyBlockLabels: Record<ApplyBlockReason, string> = {
   not_eligible: "You cannot apply to this group right now.",
 };
 
+export type Stage6RefreshState = "idle" | "queued" | "running";
+
+// Decision 2A: a Refresh that has to wait says so instead of looking like a
+// no-op, and only a refresh that actually finished claims it refreshed.
+const refreshLabels: Record<Stage6RefreshState, string> = {
+  idle: "Refresh group status",
+  queued: "Refresh queued",
+  running: "Refreshing group status…",
+};
+
 export function Stage6CapacityCount({
   count,
   maximum,
@@ -84,12 +94,15 @@ export function Stage6ApplyControl({
   applying,
   onApply,
   onRefresh,
+  refreshState = "idle",
 }: {
   post: GroupRecruitmentPost;
   busy: boolean;
   applying: boolean;
   onApply: () => void;
   onRefresh?: () => void;
+  /** Current capacity-refresh phase; defaults to an idle control. */
+  refreshState?: Stage6RefreshState;
 }) {
   const canApply = canApplyToRecruitmentPost(post);
   const reasonId = `apply-block-reason-${post.id}`;
@@ -118,10 +131,11 @@ export function Stage6ApplyControl({
           <button
             type="button"
             className="text-button"
-            disabled={busy}
+            aria-live="polite"
+            disabled={refreshState === "running"}
             onClick={onRefresh}
           >
-            Refresh group status
+            {refreshLabels[refreshState]}
           </button>
         )}
     </div>
