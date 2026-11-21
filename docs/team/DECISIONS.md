@@ -317,8 +317,8 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 
 ## 2026-11-20 — PR #37 capacity-integration review dispositions
 
-- **Status:** implementation/QA dispositions, not new product approval. Draft PR #37 remains unmerged and unreleased; no SQL, migration, Test/Main change, publish, or merge is authorized by this entry.
-- **Human approver:** None for the remaining product choices. Adam is the project owner; independent reviews were supplied by Adam-repair, Eunice, Roy, Jeffery, and Role 6.
+- **Status:** approval status and implementation status are separate. The three follow-up choices recorded below as **1A / 2A / 3A** were explicitly approved by Adam on 2026-11-20; they are settled product decisions, not open questions. What remains open is exact-head implementation and independent QA of those approved behaviors, plus the separate client/schema cutover approval. Draft PR #37 remains unmerged and unreleased; nothing in this entry authorizes SQL, a migration, a Test/Main change, a publish or a merge.
+- **Human approver:** Adam (CityLink Project, Integration, and Release Lead) approved choices 1A, 2A and 3A on 2026-11-20 in the integration-lead task. Independent reviews were supplied by Adam-repair, Eunice, Roy, Jeffery, and Role 6; a task-agent review report is not evidence of personal human authorship of any change.
 - **Decisions implemented on `feature/capacity-integration-20261119-v2`:**
   1. The Invitations page is keyed, reloaded, and dispatch-guarded by `authGeneration`, so a same-user auth boundary cannot accept an invitation using stale context. Pure identity helpers and a regression test cover this.
   2. People-page invite controls fail closed while a full roster is pending, failed, or unknown, with a visible retry/explanation. My Groups blocks unknown capacity for active groups; the forming-creator server-checked path remains.
@@ -327,5 +327,28 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   5. The cutover proposal’s creation signature is corrected from five arguments to the actual four-argument `create_group_and_invite`.
 - **Roles affected:** Adam (Project/Integration/Release Lead), Adam-repair (additive capacity-client/UI assignment), Roy (group workflows), Jeffery (recruitment/chat), Eunice (QA/docs), Role 6 (database/security review).
 - **Data/API implications:** client-only changes on the integration branch; no schema, RLS, grant, RPC, table, Test, or Main change. The server remains authoritative for capacity and invitation acceptance.
-- **Open product choices:** (a) whether a forming creator omitted from the roster should count as 1 or be unknown/server-checked; (b) whether refresh during Load more should be queued, rejected, or allowed to preserve the loaded range; (c) whether the portfolio existing-group invite needs a full-roster precheck before release.
+- **Approved product choices (these were recorded here as open until this 2026-11-21 documentation reconciliation):**
+
+  **1A — forming-group creator count. Approved by Adam on 2026-11-20.**
+  - Decision: in the narrow forming-group creator case, the current creator is counted as one member for the client capacity precheck, and only when no active membership row exists for that specific creator.
+  - Boundary: this is an explicit exception to fail-closed behavior and must **not** be generalized. A roster read that is loading, pending, failed, unavailable or otherwise unknown still fails closed with retry/unavailable feedback and no dispatch against unknown capacity. No count may be fabricated after an arbitrary missing or failed roster read.
+  - Roles affected: Roy (group creation/management, invitations, join requests), Adam-repair (capacity client/UI), Jeffery (recruitment/Apply surface), Eunice (QA/documentation), Role 6 (server-side capacity authority).
+  - Behavior/data/API implications: client-side precheck only. Supabase remains the authority that admits or rejects the last place; this approval changes no RPC signature, table, RLS policy or grant, and authorizes no migration.
+  - Implementation status: approval settled; exact-head implementation and page-level tests that distinguish this creator case from other pending/failed/unknown roster states remain pending and unverified.
+
+  **2A — Refresh during Load more. Approved by Adam on 2026-11-20.**
+  - Decision: a Refresh requested while Load more is in flight is queued and runs after pagination settles; it is not rejected and not silently dropped.
+  - Boundary: the queue applies to **both** recruitment-post pagination and grouped People/group-card pagination. A refresh that was queued, superseded or skipped must not be reported to the user as having completed.
+  - Roles affected: Jeffery (group chat and recruitment posts) — implementing on his own feature branch; Adam-repair (capacity client/UI), Eunice (QA/documentation).
+  - Behavior/data/API implications: client-side ordering of reads and state updates only; no server contract, RPC or schema change follows from this approval. The durable Apply pending state approved in the same set remains visible even if a refresh fails or is skipped.
+  - Implementation status: approval settled; Jeffery's branch implementation, reconciliation into the integration candidate, overlap/failure-path tests and exact-head QA remain pending.
+
+  **3A — Portfolio existing-group invitation precheck. Approved by Adam on 2026-11-20.**
+  - Decision: an existing-group invitation started from a coursemate portfolio page requires the same full-roster capacity precheck used elsewhere before dispatch.
+  - Boundary: the precheck is a client guard over the existing authorized full-roster read; the server remains mandatory and authoritative for the invitation outcome, and fail-closed behavior for unknown rosters is unchanged (see 1A).
+  - Roles affected: Roy (invitation workflows) — implementing on his own feature branch; the coursemate-portfolio surface owner (PR #31 workstream), Eunice (QA/documentation), Role 6 (server authority).
+  - Behavior/data/API implications: no new or changed RPC, RLS policy, grant or table contract is implied; full groups continue to block new invitations/applications and acceptance/approval, with pending items left pending.
+  - Implementation status: approval settled; at the reviewed PR #37 head the profile-page invite path lacked the precheck, so Roy's branch implementation, integration and exact-head QA remain pending.
+
+- **Documentation-only correction:** this reconciliation records the approval status of 1A/2A/3A as Adam's explicit 2026-11-20 approvals. It introduces no new product behavior and is not evidence that any approved behavior is implemented, tested or released at this or any head. `docs/team/CAPACITY_CLIENT_SCHEMA_CUTOVER_PROPOSAL.md` already states the four-argument `create_group_and_invite` at this head and was verified, not edited.
 - **Remaining gates:** exact-head review of the final integration PR, fresh review of the exact PR #34 SQL head, client/schema cutover and cached-client recovery approval, separate Test-only authorization, and signed-in multi-account/concurrent-last-place QA.
