@@ -139,7 +139,7 @@ type RpcName =
   | "get_group_chat_access"
   | "list_group_chat_messages"
   | "send_group_chat_message"
-  | "list_group_recruitment_posts"
+  | "list_group_recruitment_posts_capacity"
   | "create_group_recruitment_post"
   | "edit_group_recruitment_post"
   | "close_group_recruitment_post"
@@ -713,7 +713,7 @@ export async function listGroupRecruitmentPosts(
   after?: RecruitmentPostCursor
 ) {
   return mapGroupRecruitmentPosts(
-    await callRpc(userId, "list_group_recruitment_posts", {
+    await callRpc(userId, "list_group_recruitment_posts_capacity", {
       p_course_id: courseId,
       p_after_created_at: after?.createdAt ?? null,
       p_after_id: after?.id ?? null,

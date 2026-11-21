@@ -653,7 +653,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       nextCursor: { createdAt: "2026-11-17T09:00:00.000Z", id: "post-1" },
     });
     expect(supabaseMocks.rpc).toHaveBeenCalledWith(
-      "list_group_recruitment_posts",
+      "list_group_recruitment_posts_capacity",
       {
         p_course_id: "course-1",
         p_after_created_at: null,
@@ -668,7 +668,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       id: "post-1",
     });
     expect(supabaseMocks.rpc).toHaveBeenLastCalledWith(
-      "list_group_recruitment_posts",
+      "list_group_recruitment_posts_capacity",
       {
         p_course_id: "course-1",
         p_after_created_at: "2026-11-17T09:00:00.000Z",
