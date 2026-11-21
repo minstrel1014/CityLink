@@ -1065,6 +1065,22 @@ export function getGroupWorkflowErrorMessage(error: unknown): string {
   ) {
     return "Maximum cannot be lower than the current number of active members. Remove members first.";
   }
+  // Role 6 Option A compatibility signal for an old cached bundle: the legacy
+  // three-argument create stub aborts with SQLSTATE 45000 and the stable,
+  // version-free message token `group_capacity_upgrade_required`.
+  // Matcher actually implemented: the token must appear in the error message,
+  // compared case-insensitively on the already-lowercased raw message. The
+  // `code === "45000"` value is deliberately not required and never sufficient
+  // on its own, because the capacity rejections above are also SQLSTATE 45000;
+  // requiring the token keeps `Group is full`, `Group maximum is not set`,
+  // over-limit and maximum-too-low guidance ahead of this path and prevents
+  // every 45000 from being read as an upgrade problem. This helper only
+  // chooses display text: it never retries the call, alters the supported
+  // four-argument creation request, reloads the browser or persists a draft,
+  // so an unsaved creation form is allowed to be lost on a manual refresh.
+  if (message.includes("group_capacity_upgrade_required")) {
+    return "CityLink needs an update. Refresh before creating a group.";
+  }
   if (message.includes("group maximum does not match this group")) {
     return "The chosen maximum does not match this group's maximum. The leader must edit the maximum before inviting.";
   }

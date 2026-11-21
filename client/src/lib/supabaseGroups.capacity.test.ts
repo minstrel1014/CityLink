@@ -588,3 +588,109 @@ it("blocks a group mutation when its initiating context is stale", async () => {
   ).rejects.toThrow(/workspace changed before the action could be sent/i);
   expect(mocks.rpc).not.toHaveBeenCalled();
 });
+
+describe("stale-client capacity upgrade-required signal", () => {
+  const approved = "CityLink needs an update. Refresh before creating a group.";
+  const fallback =
+    "CityLink could not complete that group action. Your request was not confirmed; refresh and try again.";
+
+  it("maps the contract code with the stable token to the exact approved string", () => {
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "group_capacity_upgrade_required",
+      })
+    ).toBe(approved);
+  });
+
+  it("maps the stable token alone to the same approved string", () => {
+    expect(
+      getGroupWorkflowErrorMessage({
+        message: "group_capacity_upgrade_required",
+      })
+    ).toBe(approved);
+    // The matcher is the machine token, never localized or human-readable
+    // prose, and it is compared case-insensitively.
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "GROUP_CAPACITY_UPGRADE_REQUIRED",
+      })
+    ).toBe(approved);
+  });
+
+  it("keeps the capacity exact labels ahead of the upgrade handler for other 45000 errors", () => {
+    expect(
+      getGroupWorkflowErrorMessage({ code: "45000", message: "Group is full" })
+    ).toBe("Group is full");
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "Group maximum is not set",
+      })
+    ).toBe("Group maximum is not set");
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "This group has more than 19 active members.",
+      })
+    ).toBe(
+      "This group has more than 19 active members. The leader must remove members before anyone can be added or a maximum can be set."
+    );
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message:
+          "maximum cannot be lower than the current number of active members",
+      })
+    ).toBe(
+      "Maximum cannot be lower than the current number of active members. Remove members first."
+    );
+  });
+
+  it("does not read an unrelated 45000 or a genuinely missing function as an upgrade", () => {
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "secret SQL details",
+      })
+    ).toBe(fallback);
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "45000",
+        message: "CityLink 需要更新後再建立群組",
+      })
+    ).toBe(fallback);
+    expect(
+      getGroupWorkflowErrorMessage({
+        code: "PGRST202",
+        message: "function not found",
+      })
+    ).toBe(fallback);
+  });
+
+  it("surfaces the upgrade string for a rejected legacy create without retry or altered arguments", async () => {
+    const error = {
+      code: "45000",
+      message: "group_capacity_upgrade_required",
+    };
+    mocks.rpc.mockReturnValueOnce(rpcResult({ data: null, error }));
+    let thrown: unknown = null;
+    try {
+      await createGroupAndInvite("actor", "course", "recipient", "  Team  ", 5);
+    } catch (caught) {
+      thrown = caught;
+    }
+    expect(thrown).toBe(error);
+    // No auto-retry and no default/unlimited maximum substitution: the single
+    // supported four-argument request is sent verbatim, trimmed as before.
+    expect(mocks.rpc).toHaveBeenCalledOnce();
+    expect(mocks.rpc).toHaveBeenCalledWith("create_group_and_invite", {
+      p_course_id: "course",
+      p_recipient_id: "recipient",
+      p_name: "Team",
+      p_max_members: 5,
+    });
+    expect(getGroupWorkflowErrorMessage(thrown)).toBe(approved);
+  });
+});
