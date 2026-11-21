@@ -45,6 +45,20 @@ import {
   runScopedAction,
   type WorkspaceToken,
 } from "./GroupWorkspaceScope";
+import {
+  RefreshQueue,
+  type RefreshQueueState,
+  type RefreshRequestResult,
+} from "@/lib/refreshQueue";
+
+// Adam's approved decision 2A: a Refresh requested while Load more runs is
+// queued rather than silently rejected, and is never reported as finished
+// before it has actually run.
+const REFRESH_QUEUED_MESSAGE =
+  "Refresh queued. CityLink will refresh group status as soon as the current load finishes.";
+const REFRESH_RUNNING_MESSAGE = "Refreshing group status…";
+const REFRESH_SUCCESS_MESSAGE =
+  "Group capacity refreshed. Unsaved drafts, loaded posts, and loaded group cards were kept.";
 
 type LoadState = "loading" | "ready" | "error";
 type Snapshot = {
@@ -136,11 +150,45 @@ export function GroupWorkspaceContent({
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [postSubject, setPostSubject] = useState("");
+  // Appended last so the existing capacity-test state slots keep their meaning.
+  // True only while a coalesced Refresh intent is waiting for a Load more.
+  const [refreshQueued, setRefreshQueued] = useState(false);
   const groupsAttempt = useRef(0);
   const postsAttempt = useRef(0);
   const eligibilityAttempt = useRef(0);
   const groupsOperation = useRef(false);
   const postsOperation = useRef(false);
+  const latestSnapshot = useRef<Snapshot | null>(null);
+  latestSnapshot.current = snapshot;
+  const capacityRefresh = useRef<RefreshQueue<WorkspaceToken> | null>(null);
+  if (!capacityRefresh.current) {
+    capacityRefresh.current = new RefreshQueue<WorkspaceToken>({
+      isCurrent: token => scope.isCurrent(token),
+      isBlocked: () => postsOperation.current || groupsOperation.current,
+      run: token => runCapacityRefresh(token),
+      onStateChange: state => {
+        setRefreshQueued(state === "queued");
+        if (state === "queued") setFeedback(REFRESH_QUEUED_MESSAGE);
+        if (state === "running") setFeedback(REFRESH_RUNNING_MESSAGE);
+      },
+    });
+  }
+
+  /**
+   * Ask for the capacity refresh Adam approved as decision 2A. The request is
+   * never silently rejected: it either starts now, becomes the single queued
+   * intent, or is dropped when the workspace context no longer matches.
+   */
+  function requestCapacityRefresh(): RefreshRequestResult {
+    const token = ownSnapshot?.token;
+    if (!token) return "stale";
+    return capacityRefresh.current?.request(token) ?? "stale";
+  }
+
+  function clearCapacityQueue(): void {
+    capacityRefresh.current?.discard();
+    setRefreshQueued(false);
+  }
 
   // Recheck the token and attempt inside React's updater too: it may be applied
   // after another retry, refresh, or context change has already begun.
@@ -291,6 +339,7 @@ export function GroupWorkspaceContent({
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
     setPostsRefreshBusy(false);
+    clearCapacityQueue();
     setLocallyPendingPostIds([]);
     setCreatingGroupId(null);
     setEditingPostId(null);
@@ -325,6 +374,10 @@ export function GroupWorkspaceContent({
       loadEligibility(token);
     }
     return () => {
+      // A queued intent belongs to the workspace generation that created it,
+      // so it is dropped instead of refreshing an account or course that is
+      // already gone.
+      clearCapacityQueue();
       if (token && scope.isCurrent(token)) scope.invalidate();
     };
   }, [courseId, reloadToken, sessionGeneration, sessionStatus, userId, scope]);
@@ -354,6 +407,7 @@ export function GroupWorkspaceContent({
     setGroupsPageBusy(false);
     setPostsPageBusy(false);
     setPostsRefreshBusy(false);
+    clearCapacityQueue();
     setLocallyPendingPostIds([]);
     setReloadToken(value => value + 1);
   }
@@ -405,6 +459,9 @@ export function GroupWorkspaceContent({
         settle: () => {
           groupsOperation.current = false;
           setGroupsPageBusy(false);
+          // Whether this page succeeded or failed, a queued Refresh is owed a
+          // run now that the shared group read is free.
+          capacityRefresh.current?.settle();
         },
       }
     );
@@ -457,85 +514,91 @@ export function GroupWorkspaceContent({
         settle: () => {
           postsOperation.current = false;
           setPostsPageBusy(false);
+          // Whether this page succeeded or failed, a queued Refresh is owed a
+          // run now that the shared post read is free.
+          capacityRefresh.current?.settle();
         },
       }
     );
   }
 
+  /**
+   * Re-reads the loaded group-card range for the current capacity refresh.
+   *
+   * The caller holds both shared read locks for the whole attempt, so a group
+   * refresh that was asked for can no longer be skipped here and then reported
+   * to the user as completed. Errors propagate to the single refresh caller.
+   */
   async function refreshGroupsForCapacity(token: WorkspaceToken) {
-    if (!scope.isCurrent(token) || groupsOperation.current) return;
-    groupsOperation.current = true;
-    setGroupsPageBusy(true);
-    try {
-      const knownIds = new Set(ownSnapshot?.groups.map(group => group.groupId));
-      const targetCount = Math.max(1, knownIds.size);
-      const refreshed: CourseGroupSummary[] = [];
-      let cursor: CourseGroupCursor | undefined;
-      let hasMore = false;
-      let nextCursor: CourseGroupCursor | null = null;
-      let pages = 0;
-      do {
-        const page = await listCurrentTermCourseGroups(
-          token.userId,
-          token.courseId,
-          cursor
-        );
-        if (!scope.isCurrent(token)) return;
-        refreshed.push(...page.items);
-        hasMore = page.hasMore;
-        nextCursor = page.nextCursor;
-        cursor = page.nextCursor ?? undefined;
-        pages += 1;
-        const refreshedIds = new Set(refreshed.map(group => group.groupId));
-        if (
-          !page.items.length ||
-          !page.hasMore ||
-          !page.nextCursor ||
-          (refreshed.length >= targetCount &&
-            [...knownIds].every(id => refreshedIds.has(id))) ||
-          pages >= 20
-        )
-          break;
-      } while (true);
+    const knownIds = new Set(
+      (latestSnapshot.current?.groups ?? []).map(group => group.groupId)
+    );
+    const targetCount = Math.max(1, knownIds.size);
+    const refreshed: CourseGroupSummary[] = [];
+    let cursor: CourseGroupCursor | undefined;
+    let hasMore = false;
+    let nextCursor: CourseGroupCursor | null = null;
+    let pages = 0;
+    do {
+      const page = await listCurrentTermCourseGroups(
+        token.userId,
+        token.courseId,
+        cursor
+      );
       if (!scope.isCurrent(token)) return;
-      setSnapshot(previous => {
-        if (
-          !previous ||
-          !scope.isCurrent(previous.token) ||
-          previous.token.generation !== token.generation ||
-          (previous.token.authGeneration ?? 0) !== (token.authGeneration ?? 0)
-        )
-          return previous;
-        const refreshedIds = new Set(refreshed.map(group => group.groupId));
-        const missing = previous.groups.filter(
-          group => !refreshedIds.has(group.groupId)
-        );
-        return {
-          ...previous,
-          groups: [...refreshed, ...missing],
-          groupsHasMore: hasMore,
-          groupsCursor: nextCursor,
-        };
-      });
-    } catch (refreshError) {
-      if (scope.isCurrent(token)) {
-        setFeedback(getStage6ErrorMessage(refreshError));
-      }
-    } finally {
-      groupsOperation.current = false;
-      if (scope.isCurrent(token)) setGroupsPageBusy(false);
-    }
+      refreshed.push(...page.items);
+      hasMore = page.hasMore;
+      nextCursor = page.nextCursor;
+      cursor = page.nextCursor ?? undefined;
+      pages += 1;
+      const refreshedIds = new Set(refreshed.map(group => group.groupId));
+      if (
+        !page.items.length ||
+        !page.hasMore ||
+        !page.nextCursor ||
+        (refreshed.length >= targetCount &&
+          [...knownIds].every(id => refreshedIds.has(id))) ||
+        pages >= 20
+      )
+        break;
+    } while (true);
+    if (!scope.isCurrent(token)) return;
+    setSnapshot(previous => {
+      if (
+        !previous ||
+        !scope.isCurrent(previous.token) ||
+        previous.token.generation !== token.generation ||
+        (previous.token.authGeneration ?? 0) !== (token.authGeneration ?? 0)
+      )
+        return previous;
+      const refreshedIds = new Set(refreshed.map(group => group.groupId));
+      const missing = previous.groups.filter(
+        group => !refreshedIds.has(group.groupId)
+      );
+      return {
+        ...previous,
+        groups: [...refreshed, ...missing],
+        groupsHasMore: hasMore,
+        groupsCursor: nextCursor,
+      };
+    });
   }
 
-  async function refreshPostsForCapacity() {
-    const token = ownSnapshot?.token;
-    if (!token || !scope.isCurrent(token) || postsOperation.current) return;
+  /**
+   * One capacity refresh: the loaded posts first, then the loaded group cards,
+   * then the People summaries that render the same numbers. A failed attempt
+   * keeps the drafts and loaded ranges and is reported as a failure; only a
+   * refresh that actually reached the server claims it refreshed anything.
+   */
+  async function runCapacityRefresh(token: WorkspaceToken) {
+    if (!scope.isCurrent(token)) return;
     postsOperation.current = true;
+    groupsOperation.current = true;
     setPostsRefreshBusy(true);
-    setPostsPageBusy(true);
-    setFeedback("");
     try {
-      const knownIds = new Set(ownSnapshot.posts.map(post => post.id));
+      const knownIds = new Set(
+        (latestSnapshot.current?.posts ?? []).map(post => post.id)
+      );
       const targetCount = Math.max(1, knownIds.size);
       const refreshed: GroupRecruitmentPost[] = [];
       let cursor: RecruitmentPostCursor | undefined;
@@ -586,22 +649,19 @@ export function GroupWorkspaceContent({
         };
       });
       await refreshGroupsForCapacity(token);
+      if (!scope.isCurrent(token)) return;
       // People cards load their own summaries. Revalidate them too so a
       // refreshed post and its People card cannot show contradictory capacity.
       setPeopleRefreshToken(value => value + 1);
-      setFeedback(
-        "Group capacity refreshed. Unsaved drafts, loaded posts, and loaded group cards were kept."
-      );
+      setFeedback(REFRESH_SUCCESS_MESSAGE);
     } catch (refreshError) {
       if (scope.isCurrent(token)) {
         setFeedback(getStage6ErrorMessage(refreshError));
       }
     } finally {
       postsOperation.current = false;
-      if (scope.isCurrent(token)) {
-        setPostsRefreshBusy(false);
-        setPostsPageBusy(false);
-      }
+      groupsOperation.current = false;
+      if (scope.isCurrent(token)) setPostsRefreshBusy(false);
     }
   }
 
@@ -632,7 +692,9 @@ export function GroupWorkspaceContent({
           setFeedback(
             "Join request sent. The group’s authorized reviewer still needs to decide; you are not added automatically."
           );
-          void refreshPostsForCapacity();
+          // The pending state recorded above is durable: it stays visible even
+          // when this refresh has to wait for a Load more or then fails.
+          requestCapacityRefresh();
         },
         error: applyError =>
           setFeedback(getGroupWorkflowErrorMessage(applyError)),
@@ -1009,7 +1071,7 @@ export function GroupWorkspaceContent({
                 <button
                   className="secondary"
                   type="button"
-                  disabled={groupsPageBusy}
+                  disabled={groupsPageBusy || postsRefreshBusy}
                   onClick={() => void loadMoreGroups()}
                 >
                   {groupsPageBusy ? "Loading more groups…" : "Load more groups"}
@@ -1225,7 +1287,16 @@ export function GroupWorkspaceContent({
                           }
                           applying={busyAction === `apply:${post.id}`}
                           onApply={() => void applyToJoin(post)}
-                          onRefresh={() => void refreshPostsForCapacity()}
+                          onRefresh={() => {
+                            requestCapacityRefresh();
+                          }}
+                          refreshState={
+                            postsRefreshBusy
+                              ? "running"
+                              : refreshQueued
+                                ? "queued"
+                                : "idle"
+                          }
                         />
                       </div>
                     )}
@@ -1238,7 +1309,7 @@ export function GroupWorkspaceContent({
                 <button
                   className="secondary"
                   type="button"
-                  disabled={postsPageBusy}
+                  disabled={postsPageBusy || postsRefreshBusy}
                   onClick={() => void loadMorePosts()}
                 >
                   {postsPageBusy ? "Loading more posts…" : "Load more posts"}

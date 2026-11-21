@@ -186,6 +186,7 @@ function pageWith(
     editingPostId,
     options.draft ?? "",
     options.subject ?? "",
+    false,
   ];
   mocks.setters = mocks.state.map((_, index) =>
     vi.fn(value => {
@@ -487,6 +488,24 @@ describe("own-group recruitment form (isolated render mocks)", () => {
       hasMore: false,
       nextCursor: null,
     });
+    // Both halves of a capacity refresh have to succeed before the page may
+    // claim it refreshed anything, so the group read needs a real fixture.
+    mocks.listGroups.mockResolvedValue({
+      items: [
+        {
+          groupId: "group-1",
+          groupName: "Design team",
+          status: "active",
+          activeMemberCount: 3,
+          maxMembers: 5,
+          capacityCount: 3,
+          capacityState: "available",
+          canCreatePost: false,
+        },
+      ],
+      hasMore: false,
+      nextCursor: null,
+    });
     const page = pageWith(fullPost, true, null, {
       creatingGroupId: "own-1",
       subject: "Unsaved subject",
@@ -508,6 +527,14 @@ describe("own-group recruitment form (isolated render mocks)", () => {
       "user-1",
       "course-1",
       undefined
+    );
+    expect(mocks.listGroups).toHaveBeenCalledWith(
+      "user-1",
+      "course-1",
+      undefined
+    );
+    expect(mocks.setters[4]).toHaveBeenCalledWith(
+      "Group capacity refreshed. Unsaved drafts, loaded posts, and loaded group cards were kept."
     );
     expect(mocks.setters[11]).not.toHaveBeenCalled();
     expect(mocks.setters[12]).not.toHaveBeenCalled();
@@ -845,6 +872,7 @@ describe("actual load effect with mocked services", () => {
       null,
       "",
       "",
+      false,
     ];
     mocks.setters = mocks.state.map((_, index) =>
       vi.fn(value => {
