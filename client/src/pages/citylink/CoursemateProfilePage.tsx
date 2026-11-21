@@ -26,9 +26,11 @@ import {
 import {
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
+  listActiveGroupMembers,
   listCourseGroupInviteCandidates,
   loadGroupWorkflowSnapshot,
   sendGroupInvitation,
+  type GroupMembershipRow,
   type StudyGroupRow,
 } from "@/lib/supabaseGroups";
 import {
@@ -38,7 +40,7 @@ import {
 } from "@/lib/supabaseStage6";
 import { getProfileInitials } from "@/lib/supabaseProfile";
 import { CreatePeopleGroupInviteDialog } from "./PeopleCapacity";
-import { validateGroupMaximum } from "./groupCapacity";
+import { getGroupCapacityState, validateGroupMaximum } from "./groupCapacity";
 import { Stage6Status } from "./Stage6Layout";
 import "./Stage6.css";
 
@@ -67,6 +69,74 @@ function ProfileShell({ children }: { children: ReactNode }) {
 
 function firstName(displayName: string) {
   return displayName.trim().split(/\s+/)[0] || "this coursemate";
+}
+
+type PortfolioInviteOption = {
+  group: StudyGroupRow;
+  visibleCount: number | null;
+  maximum: number | null;
+  capacityState: string;
+};
+
+export function getPortfolioInviteCapacity(
+  group: StudyGroupRow,
+  roster: GroupMembershipRow[] | null,
+  userId: string
+): { count: number | null; maximum: number | null } {
+  if (roster === null) {
+    // A failed or incomplete roster read must remain server-checked.
+    return { count: null, maximum: group.max_members };
+  }
+  const creatorIncluded = roster.some(
+    member => member.profile_id === group.creator_id
+  );
+  const formingCreator =
+    group.status === "forming" &&
+    group.creator_id === userId &&
+    !creatorIncluded;
+  return {
+    count: roster.length + (formingCreator ? 1 : 0),
+    maximum: group.max_members,
+  };
+}
+
+export function portfolioInviteCapacityMessage(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return "Group is full";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "Group maximum is not set";
+  }
+  if (capacityState === "over_limit") {
+    return "This group has more than 19 active members. The leader must remove members before anyone can be added.";
+  }
+  if (capacityState === "checking") {
+    return "Checking group capacity…";
+  }
+  if (capacityState === "unknown") {
+    return "Group capacity could not be verified. Refresh the page before inviting.";
+  }
+  return null;
+}
+
+export function portfolioInviteCapacityGuidance(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return maximum !== null && visibleCount !== null
+      ? `This group has ${visibleCount}/${maximum} active members. The leader must open a place before you can invite.`
+      : "The leader must open a place before you can invite.";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "The leader must set a maximum from 2 to 19 before anyone can be invited.";
+  }
+  return null;
 }
 
 export default function CoursemateProfilePage({
@@ -107,6 +177,9 @@ export default function CoursemateProfilePage({
   );
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [creationError, setCreationError] = useState("");
+  const [inviteRosters, setInviteRosters] = useState<
+    Record<string, GroupMembershipRow[] | null>
+  >({});
   const requestGeneration = useRef(0);
 
   useEffect(() => {
@@ -236,6 +309,86 @@ export default function CoursemateProfilePage({
     userId,
   ]);
 
+  useEffect(() => {
+    let active = true;
+    const groups = snapshot?.inviteGroups ?? [];
+    if (!userId || groups.length === 0) {
+      setInviteRosters({});
+      return () => {
+        active = false;
+      };
+    }
+    void Promise.all(
+      groups.map(async group => {
+        try {
+          return [
+            group.id,
+            await listActiveGroupMembers(userId, group.id),
+          ] as const;
+        } catch {
+          return [group.id, null] as const;
+        }
+      })
+    ).then(entries => {
+      if (!active) return;
+      setInviteRosters(Object.fromEntries(entries));
+    });
+    return () => {
+      active = false;
+    };
+  }, [authGeneration, reloadToken, session.status, snapshot, userId]);
+
+  const inviteGroupOptions: PortfolioInviteOption[] =
+    !snapshot || !userId
+      ? []
+      : snapshot.inviteGroups.map(group => {
+      // The workflow snapshot contains only the viewer's own membership rows;
+      // use the separately loaded full roster. Pending and failed reads both
+      // block the local action; the server remains authoritative only after
+      // the client has a usable roster.
+      const rosterEntry = inviteRosters[group.id];
+      const rosterLoaded = Object.prototype.hasOwnProperty.call(
+        inviteRosters,
+        group.id
+      );
+      const capacity = getPortfolioInviteCapacity(
+        group,
+        rosterEntry ?? null,
+        userId
+      );
+      const visibleCount = capacity.count;
+      const maximum = capacity.maximum;
+      const capacityState =
+        visibleCount === null
+          ? maximum === null
+            ? "maximum_not_set"
+            : rosterLoaded
+              ? "unknown"
+              : "checking"
+          : getGroupCapacityState(visibleCount, maximum);
+      return { group, visibleCount, maximum, capacityState };
+    });
+  const selectedInviteOption = inviteGroupOptions.find(
+    option => option.group.id === chosenGroupId
+  );
+  const activeInviteOption =
+    selectedInviteOption ??
+    (inviteGroupOptions.length === 1 ? inviteGroupOptions[0] : undefined);
+  const activeInviteBlockedMessage = activeInviteOption
+    ? portfolioInviteCapacityMessage(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.maximum
+      )
+    : null;
+  const activeInviteGuidance = activeInviteOption
+    ? portfolioInviteCapacityGuidance(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.maximum
+      )
+    : null;
+
   async function invite(profile: CoursemateProfile) {
     if (!userId || !snapshot || busy) return;
     const context = { ...actionContext.current };
@@ -264,6 +417,13 @@ export default function CoursemateProfilePage({
           setInviteFeedback({
             tone: "error",
             message: "Choose one of your groups before sending the invitation.",
+          });
+          return;
+        }
+        if (activeInviteBlockedMessage) {
+          setInviteFeedback({
+            tone: "error",
+            message: activeInviteBlockedMessage,
           });
           return;
         }
@@ -585,16 +745,41 @@ export default function CoursemateProfilePage({
                   disabled={busy}
                 >
                   <option value="">Select a group</option>
-                  {inviteGroups.map(group => (
-                    <option value={group.id} key={group.id}>
-                      {group.name || "Study group"} · {group.status}
-                    </option>
-                  ))}
+                  {inviteGroupOptions.map(option => {
+                    const blockedMessage = portfolioInviteCapacityMessage(
+                      option.capacityState,
+                      option.visibleCount,
+                      option.maximum
+                    );
+                    return (
+                      <option
+                        value={option.group.id}
+                        key={option.group.id}
+                        disabled={Boolean(blockedMessage)}
+                      >
+                        {option.group.name || "Study group"} ·{" "}
+                        {option.group.status}
+                        {blockedMessage ? ` · ${blockedMessage}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {activeInviteBlockedMessage && (
+                  <p className="portfolio-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
+                {activeInviteGuidance && (
+                  <p className="portfolio-capacity-hint" role="note">
+                    {activeInviteGuidance}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="primary"
-                  disabled={!chosenGroupId || busy}
+                  disabled={
+                    !chosenGroupId || busy || Boolean(activeInviteBlockedMessage)
+                  }
                   onClick={() => void invite(profile)}
                 >
                   <Send size={17} />
@@ -602,15 +787,27 @@ export default function CoursemateProfilePage({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                className="primary"
-                disabled={busy}
-                onClick={() => void invite(profile)}
-              >
-                <Send size={17} />
-                {busy ? "Sending…" : inviteLabel}
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={busy || Boolean(activeInviteBlockedMessage)}
+                  onClick={() => void invite(profile)}
+                >
+                  <Send size={17} />
+                  {busy ? "Sending…" : inviteLabel}
+                </button>
+                {activeInviteBlockedMessage && (
+                  <p className="portfolio-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
+                {activeInviteGuidance && (
+                  <p className="portfolio-capacity-hint" role="note">
+                    {activeInviteGuidance}
+                  </p>
+                )}
+              </>
             )
           ) : (
             <button

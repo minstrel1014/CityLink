@@ -2099,6 +2099,13 @@ h4 {
   background: #f8e9e5;
   color: #9c5549;
 }
+
+.portfolio-capacity-hint {
+  margin: 2px 0 0;
+  color: #8c5a2d;
+  font-size: 10px;
+  line-height: 1.5;
+}
 .portfolio-invite-choice {
   display: flex;
   flex-direction: column;
