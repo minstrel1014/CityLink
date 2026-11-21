@@ -133,7 +133,7 @@ export interface RecruitmentPostCursor {
 }
 
 type RpcName =
-  | "list_current_term_course_groups"
+  | "list_current_term_course_groups_capacity"
   | "list_current_term_group_members"
   | "get_current_term_group_member_profile"
   | "get_group_chat_access"
@@ -621,7 +621,7 @@ export async function listCurrentTermCourseGroups(
   after?: CourseGroupCursor
 ) {
   return mapCourseGroupSummaries(
-    await callRpc(userId, "list_current_term_course_groups", {
+    await callRpc(userId, "list_current_term_course_groups_capacity", {
       p_course_id: courseId,
       p_after_group_name: after?.groupName ?? null,
       p_after_group_id: after?.groupId ?? null,

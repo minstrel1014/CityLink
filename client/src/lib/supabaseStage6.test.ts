@@ -135,7 +135,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       nextCursor: { groupName: "Design team", groupId },
     });
     expect(supabaseMocks.rpc).toHaveBeenCalledWith(
-      "list_current_term_course_groups",
+      "list_current_term_course_groups_capacity",
       {
         p_course_id: "course-1",
         p_after_group_name: null,
@@ -175,7 +175,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       groupId,
     });
     expect(supabaseMocks.rpc).toHaveBeenCalledWith(
-      "list_current_term_course_groups",
+      "list_current_term_course_groups_capacity",
       {
         p_course_id: "course-1",
         p_after_group_name: "Design team",

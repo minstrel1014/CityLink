@@ -317,9 +317,10 @@ describe("capacity-bearing course group summaries", () => {
       baseRow,
     ]);
     expect(mocks.getUser).toHaveBeenCalledOnce();
-    expect(mocks.rpc).toHaveBeenCalledWith("list_course_group_summaries", {
-      p_course_id: "course",
-    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "list_course_group_summaries_capacity",
+      { p_course_id: "course" }
+    );
   });
 });
 
