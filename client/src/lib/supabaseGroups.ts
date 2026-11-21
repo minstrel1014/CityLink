@@ -413,9 +413,10 @@ export async function listCourseGroupSummaries(
   courseId: string
 ): Promise<CourseGroupSummary[]> {
   const client = await verifyCurrentUser(userId);
-  const { data, error } = await client.rpc("list_course_group_summaries", {
-    p_course_id: courseId,
-  });
+  const { data, error } = await client.rpc(
+    "list_course_group_summaries_capacity",
+    { p_course_id: courseId }
+  );
   if (error) throw error;
   return mapCourseGroupSummaries(data ?? []);
 }
