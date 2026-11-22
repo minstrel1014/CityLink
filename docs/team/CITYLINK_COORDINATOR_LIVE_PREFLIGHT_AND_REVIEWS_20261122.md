@@ -356,7 +356,7 @@ The evidence branch then received this bounded docs-only follow-up to prevent PR
 
 Role 6's substantive baseline conclusion is now part of the evidence record: version differences across repository/Test/Main mostly reflect the timestamp recorded by each migration execution rather than missing objects. The repository cannot safely reconstruct either live target's ledger by blind replay. Test has an unrecorded term-model application with strong indirect evidence that its objects exist; Main genuinely lacks row 8 (`stage6_people_page_naming`) and therefore has only the two-argument create overload. Main's broader RPC grants, including anon execute on three write RPCs, remain a separate security finding that must not be bundled with capacity DDL.
 
-The capacity migration remains stopped. Before any successor capacity SQL is proposed or applied, the coordinator must perform the metadata-only live parity records Role 6 could not run because its session lacked a Supabase connector: live helper definitions compared with committed text where feasible, Main row-8 objects, and Test/Main metadata snapshots with each target explicitly re-verified first.
+The capacity migration remains stopped. The coordinator subsequently performed the metadata-only live parity records that Role 6 could not run because its session lacked a Supabase connector. Both targets were re-verified immediately before each database call. Results are recorded in `CITYLINK_TEST_MAIN_METADATA_PARITY_COORDINATOR_20261122.md`.
 
 Adam's outstanding decisions before that technical continuation are:
 
@@ -368,3 +368,17 @@ Adam's outstanding decisions before that technical continuation are:
 6. decide the four F2 implementation questions above: proactive second message string, refresh-control form, compatibility/cache window owner and length, and signed-in multi-account capacity QA owner.
 
 None of these documentation and baseline steps authorize migration application, Main writes, merge to `main`, PR readiness, deployment or publication.
+
+## 16. Coordinator live metadata parity outcome — 2026-11-22 17:50 HKT
+
+The coordinator ran SELECT-only catalog checks against the exact disposable Test project `wkzclgmhrtecnpexfesr` (`CityLink-Stage5-Test`, `ACTIVE_HEALTHY`) and exact read-only Main project `pijslbchvstkoweslymr` (`CityLink Project`, `ACTIVE_HEALTHY`). No application row, secret, credential, connection value or setting value was read. No DDL, grant, migration, invocation, write, reset or deletion occurred.
+
+The live result confirms all three technical points needed for the next Role 6 successor design:
+
+1. **Term-model object parity is exact** for the checked tables, `courses.term_id NOT NULL`, primary keys, checks, foreign keys and RLS posture, even though Test lacks the repository term-model ledger row. This strengthens the “unrecorded apply, objects present” conclusion without claiming that the ledger can or should be reconstructed by replay.
+2. **Helper origin is explained and no semantic helper drift was detected.** Both private helpers exist with browser-role execute revoked. After normalizing comments, whitespace and token spacing, both live helper bodies match each other and the checked-in Stage 6 migration. Raw text differs only because stored source formatting differs; canonical SHA-256 values and per-target raw hashes are recorded in the parity report. No helper-redefinition migration is recommended.
+3. **Main really lacks row 8.** Main has no `update_own_display_name`, `list_course_ungrouped_classmates`, `get_current_term_coursemate_profile`, recruitment-post `subject` column/return field, three-argument group-create overload or row-8 constraints. Test has them. Neither target has capacity functions or `max_members`.
+
+The parity report also compares current code heads with live catalogs. `main` client code calls the three-argument `create_group_and_invite`, while live Main has only a two-argument overload; PR #37 client code calls the four-argument capacity overload, while neither live target has it. The first mismatch becomes an actual production break only if a confirmed live surface currently serves the `main` client against Main. That deployment fact remains Adam's to confirm; it must not be inferred from repository code alone.
+
+Consequently, the next finite database action is not to apply PR #41. Role 6 should first use the parity report to define a forward-only successor with explicit per-target prerequisite assertions and keep Main security/grant remediation, ledger repair and capacity DDL as separately reviewed changes. PR #41's helper-origin docs correction is still outstanding.
