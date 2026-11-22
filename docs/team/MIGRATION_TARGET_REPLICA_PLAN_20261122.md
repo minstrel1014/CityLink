@@ -41,3 +41,13 @@ Every authorization recorded so far names `wkzclgmhrtecnpexfesr`. None of them m
 ## What remains true regardless
 
 Main stays read-only until launch. Merge, ready transition, deployment and publication remain unauthorized. The reviewed blob `a04048e90d6b64c692f03c722b9eea2849058aab` / SHA-256 `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887` must stay byte-identical. PR #50 stays a retired draft. No credential, key or `.env` content is to be printed, copied or committed anywhere in this work.
+
+## Addendum 22:20 — why Route A is now the only sensible route
+
+Two read-only facts gathered after this plan was first written make the choice between the routes much less even than it looked.
+
+First, the two existing projects are **not** at the same schema state. `list_migrations` on Test returns seven rows and no `stage5_term_model` row; on Main it returns seven rows that include `stage5_term_model` but stop at `stage6_chat_recruitment`, with no `stage6_people_page_naming` row. The repository holds eight files. The observed function signatures match that difference: Main exposes `create_group_and_invite(uuid,uuid)` while Test exposes the three-argument `create_group_and_invite(uuid,uuid,text)` with `p_name`. A physical copy of Test (Route B) would therefore reproduce Test's gaps and then require a ledger reconciliation before any new migration could be applied — two sources of drift instead of none.
+
+Second, the delivered prototype is bound to Test and calls that three-argument function. Anything that mutates Test's schema mutates the demonstration. Replaying the eight checked-in files on a fresh project (Route A) produces a superset that contains both missing pieces, needs no credential handling, and leaves Test untouched.
+
+Caveat that must travel with the first fact: a missing ledger row is not proof the objects are absent, since either project may have received SQL through the dashboard editor without a ledger entry. What is certain is that the two projects differ, and that neither can be assumed to equal the repository's eight files.
