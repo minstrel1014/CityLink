@@ -4,6 +4,10 @@ import {
   bindRequestToken,
   verifyRequestSession,
 } from "@/lib/supabaseRequestAuth";
+import {
+  GROUP_CAPACITY_UPGRADE_REQUIRED_TOKEN,
+  probeAppBuildFreshness,
+} from "@/lib/appBuildMarker";
 
 export interface GroupCoursePeer {
   profile_id: string;
@@ -883,6 +887,14 @@ export async function createGroupAndInvite(
   shouldDispatch?: () => boolean
 ): Promise<CreatedGroupAndInvitation> {
   validateGroupMaxMembers(maxMembers);
+  // F2 cached-client rollout: a bundle that can prove it is an older build
+  // shows the approved create-path message instead of dispatching a creation
+  // the server would reject. This never reloads the page, never retries, never
+  // rewrites the request and never stores the draft; an unverifiable marker
+  // stays out of the way so the server remains the authority as before.
+  if ((await probeAppBuildFreshness()) === "stale") {
+    throw new Error(GROUP_CAPACITY_UPGRADE_REQUIRED_TOKEN);
+  }
   const rows = await callGroupRpc<CreatedGroupAndInvitation[]>(
     userId,
     "create_group_and_invite",
@@ -1039,6 +1051,17 @@ export function cancelGroupJoinRequest(
   );
 }
 
+/**
+ * The one approved user-facing string for the capacity upgrade-required path,
+ * byte-for-byte as Adam approved on 2026-11-21 (20:45). It is used unchanged
+ * both for the server's stable token and for a client that can prove its own
+ * bundle is an older build. The additional proactive wording Adam sketched by
+ * example on 2026-11-22 is deliberately NOT implemented here because its exact
+ * mapping and final strings still need one confirmation.
+ */
+export const GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE =
+  "CityLink needs an update. Refresh before creating a group.";
+
 export function getGroupWorkflowErrorMessage(error: unknown): string {
   const candidate = isRecord(error) ? error : {};
   const rawMessage =
@@ -1078,8 +1101,8 @@ export function getGroupWorkflowErrorMessage(error: unknown): string {
   // chooses display text: it never retries the call, alters the supported
   // four-argument creation request, reloads the browser or persists a draft,
   // so an unsaved creation form is allowed to be lost on a manual refresh.
-  if (message.includes("group_capacity_upgrade_required")) {
-    return "CityLink needs an update. Refresh before creating a group.";
+  if (message.includes(GROUP_CAPACITY_UPGRADE_REQUIRED_TOKEN)) {
+    return GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE;
   }
   if (message.includes("group maximum does not match this group")) {
     return "The chosen maximum does not match this group's maximum. The leader must edit the maximum before inviting.";
