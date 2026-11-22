@@ -684,20 +684,46 @@ authorization. It does not authorize application, Test write, Main access of any
 kind, merge, ready transition, deployment, publication, or stub/legacy-wrapper
 cleanup.
 
-### 11.4 The F13 trigger pin is rehearsal-derived, not target-verified
+### 11.4 The F13 trigger pin: measured on Test, unverified on Main
 
-Page 01's `A-TRG-02` pin was derived from `supabase/schema.sql:354-357` and
-reproduced on a disposable PostgreSQL 17.12 cluster. Role 6 has contacted no project
-database in this or any earlier assignment, so the honest boundary is:
+Page 01's `A-TRG-02` pin was derived from `supabase/schema.sql:354-357` and first
+reproduced on a disposable PostgreSQL 17.12 cluster. That left it rehearsal-derived:
+a rehearsal proves the instrument works, not that the real target looks like it.
 
-- the trigger **count** on Test and on Main (1 and 1) is the coordinator's read-only
-  observation, reported-live, not re-derived here;
-- the trigger **identity** — name, table, timing, events, orientation, enabled — on
-  either project is **unverified by this task**;
-- therefore the pin is rehearsal-only. It must not be described as a pin against
-  CityLink Launch, and if an authorized read-only run returns an identity that
-  differs from it, that difference is a finding for Adam rather than a reason to
-  re-lower or silently re-record the expectation.
+Adam authorized a read-only identity capture on the disposable Test project on
+2026-11-23, and it has now been performed. Against `wkzclgmhrtecnpexfesr`
+("CityLink Prototype (do not migrate)", `ACTIVE_HEALTHY`, `server_version` 17.11), a
+SELECT-only catalog read returned **exactly one** non-internal trigger attached to
+`public.enforce_invitation_integrity()`, with identity:
+
+```
+invitations_enforce_integrity;public.invitations;before;insert+update;row;origin
+```
+
+`pg_get_triggerdef` agrees:
+`CREATE TRIGGER invitations_enforce_integrity BEFORE INSERT OR UPDATE ON
+public.invitations FOR EACH ROW EXECUTE FUNCTION enforce_invitation_integrity()`.
+That is character-for-character the string the 17.12 rehearsal produced, so the pin
+is now **measured on Test** rather than inferred, and the rehearsal is known to
+reproduce the real target rather than a plausible one.
+
+The same read settled the F13 attribution question: `public.invitations` carries 1
+non-internal trigger of 7 total, while `public.group_invitations` carries **0**
+non-internal triggers of 6 total (all six are internal foreign-key triggers). The
+guard therefore attaches to the legacy table, exactly as `schema.sql:354-357` says.
+Whether the capacity feature is still protected in practice is a signed-in QA
+question this pin does not answer, and must not be read as answering.
+
+What remains unverified, and must keep being said plainly:
+
+- **Main is not measured by this task.** `pijslbchvstkoweslymr` holds no access for
+  Role 6; the coordinator's report of one attachment there is reported-live, not
+  re-derived here. The pin must not be described as a pin against CityLink Launch
+  until an authorized capture names it there.
+- Any future divergence between an authorized capture and this pin is a **finding for
+  Adam**, not a reason to re-lower or silently re-record the expectation.
+- This capture is evidence about a pin, not authorization to apply anything: no
+  migration ran, no row was written, and the write boundary is unchanged.
 
 ## 12. Disposition of the Stage 4 findings
 
@@ -721,7 +747,7 @@ inference.
 | F11 | Instrument-shape question: guard versus reviewed SELECT-only checklist                                                               | **Decided by Adam as option (b)** and implemented here; the residual obligation is reviewer confirmation that row-level observation plus the wrapper is adequate control. |
 | F12 | New, found by this reshape's own 17.12 run: `.` matches a newline, so comment stripping without the `n` flag hashes a truncated body | **Fixed and published** — Rule 1 uses flags `gn`; Rule 5 (`btrim`) added; evidence in §6.1.                                                                               |
 
-| F13 | Page 01 `A-TRG-02` expected zero invitation-trigger attachments while every target that exists has one — a false stop that would have failed the release apply with 45006 | **Fixed by strengthening, at Adam's direction** — exactly one attachment **and** an identity match against a recorded pin (`A-TRG-02`), plus an attachment-set capture for the unchanged-across-apply comparison (`A-TRG-03`). Erratum in §14, evidence in §10.8. The reviewed blob is untouched. |
+| F13 | Page 01 `A-TRG-02` expected zero invitation-trigger attachments while every target that exists has one — a false stop that would have failed the release apply with 45006 | **Fixed by strengthening, at Adam's direction** — exactly one attachment **and** an identity match against a recorded pin (`A-TRG-02`), plus an attachment-set capture for the unchanged-across-apply comparison (`A-TRG-03`). Erratum in §14, evidence in §10.8. The reviewed blob is untouched. The pin itself is now **measured on Test** by an authorized read-only capture and matched the rehearsal exactly; Main is still unverified by this task (§11.4). |
 | F14 | The wrapper hard-codes the Prototype ref and structurally refuses the release target (45003/45004), so as shipped it can never authorize the single real apply | **Open by decision, not by oversight** — the scope question is Adam's and the F13 assignment explicitly declined to settle it. This fix changed only emitted messages (ref-bearing), never the scope logic. Options are stated in §14's "what remains open". |
 | F15 | New, produced by this fix: both token tables named refusals 45002-45009 without the `_gate_` segment, so a recorded refusal copied from the document matched nothing the wrapper emits | **Fixed** — tables corrected against measured 17.12 output (§5.3, checklist §8); no SQL token name changed. |
 
