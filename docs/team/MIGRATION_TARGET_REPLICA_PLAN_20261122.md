@@ -51,3 +51,13 @@ First, the two existing projects are **not** at the same schema state. `list_mig
 Second, the delivered prototype is bound to Test and calls that three-argument function. Anything that mutates Test's schema mutates the demonstration. Replaying the eight checked-in files on a fresh project (Route A) produces a superset that contains both missing pieces, needs no credential handling, and leaves Test untouched.
 
 Caveat that must travel with the first fact: a missing ledger row is not proof the objects are absent, since either project may have received SQL through the dashboard editor without a ledger entry. What is certain is that the two projects differ, and that neither can be assumed to equal the repository's eight files.
+
+## Addendum 22:40 — superseded: there is no replica project, and Route A was wrong
+
+Adam decided at 22:37 that the rehearsal target is **local** and that the release happens on CityLink Launch (Main), so no third cloud project is created and the free plan's two-active-project limit drops off the critical path. This supersedes the route comparison above: neither Route A nor Route B is being executed as written.
+
+Route A was also factually wrong and is retracted. Replaying only the eight checked-in migrations on an empty database fails at `20261102090000_stage5_term_model.sql:43` with `relation "public.courses" does not exist`, because those eight files are increments on top of `supabase/schema.sql`, not a baseline. With the base schema applied first the run stops at `:70` on a data guard requiring a course linked to the approved current term, so the fictional seed is a prerequisite as well.
+
+The working bootstrap, now proven end to end and recorded in `LOCAL_REHEARSAL_ENVIRONMENT_RECIPE_20261122.md`, is: PostgreSQL 17 from PGDG, a Supabase-shaped skeleton (`auth` schema, `extensions` with `pgcrypto`, the three roles, `auth.uid()`/`auth.role()`/`auth.jwt()` shims), `supabase/schema.sql`, `supabase/seed_citylink_fictional_courses.sql`, then the eight migrations — 8/8 exit 0, ending at the repository's schema state with `create_group_and_invite(uuid,uuid,text)` and 12 public tables.
+
+The three-way separation from the earlier section still holds, with the middle row now permanent rather than temporary: CityLink Launch receives capacity once at release; the Prototype project receives nothing; the local cluster carries the rehearsal.
