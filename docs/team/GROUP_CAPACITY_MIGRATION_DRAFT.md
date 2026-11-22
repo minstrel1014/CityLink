@@ -173,15 +173,15 @@ plus membership checks.
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
 - Role 6’s exact-head static review of the pre-Option-A SQL is recorded; the Option A SQL now needs a fresh exact-head review of the changed file, and no formal database-application approval has been given for either version.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution. Function ownership and any non-`public`/`anon` grantees (for example `service_role`) on the replaced objects were **not** rewritten here and must be read during the authorized Test preflight.
-- `private.can_browse_current_term_group` and `private.can_manage_recruitment_post` are
-  referenced by this SQL and are **not defined in any checked-in migration**; that
-  repository statement remains accurate. Adam authorized live read-only catalog
-  inspection on 2026-11-22, and the metadata-only observation found **both helpers
-  already present in live Test and in live Main** (`postgres` owner, `SECURITY
-  DEFINER`, `EXECUTE` granted to `postgres` only). Their live origin and their
-  relationship to repository migration history are therefore **unreconciled**, which
-  **reinforces rather than resolves** the migration-stop baseline mismatch recorded
-  below: before any application this dependency must either become its own
+- `private.can_browse_current_term_group` and `private.can_manage_recruitment_post`
+  are referenced by this SQL and are **not defined in any checked-in migration**;
+  that repository statement remains accurate. Adam authorized live read-only
+  catalog inspection on 2026-11-22, and the metadata-only observation found **both
+  helpers already present in live Test and in live Main** (`postgres` owner,
+  `SECURITY DEFINER`, `EXECUTE` granted to `postgres` only). Their live origin and
+  their relationship to repository migration history are therefore **unreconciled**,
+  which **reinforces rather than resolves** the migration-stop baseline mismatch
+  recorded below: before any application this dependency must either become its own
   checked-in migration or be formally documented as an out-of-band live object.
 - The compatibility wrappers and the fail-closed stub are temporary contracts. Their removal requires a later lead-approved cleanup migration; they are not dropped by this file.
 - The client release order and mapper/UI PR must be agreed before Test application.
