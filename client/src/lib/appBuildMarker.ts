@@ -10,6 +10,10 @@
 // - no inference from browser cache time, Date.now(), tab age or header dates;
 //   only the two build identifiers are compared;
 // - no automatic reload, forced refresh or background retry;
+// - no timer, interval, visibility or route hook and no background re-check:
+//   the published marker is read only when an explicit create attempt asks for
+//   it, and every later attempt takes its own reading (simultaneous attempts
+//   share one);
 // - no localStorage/sessionStorage use, so an unsaved group-creation draft is
 //   allowed to be lost when the user refreshes manually;
 // - no new user-facing wording. The single approved create-path string lives in
@@ -129,24 +133,48 @@ export type AppBuildFreshnessOptions = {
   loaded?: AppBuildMarker | null;
 };
 
-let memoizedDefaultProbe: Promise<AppBuildFreshness> | null = null;
+/**
+ * Only a *currently running* default reading is shared. The entry is forgotten
+ * as soon as that reading settles, whether it resolved or threw, so a settled
+ * verdict is never retained for the lifetime of the bundle: a deployment that
+ * lands while the same tab stays open is noticed by the next explicit,
+ * user-triggered create attempt. There is no polling, background refresh or
+ * timer behind this, and it is not a cache of any answer.
+ *
+ * Known residual (F2-M2, deliberately not fixed here because closing it needs a
+ * bounded wait, i.e. a timer, which Adam has not approved): a marker request
+ * that never settles keeps every later default probe waiting on that same
+ * in-flight reading. It fails closed — no create is dispatched and no capacity
+ * rule is bypassed — so it is an availability residual whose decision stays
+ * with Adam.
+ */
+let inFlightDefaultProbe: Promise<AppBuildFreshness> | null = null;
 
 /**
- * Decide the freshness for the current bundle load. Without a loaded marker no
- * request is made at all, so a development server or a test run cannot be
- * mistaken for a stale client. The default (no-option) probe is memoized for
- * the lifetime of the loaded bundle: a manual browser refresh is the only thing
- * that re-evaluates it, because the refresh loads a different bundle.
+ * Decide the freshness for the calling create attempt. Without a loaded marker
+ * no request is made at all, so a development server or a test run cannot be
+ * mistaken for a stale client. Simultaneous default probes are deduplicated to
+ * a single reading; a default probe after the previous one has settled re-reads
+ * the published marker with `cache: "no-store"`, so each later explicit
+ * user-triggered create gets its own answer. Probes that pass explicit options
+ * are never deduplicated, because they are caller-supplied evidence rather than
+ * the production path.
  */
 export async function probeAppBuildFreshness(
   options: AppBuildFreshnessOptions = {}
 ): Promise<AppBuildFreshness> {
   const usesDefaults =
     options.fetch === undefined && options.loaded === undefined;
-  if (usesDefaults && memoizedDefaultProbe) return memoizedDefaultProbe;
-  const probe = evaluateAppBuildFreshness(options);
-  if (usesDefaults) memoizedDefaultProbe = probe;
-  return probe;
+  if (!usesDefaults) return evaluateAppBuildFreshness(options);
+  const running = inFlightDefaultProbe;
+  if (running) return running;
+  // Cleared on settle (resolved or rejected) and only if this call is still the
+  // running one, so a later probe can never see an already-settled verdict.
+  const tracked = evaluateAppBuildFreshness(options).finally(() => {
+    if (inFlightDefaultProbe === tracked) inFlightDefaultProbe = null;
+  });
+  inFlightDefaultProbe = tracked;
+  return tracked;
 }
 
 async function evaluateAppBuildFreshness(
@@ -159,7 +187,12 @@ async function evaluateAppBuildFreshness(
   return compareAppBuildMarkers(loaded, published);
 }
 
-/** Test seam only: the production code path has one freshness answer per load. */
+/**
+ * Test seam only: forget a running default reading so a test can start an
+ * isolated scenario. Production code never calls it. In real use each create
+ * attempt already re-reads the marker, and a manual browser refresh is what
+ * replaces the loaded bundle and therefore the baked-in identifier.
+ */
 export function resetAppBuildFreshnessProbe(): void {
-  memoizedDefaultProbe = null;
+  inFlightDefaultProbe = null;
 }
