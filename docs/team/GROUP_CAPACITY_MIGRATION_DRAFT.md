@@ -174,15 +174,26 @@ plus membership checks.
 - Role 6’s exact-head static review of the pre-Option-A SQL is recorded; the Option A SQL now needs a fresh exact-head review of the changed file, and no formal database-application approval has been given for either version.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution. Function ownership and any non-`public`/`anon` grantees (for example `service_role`) on the replaced objects were **not** rewritten here and must be read during the authorized Test preflight.
 - `private.can_browse_current_term_group` and `private.can_manage_recruitment_post`
-  are referenced by this SQL and are **not defined in any checked-in migration**;
-  that repository statement remains accurate. Adam authorized live read-only
-  catalog inspection on 2026-11-22, and the metadata-only observation found **both
-  helpers already present in live Test and in live Main** (`postgres` owner,
-  `SECURITY DEFINER`, `EXECUTE` granted to `postgres` only). Their live origin and
-  their relationship to repository migration history are therefore **unreconciled**,
-  which **reinforces rather than resolves** the migration-stop baseline mismatch
-  recorded below: before any application this dependency must either become its own
-  checked-in migration or be formally documented as an out-of-band live object.
+  are referenced by this SQL **and are defined by the checked-in**
+  `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` (`:133` and
+  `:160`, both `SECURITY DEFINER SET search_path = ''`, browser-role revocations at
+  `:931`–`:932`). An earlier version of this bullet said no checked-in migration
+  defined them and that their live origin was unreconciled; that judgement was
+  **factually wrong** and is corrected here using the coordinator's 2026-11-22
+  metadata-only parity record. The authorized live inspection found **both helpers
+  present in live Test and in live Main** (`postgres` owner, `SECURITY DEFINER`,
+  empty `search_path`, `EXECUTE` false for `anon`, `authenticated` and
+  `service_role`); raw definition hashes differ between targets only in stored
+  formatting, and after normalizing comments, whitespace and token spacing both
+  live bodies match each other and the checked-in body. Helper origin is therefore
+  **explained**, not out-of-band. The residual that still stands, and still
+  **reinforces rather than resolves** the migration-stop baseline mismatch recorded
+  below, is ledger/replay history and the other target drift — not a missing helper
+  definition. **Role 6 recommendation, not yet approved by Adam:** no
+  helper-redefinition migration is needed, because `20261118050000` is the
+  authoritative origin; assert the helper posture at preflight instead. This
+  authorizes no migration, Test or Main write, merge, release, deployment or
+  publication.
 - The compatibility wrappers and the fail-closed stub are temporary contracts. Their removal requires a later lead-approved cleanup migration; they are not dropped by this file.
 - The client release order and mapper/UI PR must be agreed before Test application.
 - Adam’s 2026-11-22 authorization is recorded in “Authorization boundary recorded
@@ -223,16 +234,25 @@ Adam’s scope as received on 2026-11-22. It is a scope decision, not a release 
   `CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md`, the SQL at
   `2bc29595f5c66b0f379a4a46f544a2364fc88be2`, main `1a583e30c019733d1880d2614ca853481509fdad`
   and client head `d4558a73dccfa0878dc43ed78271c44865574d5b`.
-- **Repository absence (static):** the two `private` helpers are defined in no
-  checked-in migration; they appear only in
-  `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql`.
+- **Repository presence (static, corrected 2026-11-22):** the two `private` helpers
+  are defined in checked-in `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`
+  at `:133` and `:160`, with the browser-role revocations at `:931`–`:932`. The
+  earlier "repository absence" entry in this section was wrong: it treated
+  `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` as the only home of the
+  helpers, although that proposal is the draft of the same migration.
 - **Live read-only evidence, performed by the coordinator under Adam’s separate
   2026-11-22 authorization and not by this task:** both helpers exist in the Test and
   Main catalogs; Test has only the three-argument `create_group_and_invite`, no
   `*_capacity` functions and no `study_groups.max_members` column; Main has only a
   two-argument `create_group_and_invite`, no `max_members` and no `*_capacity`
   functions; `private` schema USAGE excludes `service_role` on both; Main grants are
-  broader than Test for several public group functions.
+  broader than Test for several public group functions. The same 2026-11-22 parity
+  record also shows the two helpers with `EXECUTE` false for `anon`,
+  `authenticated` and `service_role` on both targets, and canonical normalized
+  SHA-256 values `5991901a35dcf8480e807091a105dde3cd8f88a3881a032f1820bd1d3a61b3fc`
+  (`can_browse_current_term_group`) and
+  `5e88d56bce2d575a5df97a39bd609746499b0fa4981e6632af6ebbfb25d2d1b5`
+  (`can_manage_recruitment_post`) matching the checked-in body.
 - **Not verified here:** SQL execution, migration application, application-row
   access or writes, signed-in behaviour, concurrency/locking, capacity behaviour at
   scale, deployment or publication. This F4 amendment made no database contact and

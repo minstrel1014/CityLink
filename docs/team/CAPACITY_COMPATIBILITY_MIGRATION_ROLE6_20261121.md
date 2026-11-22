@@ -228,19 +228,39 @@ written decision recorded in `docs/team/DECISIONS.md`.
 ## 7. Open items and unresolved dependencies
 
 1. **`private.can_browse_current_term_group` and
-   `private.can_manage_recruitment_post` are referenced by this SQL but are
-   defined in no checked-in migration** — the repository statement remains
-   accurate; they appear only in
-   `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql`. The live read-only
-   catalog inspection Adam authorized on 2026-11-22 found **both helpers already
-   present in live Test and in live Main** (`postgres` owner, `SECURITY DEFINER`,
-   `EXECUTE` for `postgres` only). Their live origin and relationship to
-   repository migration history are therefore **unreconciled**, which
-   **reinforces rather than resolves** the migration-stop baseline mismatch in
-   section 9. Before any application this dependency must either become its own
-   checked-in migration or be formally documented as an out-of-band live object;
-   ownership, effective/default grants and the private schema still need the
-   recorded preflight reading at that moment.
+   `private.can_manage_recruitment_post` are defined by the checked-in
+   `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`** —
+   `can_browse_current_term_group` at `:133`, `can_manage_recruitment_post` at
+   `:160`, both `SECURITY DEFINER SET search_path = ''`, with the browser-role
+   revocations at `:931`–`:932`. **Corrected 2026-11-22:** an earlier version of
+   this item, and the matching bullet in `GROUP_CAPACITY_MIGRATION_DRAFT.md`,
+   claimed no checked-in migration defined the helpers and that their live origin
+   was unreconciled. That repository judgement was factually wrong. It came from a
+   text search that stopped at `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql`,
+   which is the draft of that same migration; the claim is superseded by the
+   coordinator's metadata-only parity record
+   `CITYLINK_TEST_MAIN_METADATA_PARITY_COORDINATOR_20261122.md` (2026-11-22).
+   That authorized live inspection found both helpers present in **Test and Main**,
+   `postgres`-owned, `SECURITY DEFINER`, empty `search_path`, and `EXECUTE`
+   **false for `anon`, `authenticated` and `service_role` alike**. The raw
+   `pg_get_functiondef` hashes differ between the two targets only because the
+   stored source formatting differs (lengths 666/748 and 864/1037); after
+   normalizing SQL comments, whitespace and token spacing both live bodies match
+   each other **and** the checked-in body. Canonical SHA-256 after normalization:
+   `5991901a35dcf8480e807091a105dde3cd8f88a3881a032f1820bd1d3a61b3fc`
+   (`can_browse_current_term_group`) and
+   `5e88d56bce2d575a5df97a39bd609746499b0fa4981e6632af6ebbfb25d2d1b5`
+   (`can_manage_recruitment_post`). Helper origin is therefore **explained**, not
+   out-of-band, and this item no longer blocks on a missing definition. The
+   narrower residual that still stands is migration-ledger/replay history and the
+   other target drift, which the baseline reconciliation maps; ownership,
+   effective/default grants and the private schema still need the recorded
+   preflight reading at the moment of any application. **Role 6 recommendation,
+   explicitly not yet approved by Adam:** add no helper-redefinition migration;
+   treat `20261118050000` as the authoritative origin and assert the expected
+   helper posture during preflight instead. This is a recommendation about review
+   design only. It authorizes nothing: no migration, no Test or Main write, no
+   merge, release, deployment or publication.
 2. **Function ownership was not rewritten.** The replaced and new objects inherit
    the ownership of whichever role executes the migration. `SECURITY DEFINER`
    wrappers therefore depend on live ownership being correct; verify it in
@@ -323,13 +343,18 @@ not). By Adam’s existing release gate a material mismatch is a preflight stop,
 the Option A SQL on PR #41 **remains unapplied**, and the compatibility stub and
 legacy read wrappers stay in place by design rather than by omission.
 
-**Baseline reconciliation is now the first blocker.** Because the two `private`
-helpers exist live in both projects but in no checked-in migration, the live
-baseline origin and the repository history must be reconciled — as a new
-checked-in migration for the dependency, or as a formally documented out-of-band
-object — before any capacity migration can be proposed again. Role 6 cannot
-perform that reconciliation from static sources alone and no live access was used
-for this documentation amendment.
+**Baseline reconciliation remains the first blocker, but not for helper origin.**
+The two `private` helpers are defined by the checked-in
+`20261118050000_stage6_chat_recruitment.sql` (`:133`, `:160`, revocations
+`:931`–`:932`), and the coordinator's 2026-11-22 metadata-only parity record found
+both present in Test and Main with exactly the posture that file produces; after
+normalizing stored-source formatting the live bodies equal the checked-in body, so
+no security-relevant logic divergence was observed in that bounded comparison. What
+still has to be reconciled is the ledger and replay history itself: repository
+filename versions that match neither target's recorded versions, Test's unrecorded
+term model, and Main's missing row 8. Role 6 could not and did not perform any live
+comparison: this task has no Supabase connector, used no live access, and the live
+facts above are the coordinator's authorized read-only results.
 
 **Scope of this amendment.** F4 was a documentation-only correction requested by
 Adam after F1 completed. It changes no SQL, no client behaviour and no
