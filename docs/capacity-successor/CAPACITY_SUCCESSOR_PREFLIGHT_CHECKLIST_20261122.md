@@ -2,145 +2,245 @@
 
 **Status: blank template for a future, separately authorized run. Do not fill it
 in retroactively from memory, and do not treat a completed template as
-authorization for anything.**
+authorization for anything. It has never been filled in: Role 6's authorized
+read-only Test dry run was blocked because no Supabase connector is enabled in
+this task (package doc §11.1).**
 
-This is the record format that makes Adam's helper policy enforceable: the
-guard in
-`docs/capacity-successor/20261122180000_stage7_group_capacity_prerequisite_guard_DRAFT.sql`
-either passes or stops the application, and this page is what "stopped" and
-"passed" have to look like in writing.
+- Instrument of record: `docs/capacity-successor/preflight/` pages 00–05 plus
+  `90_apply_gate_wrapper_DRAFT.sql`. Design rationale and finding dispositions
+  live in
+  `docs/capacity-successor/CAPACITY_SUCCESSOR_MIGRATION_PACKAGE_ROLE6_20261122.md`
+  ("the package doc").
+- Retired instrument: the DO-block guard
+  `20261122180000_stage7_group_capacity_prerequisite_guard_DRAFT.sql` was deleted,
+  not repaired. It is recoverable at `bc6a6d5` and must not be run.
+- Prepared by: Role 6 continuity task (human name TBD; no human authorship is
+  attributed to this document).
 
 ## 0. Preconditions for using this page at all
 
 | Condition            | Requirement                                                                                                                                                                         |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Approval recorded    | Adam's 2026-11-22 helper policy, as integrated in the PR #48 evidence branch Section 18                                                                                             |
+| Approval recorded    | Adam's 2026-11-22 helper policy and the 22:04 instrument-shape decision (option b: SELECT-only pages plus a thin refusal wrapper)                                                   |
 | Exact SQL head       | `supabase/migrations/20261119090000_group_hard_max.sql` blob `a04048e90d6b64c692f03c722b9eea2849058aab`, SHA-256 `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887` |
-| Exact successor head | the branch head recorded in §1, which must contain this page unchanged                                                                                                              |
-| Recipe pinned        | §2 shows a pinned normalization recipe and expected digests; while G4 is unpinned, no application may be requested                                                                  |
-| Target               | disposable Test `wkzclgmhrtecnpexfesr` only. Main is out of scope and the guard refuses it                                                                                          |
+| Exact successor head | the PR #51 head recorded in §1, which must contain these pages unchanged                                                                                                            |
+| Recipe pinned        | §2 complete; while `P-H1-DIG`/`P-H2-DIG` read `UNPINNED`, no application may be requested                                                                                           |
+| Target               | disposable Test `wkzclgmhrtecnpexfesr` only. Main is out of scope and the wrapper refuses it with `group_capacity_target_out_of_scope`                                              |
+| Engine major         | 17 on the target (Adam's 22:04 decision: Test 17.11.0.011, Main 17.11.0.003); page 00 `C-MAJ-01` and page 05 `P-ENG-01` must agree                                                  |
 | Authorization        | a separate, explicit Adam authorization naming the exact SQL head and the exact target, recorded before execution                                                                   |
-| Fresh review         | exact-head Role 6 review still current for the guard and the reviewed blob, plus Roy/Jeffery client-contract confirmation and Eunice's independent read                             |
+| Fresh review         | exact-head Role 6 review still current for the pages, the wrapper and the reviewed blob, plus Roy/Jeffery client-contract confirmation and Eunice's independent read                |
 
 ## 1. Run header (operator fills in)
 
-| Field                                                      | Value                  |
-| ---------------------------------------------------------- | ---------------------- |
-| Date and time (with timezone)                              |                        |
-| Executor task and human lead                               |                        |
-| Adam authorization reference                               |                        |
-| Authorized target ref                                      | `wkzclgmhrtecnpexfesr` |
-| Connector/target identity confirmed out-of-band (who, how) |                        |
-| Successor branch head                                      |                        |
-| Reviewed blob object id re-verified                        |                        |
-| Runner used (session, tool, role)                          |                        |
-| Transaction form actually used                             |                        |
-| Session user returned by the catalog                       |                        |
+| Field                                                 | Value                  |
+| ----------------------------------------------------- | ---------------------- |
+| Run id (declare as `citylink.capacity_run_id`)        |                        |
+| Date and time, start and end (with timezone)          |                        |
+| Executor task and human lead                          |                        |
+| Adam authorization reference                          |                        |
+| Authorized target ref                                 | `wkzclgmhrtecnpexfesr` |
+| Target ref read from the tool's own response          |                        |
+| Target display name / status as reported              |                        |
+| Connector/tool used (no credential value recorded)    |                        |
+| Successor branch head                                 |                        |
+| Reviewed blob object id re-verified                   |                        |
+| Engine major / full version (`C-MAJ-01` / `C-MAJ-02`) |                        |
+| Database (`C-DB-03`)                                  |                        |
+| Session user / current user (`C-USR-04` / `C-USR-05`) |                        |
+| Locale collate / ctype (`C-LOC-07`)                   |                        |
+| Encoding (`C-ENC-08`)                                 |                        |
+| Session `search_path` verbatim (`C-CFG-06`)           |                        |
+| Transaction form actually used                        |                        |
+| Raw output storage location for every page            |                        |
 
 ## 2. Recipe pinning (must be complete before any application request)
 
-| Item                                                          | Value                                                     | Pinned by |
-| ------------------------------------------------------------- | --------------------------------------------------------- | --------- |
-| Normalization input scope                                     | `pg_get_functiondef(<helper oid>)`                        |           |
-| Comment-stripping rule                                        |                                                           |           |
-| Whitespace rule                                               |                                                           |           |
-| Token-spacing rule                                            |                                                           |           |
-| Case folding                                                  |                                                           |           |
-| Trailing-semicolon handling                                   |                                                           |           |
-| Digest encoding                                               | `encode(sha256(convert_to(<normalized>, 'utf8')), 'hex')` |           |
-| Pinned browse digest (Test)                                   |                                                           |           |
-| Pinned manage digest (Test)                                   |                                                           |           |
-| Same values observed on Main (read-only, for comparison only) |                                                           |           |
-| Coordinator canonical values still match?                     | yes / no / recipe-differs                                 |           |
-| If "recipe-differs": recorded reconciliation                  |                                                           |           |
+The recipe is published in package doc §6 and echoed by page 05 rows
+`P-RCP-06`/`P-RCP-07`: strip `--.*` with flags **`gn`**, collapse whitespace, drop
+spaces around `( ) , ;`, `lower`, `btrim`, then
+`encode(sha256(convert_to(<normalized>, 'utf8')), 'hex')`. Do not substitute
+another recipe; a different recipe is a different pin.
+
+| Item                                                                  | Value                                                   | Observed |
+| --------------------------------------------------------------------- | ------------------------------------------------------- | -------- |
+| Input scope declared                                                  | `pg_get_functiondef(<helper oid>)` on the target        |          |
+| browse helper OID (`P-H1-OID`)                                        | recorded                                                |          |
+| browse `pg_get_functiondef` chars / octets (`P-H1-LEN`)               | recorded                                                |          |
+| browse normalized digest (`P-H1-DIG`)                                 | recorded verbatim, never rounded or abbreviated         |          |
+| browse empty-`search_path` verdict (`P-H1-CFG`)                       | PASS required                                           |          |
+| browse ACL posture (`P-H1-ACL`)                                       | recorded                                                |          |
+| manage helper OID (`P-H2-OID`)                                        | recorded                                                |          |
+| manage `pg_get_functiondef` chars / octets (`P-H2-LEN`)               | recorded                                                |          |
+| manage normalized digest (`P-H2-DIG`)                                 | recorded verbatim                                       |          |
+| manage empty-`search_path` verdict (`P-H2-CFG`)                       | PASS required                                           |          |
+| manage ACL posture (`P-H2-ACL`)                                       | recorded                                                |          |
+| Two consecutive executions identical?                                 | yes required (pages write nothing, so this is expected) |          |
+| Value declared into `citylink.capacity_pinned_digests`                | `<browse hex>,<manage hex>`                             |          |
+| Coordinator canonical values (`5991901a…` / `5e88d56b…`) still match? | yes / no / recipe-differs                               |          |
+| If "recipe-differs": recorded reconciliation                          |                                                         |          |
 
 Rules for this section:
 
-- Both targets must agree with each other **under the same pinned recipe**.
-  Agreement under two different recipes proves nothing.
-- If the pinned value differs from the coordinator's canonical value, that is
-  an unresolved discrepancy and a stop, not a licence to relax the recipe.
-- A recipe change that makes a mismatch disappear is exactly the failure mode
-  this page exists to prevent. Record the rejected variant if one is tried.
+- A `UNPINNED` digest row is **not** a pass and must never be transcribed as one.
+- Do not mix digest families (package doc §6.2). The coordinator's canonical live
+  values, the historical checked-in-file values (`9206e208…` / `1158da30…`) and
+  Role 6's local fixture values (`f150f880…` / `7d50da9e…`) are three different
+  input scopes. Only a digest produced by page 05 **on the authorized target**
+  with the published recipe may be declared here.
+- If the target's digests differ from a previously recorded pin, stop and record
+  the pair; that is drift evidence for review, not a licence to relax the recipe.
+  A recipe change that makes a mismatch disappear is exactly the failure mode this
+  page exists to prevent. Record the rejected variant if one is tried.
+- Main may be compared only inside its existing read-only boundary and only under
+  the same pinned recipe; agreement under two different recipes proves nothing.
 
-## 3. Guard run (Test)
+## 3. Preflight run (Test)
 
-Run the guard first, inside the authorized read-only path. Record the outcome.
+Run each page as its own statement batch, in this order, and attach the raw
+output rather than summarising it.
 
-| Check | Meaning if it fails                                                                                                  | Result | Observed evidence |
-| ----- | -------------------------------------------------------------------------------------------------------------------- | ------ | ----------------- |
-| G1    | target not pinned, unknown, or Main                                                                                  |        |                   |
-| G2    | term model or a base table missing                                                                                   |        |                   |
-| G3    | helper signature, ownership, `SECURITY DEFINER`, empty `search_path`, or browser/service-role revoke posture differs |        |                   |
-| G4    | normalized helper body does not match the pinned digest                                                              |        |                   |
-| G5    | capacity objects already partly present                                                                              |        |                   |
-| G6    | row-8 subject contract or a legacy read output set differs from the reviewed shape                                   |        |                   |
-| G7    | a signature the reviewed file replaces is missing, or the two-argument create is still present                       |        |                   |
-| G8    | runner cannot legally replace or create what the reviewed file needs                                                 |        |                   |
-| G9    | `study_groups` posture or the max-member constraint is in an unexplained state                                       |        |                   |
-| G10   | invitation-integrity guard attachment state contradicts the reviewed premise                                         |        |                   |
-| G11   | capture only: ledger versions, default privileges, explicit ACL count                                                |        | n/a               |
+| Page | File                                     | Required?           | Rows                        | FAIL | UNPINNED | Raw output at |
+| ---- | ---------------------------------------- | ------------------- | --------------------------- | ---- | -------- | ------------- | --- |
+| 00   | `00_target_identity_and_engine.sql`      | yes                 | 18                          |      |          |               |
+| 01   | `01_track_a_capacity_prerequisites.sql`  | yes                 | 55                          |      |          |               |
+| 02   | `02_track_b_row8_promotion.sql`          | if Track B in scope | 17                          | n/a  |          |               |
+| 03   | `03_track_c_grant_posture_survey.sql`    | if Track C in scope | 33                          | n/a  |          |               |
+| 04   | `04_track_d_ledger_identity_capture.sql` | if Track D in scope | 4 (+1 per recorded version) |      |          |               |     |
+| 05   | `05_helper_pinning_record.sql`           | yes                 | 17                          |      |          |               |
 
-Token returned on failure: `group_capacity_prerequisite_mismatch` /
-`group_capacity_prerequisite_unpinned` / `group_capacity_main_out_of_scope`.
+Page 04 note: run statement 2 **only** if statement 1 reports the ledger table
+present; statement 2 is parse-time dependent on that table existing.
+
+Page 01 stop conditions (any one stops the run):
+
+- [ ] `A-TAB-*` any `FAIL` — term-model or study-group objects missing.
+- [ ] `A-COL-01`/`A-COL-02` any `FAIL` — row-8 dependency absent (Track B).
+- [ ] `A-COL-03` any `FAIL` — `study_groups.max_members` already present, so this
+      is not a first forward application.
+- [ ] `A-HLP-*` any `FAIL` — helper existence, ownership, `SECURITY DEFINER`,
+      empty `search_path` or browser/service-role `EXECUTE` posture differs from
+      the reviewed state.
+- [ ] `A-CAP-*` any `FAIL` — a capacity object already exists; do not re-apply.
+- [ ] `A-RPL-01..05` any `FAIL`, or `A-RPL-06` `FAIL` — the replaced-signature set
+      is not what the blob expects (the two-argument create must be absent on Test
+      and is present on Main).
+- [ ] `A-LGC-01/03/05` any `FAIL` — a legacy read result shape is not the released
+      shape the blob re-declares.
+- [ ] `A-RUN-01/02` any `FAIL` — the executing role cannot legally replace or
+      create what the reviewed file needs.
+- [ ] `A-TRG-01` reports an attached invitation-integrity trigger where the
+      reviewed draft assumes none — stop for review, do not proceed.
+
+Marker declaration (same session, copied from the captured output only):
+
+| Marker                                | Value declared | Source row |
+| ------------------------------------- | -------------- | ---------- |
+| `citylink.capacity_run_id`            |                | §1         |
+| `citylink.capacity_target_ref`        |                | §1         |
+| `citylink.capacity_pages_run`         |                | §3         |
+| `citylink.capacity_preflight_verdict` |                | §3         |
+| `citylink.capacity_pinned_digests`    |                | §2         |
+| `citylink.capacity_engine_major`      |                | `C-MAJ-01` |
+| `citylink.capacity_blob_identity`     |                | §0         |
+
+Gate call: `select private.citylink_capacity_apply_gate();`
+
+- [ ] Returned `group_capacity_gate_satisfied run=… target=…` (record verbatim)
+- [ ] Refused — record token and SQLSTATE verbatim; do not re-declare markers
+      until the underlying cause is understood: `_______________________`
 
 ## 4. Decision point
 
-| Outcome                                  | Required action                                                                                                                                                            |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Any pinned check failed                  | **Stop.** No capacity DDL. Report which track owns the failure (capacity DDL / row-8 promotion / grant normalization / ledger repair). Never "fix" it inside capacity work |
-| G4 unpinned                              | **Stop.** Return to §2. Do not substitute a whitespace-insensitive comparison for the pinning step                                                                         |
-| All pinned checks passed and §2 complete | The application may be _requested_, only under Adam's separate Test-only authorization naming the exact SQL head                                                           |
-| Anything unexpected during the run       | **Stop** and record it. An unexplained difference is a finding, not noise to average away                                                                                  |
+| Outcome                                         | Required action                                                                                                                                                            |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Any page row `FAIL`                             | **Stop.** No capacity DDL. Report which track owns the failure (capacity DDL / row-8 promotion / grant normalization / ledger repair). Never "fix" it inside capacity work |
+| Any row `UNPINNED` in pages 00, 01 or 05        | **Stop.** Return to §2 or declare the marker from evidence. Do not substitute a whitespace-insensitive comparison for the pinning step                                     |
+| Wrapper refused                                 | **Stop.** The refusal token is the finding; a re-declaration that makes it disappear is not a fix                                                                          |
+| Every required row PASS/CAPTURE and §2 complete | The application may be _requested_, only under Adam's separate Test-only authorization naming the exact SQL head                                                           |
+| Anything unexpected during the run              | **Stop** and record it. An unexplained difference is a finding, not noise to average away                                                                                  |
 
 ## 5. Application (only after an explicit Adam authorization)
 
-| Step                                                          | Record |
-| ------------------------------------------------------------- | ------ |
-| Guard re-run immediately before, same session, same target    |        |
-| Application started (timestamp)                               |        |
-| Exact file applied, byte-identical, blob id re-verified first |        |
-| Runner output tail (errors, warnings, notices)                |        |
-| Transaction outcome (committed or aborted)                    |        |
-| Elapsed time                                                  |        |
-| Any statement that behaved differently from the review        |        |
+| Field                                                                       | Value |
+| --------------------------------------------------------------------------- | ----- |
+| Pages re-run immediately before, same session, same target                  |       |
+| Wrapper returned satisfaction in that same session                          |       |
+| Application started (timestamp, local + UTC)                                |       |
+| Exact file applied, byte-identical, blob id re-verified first               |       |
+| `--single-transaction` used? (**must be NO** — F10)                         |       |
+| Outer `BEGIN`/`COMMIT` added? (**must be NO** — F10)                        |       |
+| Reason: the file carries its own `begin;` at `:39` and `commit;` at `:1756` |       |
+| Runner and exact command line                                               |       |
+| Exit status                                                                 |       |
+| Application completed (timestamp, local + UTC)                              |       |
+| Elapsed time                                                                |       |
+| Runner output tail (errors, warnings, notices) quoted separately            |       |
+| Transaction outcome (committed or aborted)                                  |       |
+| Any statement that behaved differently from the review                      |       |
+| Intervening manual change to the target between §3 and §5? (must be none)   |       |
 
 ## 6. Post-application verification
 
-| Verification                                               | Expected                                                                                                                    | Result |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Three `_capacity` names exist with the reviewed signatures | `list_course_group_summaries_capacity`, `list_current_term_course_groups_capacity`, `list_group_recruitment_posts_capacity` |        |
-| Three legacy read names keep their reviewed output sets    | five, six and fourteen columns as in G6                                                                                     |        |
-| Three-argument create still fails closed                   | `group_capacity_upgrade_required`, SQLSTATE `45000`                                                                         |        |
-| Four-argument create exists                                | `create_group_and_invite(uuid,uuid,text,integer)`                                                                           |        |
-| `max_members` column and 2–19 check exist                  | nullable column, guarded check constraint                                                                                   |        |
-| Invitation/request/accept/approve paths enforce capacity   | per Option A contracts                                                                                                      |        |
-| Helper posture unchanged from §3 G3/G4                     | identical                                                                                                                   |        |
-| No unexpected object created or dropped                    |                                                                                                                             |        |
-| Client build/version marker path still matches F2 contract |                                                                                                                             |        |
+Re-run pages 00, 01 and 05 in the same session, and record before/after:
 
-Runtime behaviour (real calls, sessions, concurrency) is **Eunice's separately
-authorized signed-in Test QA** and is never inferred from this table.
+| Check                                                    | Expected after application                                                                                                  | Before | After |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
+| `A-COL-03` (`max_members` clean slate)                   | now reports the column present; the FAIL becomes the reviewed state                                                         |        |       |
+| `A-CAP-01..09` (capacity functions absent)               | now present with the reviewed signatures                                                                                    |        |       |
+| `A-CAP-11`/`A-CAP-12` (capacity table/constraint absent) | now present (`group_removal_context`, `study_groups_max_members_chk`)                                                       |        |       |
+| `A-RPL-01..06` (replacement signatures)                  | four-argument `create_group_and_invite(uuid,uuid,text,integer)` exists; three-argument stub still fails closed              |        |       |
+| `A-LGC-01/03/05` (legacy read shapes)                    | five, six and fourteen columns as reviewed                                                                                  |        |       |
+| Three `_capacity` read names                             | `list_course_group_summaries_capacity`, `list_current_term_course_groups_capacity`, `list_group_recruitment_posts_capacity` |        |       |
+| Three-argument create behaviour                          | `group_capacity_upgrade_required`, SQLSTATE `45000` — unchanged                                                             |        |       |
+| `A-TRG-01/02` (invitation trigger state)                 | unchanged from preflight                                                                                                    |        |       |
+| `P-H1-DIG` / `P-H2-DIG`                                  | identical to §2                                                                                                             |        |       |
+| `D-LDG-10` (recorded ledger versions)                    | recorded and compared against package doc §13 — **recorded, not repaired** (Track D needs its own Adam authorization)       |        |       |
+
+- [ ] No new `FAIL` row appeared anywhere.
+- [ ] Raw output of every re-run stored at: `______________________`
+
+Runtime behaviour (real calls, signed-in sessions, concurrency, full/pending
+transitions) is **Eunice's separately authorized signed-in Test QA** and is never
+inferred from this table.
 
 ## 7. What this template never establishes
 
-- Not that Test or Main was touched: this template is blank by design.
+- Not that Test or Main was touched: this template is blank by design, and Role 6
+  contacted no project database while writing it.
 - Not that any migration was applied.
-- Not that RLS, Auth, ACLs, concurrency or client behavior work.
+- Not that RLS, Auth, ACLs, concurrency or client behaviour work.
 - Not merge, ready, deployment, publication or release.
-- Not permission to remove the compatibility stub or legacy wrappers; cleanup
-  needs new explicit Adam approval after the reviewed evidence conditions, and
-  elapsed time alone never authorizes it.
+- Not permission to remove the compatibility stub or the legacy read wrappers;
+  cleanup needs new explicit Adam approval after the reviewed evidence conditions
+  are met, and elapsed time alone never authorizes it.
+- The wrapper is an operator-facing record, not a security control. It reads only
+  operator-declared markers, performs no catalog observation, and must never be
+  described as a substitute for RLS, ownership or Adam's authorization.
+- A locally reproduced digest is not a Test pin (package doc §6.2).
+
+## 8. Fail-closed token quick reference
+
+| Token                                | SQLSTATE | Meaning                                                                                                             |
+| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `group_capacity_gate_run_undeclared` | 45001    | no run id declared                                                                                                  |
+| `group_capacity_target_undeclared`   | 45002    | no target ref declared                                                                                              |
+| `group_capacity_target_out_of_scope` | 45003    | declared target is Main                                                                                             |
+| `group_capacity_target_unauthorized` | 45004    | declared target is some other ref than the authorized Test ref                                                      |
+| `group_capacity_pages_incomplete`    | 45005    | pages 00, 01 or 05 not declared as run                                                                              |
+| `group_capacity_verdict_unsatisfied` | 45006    | declared verdict is not a satisfaction statement                                                                    |
+| `group_capacity_pin_unrecorded`      | 45007    | pin missing, malformed, or an `UNPINNED` placeholder                                                                |
+| `group_capacity_engine_unconfirmed`  | 45008    | declared engine major is not 17                                                                                     |
+| `group_capacity_artifact_unverified` | 45009    | declared blob identity is not the reviewed pair                                                                     |
+| `group_capacity_upgrade_required`    | 45000    | **client-facing** stale-contract signal inside the reviewed blob; never a preflight signal and never to be remapped |
 
 ## Adam's next action(s):
 
-1. **[Decision] Authorize the bounded read-only recipe-pinning dry run** (this
-   page §2) against disposable Test `wkzclgmhrtecnpexfesr`, with Main compared
-   only inside its existing read-only boundary. Expected: pinned normalization
-   scope plus the two helper digests recorded here. Unblocks: any Test capacity
-   preflight and every later application request.
-2. **[Decision] Confirm the two-step guarded sequence** (read-only guard, then
-   the byte-identical reviewed file) instead of a new atomic successor head that
-   inlines the guard and would need a fresh exact-head SQL review.
-3. **[Decision] Confirm Main stays outside the capacity plan** until row-8
-   promotion and grant normalization are each separately decided.
+1. **[Action — first blocker] Enable the Supabase connector on the task that must
+   record §2**, so the two helper digests can be pinned on the authorized target
+   instead of staying `UNPINNED`.
+2. **[Decision] Confirm this template matches the run you intend to authorize** —
+   required pages, marker vocabulary, the gate call, the F10 transaction
+   prohibition and the two application timestamps are all load-bearing here.
+3. **[Confirmation — no action if you agree] Confirm Main stays outside the
+   capacity plan** until row-8 promotion (Track B) and grant normalization
+   (Track C) are each separately decided.

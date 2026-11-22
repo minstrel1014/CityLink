@@ -1,0 +1,356 @@
+-- =============================================================================
+-- CityLink capacity successor — preflight page 01: Track A prerequisites
+-- =============================================================================
+-- DRAFT REVIEW ARTIFACT. SELECT-only observation page. Not a migration, not
+-- authorization, raises nothing. Refusal belongs to
+-- 90_apply_gate_wrapper_DRAFT.sql.
+--
+-- Track served: A — the reviewed capacity DDL
+--   supabase/migrations/20261119090000_group_hard_max.sql
+--   blob a04048e90d6b64c692f03c722b9eea2849058aab, SHA-256
+--   5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887.
+--   This page observes the state that file was reviewed against. It never
+--   restates, alters, re-applies or duplicates it.
+--
+-- Retired-guard traceability (option (b) reshape):
+--   A-TAB-*, A-COL-*      replace guard G2 and G5's column portion
+--   A-HLP-*               replaces G3 (helper posture, asserted never redefined)
+--   A-CAP-*               replaces G5 (clean-slate forward application)
+--   A-RPL-*               replaces G7 (signatures the reviewed file replaces)
+--   A-LGC-*               replaces G6's legacy output-shape portion
+--   A-RUN-*               replaces G8 and G9 (runner legality, schema posture)
+--   A-TRG-*               replaces G10 (invitation-integrity premise)
+--   G1 moved to page 00, G4 to page 05, G11 to pages 03 and 04.
+--
+-- Construction notes a reviewer should check:
+--   * Presence uses to_regclass / to_regprocedure / to_regnamespace, which
+--     return NULL for an absent name. There is no `::regclass` cast anywhere,
+--     so an absent object is reported, never an abort.
+--   * A helper's `search_path` pin is decided by the published normalization
+--     contract: each proconfig entry is split at its first '=', quoting is
+--     stripped, and the empty case is the empty normalized value. No
+--     comparison against a hard-coded rendering such as 'search_path='.
+--   * Output column sets use proargmodes ('t' table / 'o' out), not a comma
+--     count of a rendered string, and not proallargnames, which does not exist.
+--   * No application row, secret, or other project is read.
+--
+-- SAFE TO RUN TWICE; identical rows are the expected outcome.
+-- =============================================================================
+
+with base(id, sig) as (
+  values
+    ('A-TAB-01', 'public.academic_terms'),
+    ('A-TAB-02', 'public.citylink_settings'),
+    ('A-TAB-03', 'public.study_groups'),
+    ('A-TAB-04', 'public.group_memberships'),
+    ('A-TAB-05', 'public.group_invitations'),
+    ('A-TAB-06', 'public.group_join_requests'),
+    ('A-TAB-07', 'public.group_recruitment_posts'),
+    ('A-TAB-08', 'public.profiles'),
+    ('A-TAB-09', 'public.courses'),
+    ('A-TAB-10', 'public.enrolments')
+),
+helpers(ordinal, nsp, name, sig) as (
+  values
+    (1, 'private', 'can_browse_current_term_group',
+     'private.can_browse_current_term_group(uuid)'),
+    (2, 'private', 'can_manage_recruitment_post',
+     'private.can_manage_recruitment_post(uuid)')
+),
+resolved(sig, ordinal, fid, impl_count, owner, secdef, cfg_rendered,
+         sp_present, sp_normalized) as (
+  select h.sig, h.ordinal, p.oid,
+         (select count(*)
+            from pg_proc q
+            join pg_namespace n on n.oid = q.pronamespace
+           where n.nspname = h.nsp and q.proname = h.name),
+         r.rolname, p.prosecdef, c.cfg_rendered, c.sp_present, c.sp_normalized
+    from helpers h
+    left join pg_proc p on p.oid = to_regprocedure(h.sig)
+    left join pg_roles r on r.oid = p.proowner
+    cross join lateral (
+      select coalesce(string_agg(e, ',' order by e), '<none>') as cfg_rendered,
+             coalesce(bool_or(split_part(e, '=', 1) = 'search_path'), false)
+               as sp_present,
+             max(case when split_part(e, '=', 1) = 'search_path'
+                      then btrim(replace(replace(substr(e, position('=' in e) + 1),
+                              '"', ''), '''', ''))
+                 end) as sp_normalized
+        from unnest(coalesce(p.proconfig, array[]::text[])) as e
+    ) c
+),
+capacity(id, sig) as (
+  values
+    ('A-CAP-01', 'public.set_group_max_members(uuid,integer)'),
+    ('A-CAP-02', 'public.create_group_and_invite(uuid,uuid,text,integer)'),
+    ('A-CAP-03', 'public.list_course_group_summaries_capacity(uuid)'),
+    ('A-CAP-04', 'public.list_current_term_course_groups_capacity(uuid,text,uuid,integer)'),
+    ('A-CAP-05', 'public.list_group_recruitment_posts_capacity(uuid,timestamptz,uuid,integer)'),
+    ('A-CAP-06', 'public.remove_group_member(uuid,uuid)'),
+    ('A-CAP-07', 'private.group_active_member_count(uuid)'),
+    ('A-CAP-08', 'private.assert_group_has_capacity(uuid,integer)'),
+    ('A-CAP-09', 'private.cancel_pending_invitations_from_removed_member(uuid,uuid)')
+),
+replaced(id, sig) as (
+  values
+    ('A-RPL-01', 'public.send_group_invitation(uuid,uuid)'),
+    ('A-RPL-02', 'public.request_to_join_group(uuid)'),
+    ('A-RPL-03', 'public.respond_to_group_invitation(uuid,boolean)'),
+    ('A-RPL-04', 'public.review_group_join_request(uuid,boolean)'),
+    ('A-RPL-05', 'public.create_group_and_invite(uuid,uuid,text)')
+),
+legacy(ord, sig, expect_names) as (
+  values
+    (1, 'public.list_course_group_summaries(uuid)',
+     'profile_id,group_id,group_name,group_status,group_size'),
+    (2, 'public.list_current_term_course_groups(uuid,text,uuid,integer)',
+     'group_id,group_name,group_status,active_member_count,can_create_post,has_more'),
+    (3, 'public.list_group_recruitment_posts(uuid,timestamptz,uuid,integer)',
+     'post_id,group_id,group_name,subject,active_member_count,author_name,body,'
+     || 'post_status,created_at,updated_at,closed_at,apply_enabled,can_manage,has_more')
+),
+legacy_resolved(ord, sig, expect_names, fid, out_names, rendered_result) as (
+  select lg.ord, lg.sig, lg.expect_names, p.oid, o.out_names,
+         pg_get_function_result(p.oid)
+    from legacy lg
+    left join pg_proc p on p.oid = to_regprocedure(lg.sig)
+    cross join lateral (
+      select coalesce(string_agg(nm, ',' order by ord), '<none>') as out_names
+        from unnest(coalesce(p.proargnames, array[]::text[]))
+             with ordinality as x(nm, ord)
+       where p.proargmodes is not null
+         and p.proargmodes[ord] = any (array['t', 'o'])
+    ) o
+),
+foreign_owned(count) as (
+  select count(*)
+    from (select sig from replaced
+          union all
+          select 'public.create_group_and_invite(uuid,uuid,text,integer)'
+          union all
+          select sig from legacy) rp
+    join pg_proc p on p.oid = to_regprocedure(rp.sig)
+    join pg_roles r on r.oid = p.proowner
+   where not pg_has_role(session_user, r.oid, 'member')
+)
+select '01' as page, b.id as check_id,
+       'base object present: ' || b.sig as subject,
+       'present' as expected,
+       coalesce(to_regclass(b.sig)::text, '<absent>') as observed,
+       case when to_regclass(b.sig) is null then 'FAIL' else 'PASS' end as verdict
+  from base b
+
+union all
+select '01', 'A-COL-01', 'current-term model: courses.term_id is NOT NULL',
+       'attnotnull = true',
+       coalesce((select case when a.attnotnull then 'true' else 'false' end
+                   from pg_attribute a
+                  where a.attrelid = to_regclass('public.courses')
+                    and a.attname = 'term_id' and a.attnum > 0
+                    and not a.attisdropped
+                  limit 1), '<column absent>'),
+       case when (select a.attnotnull from pg_attribute a
+                    where a.attrelid = to_regclass('public.courses')
+                      and a.attname = 'term_id' and a.attnum > 0
+                      and not a.attisdropped
+                    limit 1) then 'PASS' else 'FAIL' end
+
+union all
+select '01', 'A-COL-02', 'row-8 contract: group_recruitment_posts.subject NOT NULL',
+       'attnotnull = true (the reviewed reads select p.subject at blob :1494/:1532)',
+       coalesce((select case when a.attnotnull then 'true' else 'false' end
+                   from pg_attribute a
+                  where a.attrelid = to_regclass('public.group_recruitment_posts')
+                    and a.attname = 'subject' and a.attnum > 0
+                    and not a.attisdropped
+                  limit 1), '<column absent>'),
+       case when (select a.attnotnull from pg_attribute a
+                    where a.attrelid = to_regclass('public.group_recruitment_posts')
+                      and a.attname = 'subject' and a.attnum > 0
+                      and not a.attisdropped
+                    limit 1) then 'PASS' else 'FAIL' end
+
+union all
+select '01', 'A-COL-03', 'clean slate: study_groups.max_members absent',
+       'absent before a first forward application',
+       coalesce((select 'present, attnotnull=' || a.attnotnull::text
+                   from pg_attribute a
+                  where a.attrelid = to_regclass('public.study_groups')
+                    and a.attname = 'max_members' and a.attnum > 0
+                    and not a.attisdropped
+                  limit 1), '<absent>'),
+       case when (select count(*) from pg_attribute a
+                    where a.attrelid = to_regclass('public.study_groups')
+                      and a.attname = 'max_members' and a.attnum > 0
+                      and not a.attisdropped) > 0 then 'FAIL' else 'PASS' end
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-CNT',
+       'helper implemented exactly once: ' || r.sig,
+       '1', coalesce(r.impl_count::text, '<unreadable>'),
+       case when coalesce(r.impl_count, 0) = 1 then 'PASS' else 'FAIL' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-OWN',
+       'helper owner: ' || r.sig,
+       'postgres (the reported parity value, not an assumption of it)',
+       coalesce(r.owner, '<absent or unreadable>'),
+       case when r.owner = 'postgres' then 'PASS' else 'FAIL' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-DEF',
+       'helper is SECURITY DEFINER: ' || r.sig,
+       'true', coalesce(r.secdef::text, '<absent>'),
+       case when r.secdef is true then 'PASS' else 'FAIL' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-PIN',
+       'helper search_path pin present and empty: ' || r.sig,
+       'a search_path entry exists and its normalized value is empty',
+       'entries=' || r.cfg_rendered || ' | normalized='
+       || coalesce(nullif(r.sp_normalized, ''), '<empty>'),
+       case when r.fid is null then 'FAIL'
+            when not r.sp_present then 'FAIL'
+            when coalesce(r.sp_normalized, '') = '' then 'PASS'
+            else 'FAIL' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-XAN',
+       'anon EXECUTE posture: ' || r.sig,
+       'false — these helpers are not API entry points',
+       coalesce(has_function_privilege('anon', r.fid, 'execute')::text,
+                '<not evaluable>'),
+       case when r.fid is null then 'FAIL'
+            when has_function_privilege('anon', r.fid, 'execute') then 'FAIL'
+            else 'PASS' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-XAU',
+       'authenticated EXECUTE posture: ' || r.sig,
+       'false',
+       coalesce(has_function_privilege('authenticated', r.fid, 'execute')::text,
+                '<not evaluable>'),
+       case when r.fid is null then 'FAIL'
+            when has_function_privilege('authenticated', r.fid, 'execute') then 'FAIL'
+            else 'PASS' end
+  from resolved r
+
+union all
+select '01', 'A-HLP-' || r.ordinal || '-XSV',
+       'service_role EXECUTE posture: ' || r.sig,
+       'false (the recorded posture on both targets)',
+       coalesce(has_function_privilege('service_role', r.fid, 'execute')::text,
+                '<not evaluable>'),
+       case when r.fid is null then 'FAIL'
+            when has_function_privilege('service_role', r.fid, 'execute') then 'FAIL'
+            else 'PASS' end
+  from resolved r
+
+union all
+select '01', c.id, 'capacity object not yet present: ' || c.sig,
+       'absent — a first forward application, not a repeat',
+       coalesce(to_regprocedure(c.sig)::text, '<absent>'),
+       case when to_regprocedure(c.sig) is null then 'PASS' else 'FAIL' end
+  from capacity c
+
+union all
+select '01', 'A-CAP-11', 'capacity table not yet present: private.group_removal_context',
+       'absent', coalesce(to_regclass('private.group_removal_context')::text, '<absent>'),
+       case when to_regclass('private.group_removal_context') is null
+            then 'PASS' else 'FAIL' end
+
+union all
+select '01', 'A-CAP-12', 'capacity constraint not yet present: study_groups_max_members_chk',
+       '0 rows in pg_constraint',
+       coalesce((select count(*)::text from pg_constraint k
+                  where k.conrelid = to_regclass('public.study_groups')
+                    and k.conname = 'study_groups_max_members_chk'), '0'),
+       case when coalesce((select count(*) from pg_constraint k
+                             where k.conrelid = to_regclass('public.study_groups')
+                               and k.conname = 'study_groups_max_members_chk'), 0) > 0
+            then 'FAIL' else 'PASS' end
+
+union all
+select '01', r.id, 'signature the reviewed file replaces is present: ' || r.sig,
+       'present', coalesce(to_regprocedure(r.sig)::text, '<absent>'),
+       case when to_regprocedure(r.sig) is null then 'FAIL' else 'PASS' end
+  from replaced r
+
+union all
+select '01', 'A-RPL-06', 'two-argument create_group_and_invite is gone',
+       'absent — the reviewed file drops it at blob :245',
+       coalesce(to_regprocedure('public.create_group_and_invite(uuid,uuid)')::text,
+                '<absent>'),
+       case when to_regprocedure('public.create_group_and_invite(uuid,uuid)') is null
+            then 'PASS' else 'FAIL' end
+
+union all
+select '01', 'A-LGC-' || lpad((l.ord * 2 - 1)::text, 2, '0'),
+       'legacy read output set matches the reviewed name list: ' || l.sig,
+       l.expect_names,
+       case when l.fid is null then '<function absent>'
+            else coalesce(l.out_names, '<none>') end,
+       case when l.fid is null then 'FAIL'
+            when coalesce(l.out_names, '<none>') = l.expect_names then 'PASS'
+            else 'FAIL' end
+  from legacy_resolved l
+
+union all
+select '01', 'A-LGC-' || lpad((l.ord * 2)::text, 2, '0'),
+       'legacy read result rendering (capture, not a gate): ' || l.sig,
+       'recorded verbatim for the pinning appendix',
+       case when l.fid is null then '<function absent>'
+            else coalesce(substr(l.rendered_result, 1, 120), '<unreadable>') end,
+       'CAPTURE'
+  from legacy_resolved l
+
+union all
+select '01', 'A-RUN-01', 'runner can legally replace every object the file replaces',
+       '0 objects owned by a role the session role is not a member of',
+       coalesce(f.count::text, '<unreadable>'),
+       case when coalesce(f.count, 0) = 0 then 'PASS' else 'FAIL' end
+  from foreign_owned f
+
+union all
+select '01', 'A-RUN-02', 'runner has CREATE on schema public',
+       'true on the authorized Supabase target',
+       coalesce(has_schema_privilege(session_user, 'public', 'create')::text,
+                '<unreadable>'),
+       case when has_schema_privilege(session_user, 'public', 'create')
+            then 'PASS' else 'FAIL' end
+
+union all
+select '01', 'A-RUN-03', 'schema private posture before application (capture)',
+       'either state is legitimate; the reviewed file creates it at blob :971',
+       coalesce((select 'owner=' || r.rolname from pg_namespace n
+                   join pg_roles r on r.oid = n.nspowner
+                  where n.oid = to_regnamespace('private')), '<absent>'),
+       'CAPTURE'
+
+union all
+select '01', 'A-TRG-01', 'invitation-integrity function exists as reviewed',
+       'present',
+       coalesce(to_regprocedure('public.enforce_invitation_integrity()')::text,
+                '<absent>'),
+       case when to_regprocedure('public.enforce_invitation_integrity()') is null
+            then 'FAIL' else 'PASS' end
+
+union all
+select '01', 'A-TRG-02', 'invitation-integrity trigger attachments',
+       '0 — the reviewed draft leaves it unattached; an attached target is a stop',
+       coalesce((select count(*)::text from pg_trigger t
+                  where not t.tgisinternal
+                    and t.tgfoid = to_regprocedure('public.enforce_invitation_integrity()')), '0'),
+       case when coalesce((select count(*) from pg_trigger t
+                             where not t.tgisinternal
+                               and t.tgfoid = to_regprocedure(
+                                   'public.enforce_invitation_integrity()')), 0) > 0
+            then 'FAIL' else 'PASS' end
+
+ order by check_id
+ limit 60;
