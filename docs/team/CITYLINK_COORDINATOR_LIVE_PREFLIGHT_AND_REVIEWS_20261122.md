@@ -312,8 +312,9 @@ F4 wording now states explicitly that:
 - it is never security authority;
 - real server authority is `private.can_manage_recruitment_post` plus the relevant membership check;
 - browse-row `false` must not be interpreted as an actual authorization denial;
-- the private helpers are **defined by checked-in** `20261118050000_stage6_chat_recruitment.sql` (`:133`, `:160`) and are present in live Test/Main, so their origin is explained; only whether the live bodies equal the committed text remains open (Role 6 correction, 2026-11-22; the earlier wording of this bullet was factually wrong);
 - Adam's 2026-11-22 QA/security authorization does not authorize applying PR #41.
+
+The private-helper origin statement in sections 11 and 13 is a correction to this evidence document produced by Role 6 PR #49. It is **not yet present in PR #41 head** `2bb659d6e565ba74c49c124f0f17a326877e66ae`: both `docs/team/CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md` and `docs/team/GROUP_CAPACITY_MIGRATION_DRAFT.md` at that head still incorrectly say that the two helpers are defined in no checked-in migration. The repository source is `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` (`:133` and `:160`), with browser-role revocations at `:931`–`:932`. A separate bounded docs-only PR #41 amendment remains required; it must prove the reviewed SQL blob and SHA-256 remain unchanged.
 
 ## 14. Coordinator reconciliation snapshot — 2026-11-22 17:09 HKT
 
@@ -338,3 +339,32 @@ Remaining F2 decisions for Adam:
 2. refresh action: provide an in-app user-clicked control or give a browser-reload instruction;
 3. compatibility/cache window length and who declares completion;
 4. named owner for signed-in multi-account capacity QA after migration readiness.
+
+## 15. Role 6 baseline integration and remaining PR #41 correction — 2026-11-22 17:40 HKT
+
+The coordinator independently verified Role 6 PR #49 at head `f96e11cdde7e06d8dcdce929e13eb73f3fd5eb01` before integrating it:
+
+- the branch contains the full baseline reconciliation file and only the two assigned documentation files;
+- the evidence-file correction accurately identifies and replaces the earlier false helper-origin wording from PR #48;
+- `git diff --check` passes;
+- Prettier 3.6.2 reports both files canonical;
+- the reviewed PR #41 SQL blob remains `a04048e90d6b64c692f03c722b9eea2849058aab` and is untouched by PR #49.
+
+PR #49 was normally merged into the evidence branch at merge commit `47fcc9cb5458d93d15e0a4cd32932a3b59e13695`, and the evidence branch was updated to that commit. This integration affects PR #48's evidence base only; it does not merge PR #49 into `main`, PR #37, PR #41, PR #34, or any database. It does not apply a migration or authorize deployment/publication.
+
+The evidence branch then received this bounded docs-only follow-up to prevent PR #49's correction from being mistaken for a correction already applied to PR #41. PR #41 remains OPEN/draft at `2bb659d...` with its factual helper-origin error outstanding.
+
+Role 6's substantive baseline conclusion is now part of the evidence record: version differences across repository/Test/Main mostly reflect the timestamp recorded by each migration execution rather than missing objects. The repository cannot safely reconstruct either live target's ledger by blind replay. Test has an unrecorded term-model application with strong indirect evidence that its objects exist; Main genuinely lacks row 8 (`stage6_people_page_naming`) and therefore has only the two-argument create overload. Main's broader RPC grants, including anon execute on three write RPCs, remain a separate security finding that must not be bundled with capacity DDL.
+
+The capacity migration remains stopped. Before any successor capacity SQL is proposed or applied, the coordinator must perform the metadata-only live parity records Role 6 could not run because its session lacked a Supabase connector: live helper definitions compared with committed text where feasible, Main row-8 objects, and Test/Main metadata snapshots with each target explicitly re-verified first.
+
+Adam's outstanding decisions before that technical continuation are:
+
+1. accept the helper-origin correction and the policy of using `20261118050000_stage6_chat_recruitment.sql` as the authoritative source rather than adding a helper-redefinition migration;
+2. direct a bounded PR #41 docs-only correction and name whether Role 6 should perform it;
+3. reconcile the documentation conflict in which Main has a `stage6_chat_recruitment` ledger row while Stage 6 documentation describes Main as untouched;
+4. document the conflict between `docs/SUPABASE_SETUP.md` and the 2026-11-18 `DECISIONS.md` file-5 record;
+5. confirm whether any live surface currently points at Main;
+6. decide the four F2 implementation questions above: proactive second message string, refresh-control form, compatibility/cache window owner and length, and signed-in multi-account capacity QA owner.
+
+None of these documentation and baseline steps authorize migration application, Main writes, merge to `main`, PR readiness, deployment or publication.
