@@ -68,3 +68,9 @@ It does not produce an authoritative pin: `P-H1-DIG`/`P-H2-DIG` remain `UNPINNED
 ## Boundary
 
 Local cluster only, created and destroyed in this sandbox. Two read-only catalog counts were made against the two real projects, both returning a single integer; no application row was read, no migration was applied to any project, no credential was used or printed, and no merge, deployment or publication occurred.
+
+## Erratum — 2026-11-23 00:40, Adam's decision
+
+The `A-TRG-02` row's expectation and its inline comment (`the reviewed draft leaves it unattached; an attached target is a stop`) are **wrong** and are recorded here as an erratum rather than repaired in place. The reviewed blob `supabase/migrations/20261119090000_group_hard_max.sql` stays byte-identical: it was reviewed at SHA-256 `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887` and nothing in this finding justifies reopening it. What was wrong was the assumption behind the assertion, not the SQL.
+
+The corrected assertion, as Adam directed, is: **exactly one** non-internal trigger on `public.enforce_invitation_integrity()`; its **identity matches** the recorded pin (name, target table, timing and event); and the set must be **unchanged** across the apply — no addition, no removal. That is a materially stronger check than "count is zero": it detects a silent re-attachment or a dropped guard, which the old expectation could not have detected even if it had passed.
