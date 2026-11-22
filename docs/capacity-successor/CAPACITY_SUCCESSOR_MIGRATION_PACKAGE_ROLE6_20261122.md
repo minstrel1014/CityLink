@@ -186,15 +186,15 @@ and each one was checked mechanically (§10.5) on every page:
 
 ### 5.2 Page inventory
 
-| Page | File                                     | Rows | Prefix | Observes                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| ---- | ---------------------------------------- | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 00   | `00_target_identity_and_engine.sql`      | 18   | `C-`   | Engine major (`C-MAJ-01` expects 17), full version, database, `session_user`/`current_user`, collate/ctype/encoding, Supabase-shape rows (`C-SBA-*`), and a verbatim echo of each of the seven operator markers (`C-MRK-12..18`) — `UNPINNED` when a marker is undeclared.                                                                                                                                                                                             |
-| 01   | `01_track_a_capacity_prerequisites.sql`  | 55   | `A-`   | Track A gating observations: ten term-model/study-group tables (`A-TAB-*`), three column facts (`A-COL-*`), the two helper postures in seven fields each (`A-HLP-1-*`, `A-HLP-2-*`), nine capacity-absence signatures plus table and constraint (`A-CAP-*`), six replaced-signature checks (`A-RPL-*`), six legacy read-shape checks and renderings (`A-LGC-*`), three runner-legality/ownership rows (`A-RUN-*`), and the invitation-trigger premise (`A-TRG-01/02`). |
-| 02   | `02_track_b_row8_promotion.sql`          | 17   | `B-`   | Row-8 objects as the engine renders them (`B-FUN-*`), the overload inventory (`B-INV-*`), column rendering including defaults (`B-COL-*`), the subject CHECK list (`B-CHK-01`) and the create-overload count (`B-CNT-01`). Capture-only: Track B is Adam's decision, not this package's.                                                                                                                                                                               |
-| 03   | `03_track_c_grant_posture_survey.sql`    | 33   | `C-`   | Per-object ACL rendering (`C-FUN-*`), role identity (`C-ROL-*`), ten effective-EXECUTE rows (`C-EXE-*`), schema posture (`C-SCH-*`), default-ACL rendering and count (`C-DFA-*`), RLS policy counts and `relrowsecurity` flags (`C-POL-*`). Deliberately capture-only; `aclexplode` is not used, because a mis-read ACL expansion must not become a silent gate.                                                                                                       |
-| 04   | `04_track_d_ledger_identity_capture.sql` | 5    | `D-`   | Statement 1 (4 rows, runnable anywhere): ledger table identity, its columns as this engine sees them, its schema, and the explicit limit note that repository filenames are **not** readable from SQL. Statement 2 (1 row per recorded version, `limit 100`): verbatim recorded versions — run only when statement 1 reports the table present, because the second statement is parse-time dependent.                                                                  |
-| 05   | `05_helper_pinning_record.sql`           | 17   | `P-`   | The G4 pinning instrument: engine major, locale/ctype, encoding, identity fields, session `search_path` capture, the recipe identity and input-scope declaration (`P-RCP-06/07`), and per helper the OID, `pg_get_functiondef` length in chars and octets, the normalized digest, the empty-`search_path` proconfig verdict and the ACL posture (`P-H1-*`, `P-H2-*`). Digits are compared only against the operator-declared pin; no pin is baked in.                  |
-| 90   | `90_apply_gate_wrapper_DRAFT.sql`        | n/a  | n/a    | The refusal wrapper (§5.3). The only raising instrument in the package.                                                                                                                                                                                                                                                                                                                                                                                                |
+| Page | File                                     | Rows | Prefix | Observes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---- | ---------------------------------------- | ---- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 00   | `00_target_identity_and_engine.sql`      | 18   | `C-`   | Engine major (`C-MAJ-01` expects 17), full version, database, `session_user`/`current_user`, collate/ctype/encoding, Supabase-shape rows (`C-SBA-*`), and a verbatim echo of each of the seven operator markers (`C-MRK-12..18`) — `UNPINNED` when a marker is undeclared.                                                                                                                                                                                                                                       |
+| 01   | `01_track_a_capacity_prerequisites.sql`  | 56   | `A-`   | Track A gating observations: ten term-model/study-group tables (`A-TAB-*`), three column facts (`A-COL-*`), the two helper postures in seven fields each (`A-HLP-1-*`, `A-HLP-2-*`), nine capacity-absence signatures plus table and constraint (`A-CAP-*`), six replaced-signature checks (`A-RPL-*`), six legacy read-shape checks and renderings (`A-LGC-*`), three runner-legality/ownership rows (`A-RUN-*`), and the invitation-integrity attachment assertion strengthened for F13 (`A-TRG-01..03`, §14). |
+| 02   | `02_track_b_row8_promotion.sql`          | 17   | `B-`   | Row-8 objects as the engine renders them (`B-FUN-*`), the overload inventory (`B-INV-*`), column rendering including defaults (`B-COL-*`), the subject CHECK list (`B-CHK-01`) and the create-overload count (`B-CNT-01`). Capture-only: Track B is Adam's decision, not this package's.                                                                                                                                                                                                                         |
+| 03   | `03_track_c_grant_posture_survey.sql`    | 33   | `C-`   | Per-object ACL rendering (`C-FUN-*`), role identity (`C-ROL-*`), ten effective-EXECUTE rows (`C-EXE-*`), schema posture (`C-SCH-*`), default-ACL rendering and count (`C-DFA-*`), RLS policy counts and `relrowsecurity` flags (`C-POL-*`). Deliberately capture-only; `aclexplode` is not used, because a mis-read ACL expansion must not become a silent gate.                                                                                                                                                 |
+| 04   | `04_track_d_ledger_identity_capture.sql` | 5    | `D-`   | Statement 1 (4 rows, runnable anywhere): ledger table identity, its columns as this engine sees them, its schema, and the explicit limit note that repository filenames are **not** readable from SQL. Statement 2 (1 row per recorded version, `limit 100`): verbatim recorded versions — run only when statement 1 reports the table present, because the second statement is parse-time dependent.                                                                                                            |
+| 05   | `05_helper_pinning_record.sql`           | 17   | `P-`   | The G4 pinning instrument: engine major, locale/ctype, encoding, identity fields, session `search_path` capture, the recipe identity and input-scope declaration (`P-RCP-06/07`), and per helper the OID, `pg_get_functiondef` length in chars and octets, the normalized digest, the empty-`search_path` proconfig verdict and the ACL posture (`P-H1-*`, `P-H2-*`). Digits are compared only against the operator-declared pin; no pin is baked in.                                                            |
+| 90   | `90_apply_gate_wrapper_DRAFT.sql`        | n/a  | n/a    | The refusal wrapper (§5.3). The only raising instrument in the package.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Row totals were measured, not estimated: 145 observation rows across the six
 pages.
@@ -224,25 +224,55 @@ session that ran the pages):
 Refusal tokens, each with its own SQLSTATE — distinct by design from the
 client-facing `group_capacity_upgrade_required` (blob `:398`–`:399`, `45000`), so
 an operator-facing preflight signal can never be mapped onto the stale-client
-affordance:
+affordance. The names below are the strings the wrapper actually emits, taken from
+the measured 17.12 run in §10.8 rather than from a comment:
 
-| Token                                | SQLSTATE | Refuses when                                                            |
-| ------------------------------------ | -------- | ----------------------------------------------------------------------- |
-| `group_capacity_gate_run_undeclared` | 45001    | no run id declared                                                      |
-| `group_capacity_target_undeclared`   | 45002    | no target ref declared                                                  |
-| `group_capacity_target_out_of_scope` | 45003    | declared target is Main's ref                                           |
-| `group_capacity_target_unauthorized` | 45004    | declared target is any other ref than the authorized Test ref           |
-| `group_capacity_pages_incomplete`    | 45005    | pages 00, 01 or 05 not declared as run                                  |
-| `group_capacity_verdict_unsatisfied` | 45006    | declared verdict is not a satisfaction statement                        |
-| `group_capacity_pin_unrecorded`      | 45007    | pin missing, malformed, or an `UNPINNED` placeholder                    |
-| `group_capacity_engine_unconfirmed`  | 45008    | declared engine major is not 17                                         |
-| `group_capacity_artifact_unverified` | 45009    | declared blob identity is not the reviewed `a04048e9…`/`5cf0a66a…` pair |
+| Token                                     | SQLSTATE | Refuses when                                                            |
+| ----------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| `group_capacity_gate_run_undeclared`      | 45001    | no run id declared                                                      |
+| `group_capacity_gate_target_undeclared`   | 45002    | no target ref declared                                                  |
+| `group_capacity_gate_target_out_of_scope` | 45003    | declared target is Main's ref                                           |
+| `group_capacity_gate_target_unauthorized` | 45004    | declared target is any other ref than the authorized Test ref           |
+| `group_capacity_gate_pages_incomplete`    | 45005    | pages 00, 01 or 05 not declared as run                                  |
+| `group_capacity_gate_verdict_unsatisfied` | 45006    | declared verdict is not a satisfaction statement                        |
+| `group_capacity_gate_pin_unrecorded`      | 45007    | pin missing, malformed, or an `UNPINNED` placeholder                    |
+| `group_capacity_gate_engine_unconfirmed`  | 45008    | declared engine major is not 17                                         |
+| `group_capacity_gate_artifact_unverified` | 45009    | declared blob identity is not the reviewed `a04048e9…`/`5cf0a66a…` pair |
 
-Success returns the single row
-`group_capacity_gate_satisfied run=<id> target=<ref>`. It is not a security
-control and not a substitute for RLS or for Adam's authorization; it is the
-fail-closed record that the declared preflight happened, on the declared target,
-against the declared artifact.
+**F15 — a documentation defect found while making the verdicts ref-bearing.** This
+table and the quick reference in checklist §8 previously spelled refusals
+45002-45009 without the `_gate_` segment (for example
+`group_capacity_target_undeclared`). The wrapper has never emitted those strings.
+An operator copying a token from the document would have recorded a name that does
+not exist, and every refusal record would have disagreed with the runner output.
+Corrected here against measured behaviour; no SQL token name changed.
+
+**Ref-bearing verdict rule (Adam's hard requirement, 2026-11-23 00:40).** A verdict
+is evidence only if it names the target it was produced for. From 45003 onward every
+message carries that ref after the token — `group_capacity_gate_pages_incomplete
+target=wkzclgmhrtecnpexfesr` and so on, all observed in §10.8. `45001` and `45002`
+are the two states where the ref is by definition not yet known (nothing declared,
+or no target declared), so they stay bare and are identified by token and SQLSTATE
+alone. The success row is
+
+```
+group_capacity_gate_satisfied run=<id> target=<ref>
+```
+
+which **already carried the ref at the reshape head `7114b96`** (§10.6 and the row
+measured again in §10.8). F13's second half therefore changed the refusal messages,
+not the success token, and changed no scope decision: whether the gate should scope
+a real release target at all is F14 and remains Adam's.
+
+The ref is operator-declared, so it is not proof of which database answered:
+`current_database()` is `postgres` on both Supabase projects and cannot distinguish
+them. Pair any returned token with the archived page 00 rows `C-MRK-13` (declared
+ref), `C-DB-03` (`current_database()`) and `C-USR-04` (`session_user`) under the same
+run id.
+
+The gate is not a security control and not a substitute for RLS or for Adam's
+authorization; it is the fail-closed record that the declared preflight happened, on
+the declared target, against the declared artifact.
 
 ### 5.4 Traceability to the retired guard
 
@@ -257,7 +287,7 @@ against the declared artifact.
 | G7 replaced signatures           | page 01 `A-RPL-01..06`                                                       |
 | G8 runner legality               | page 01 `A-RUN-01..03`                                                       |
 | G9 `private` posture             | page 00 `C-SBA-11`, page 03 `C-SCH-01/02`                                    |
-| G10 trigger premise              | page 01 `A-TRG-01/02`                                                        |
+| G10 trigger premise              | page 01 `A-TRG-01..03`, strengthened for F13 (§14)                           |
 | G11 ledger + default ACL capture | page 04 `D-LDG-*`, page 03 `C-DFA-01/02`                                     |
 
 ## 6. The published normalization contract
@@ -529,6 +559,83 @@ bytes, blob id `a04048e90d6b64c692f03c722b9eea2849058aab` and SHA-256
 (Prettier has no SQL parser, so the SQL is covered by the real-parser run in
 §10.2, not by formatting checks).
 
+### 10.8 F13 re-validation at the fix head
+
+This is the run Adam's F13 assignment required as its evidence bar: a disposable
+PostgreSQL 17 brought to **repository schema state**, page 01 and the wrapper
+executed against it, raw output archived.
+
+Engine `PostgreSQL 17.12 (Ubuntu 17.12-1.pgdg24.04+1)`; socket-only cluster with
+`listen_addresses=''`, zero TCP listeners, destroyed at teardown (`pgrep -c
+postgres` → 0, data and socket directories gone). Repository schema state was built
+from the repository's own files — a harness-only `auth` stand-in, then
+`supabase/schema.sql`, then `supabase/seed_citylink_fictional_courses.sql`, then the
+eight pre-blob checked-in migrations, each exit 0, giving 12 public tables. The
+reviewed blob was applied afterwards **as reviewed** (no `--single-transaction`, no
+outer `BEGIN`), exit 0, with the file's SHA-256 recorded identical before and after.
+
+Page 01, same database state, before and after the fix:
+
+| Page 01 run                | Rows | PASS | FAIL | CAPTURE | UNPINNED | Distinct ids |
+| -------------------------- | ---- | ---- | ---- | ------- | -------- | ------------ |
+| expectation as shipped     | 55   | 50   | 1    | 4       | 0        | 55           |
+| assertion after F13, run 1 | 56   | 51   | 0    | 5       | 0        | 56           |
+| assertion after F13, run 2 | 56   | 51   | 0    | 5       | 0        | 56           |
+
+The row-by-row diff between the shipped expectation and the fixed assertion is
+exactly one verdict change — `A-TRG-02: FAIL → PASS` — plus the added `A-TRG-03`
+capture row; the other 54 rows keep their verdicts, and runs 1 and 2 were
+byte-identical. The shipped row's single failure reproduced independently of the
+coordinator's rehearsal: `expected='0 — the reviewed draft leaves it unattached…'
+observed='1'`.
+
+Mutation controls, on the same disposable database, to prove the strengthened row
+is not vacuous:
+
+| State produced                               | `A-TRG-02` verdict                           | `A-TRG-03` observed               |
+| -------------------------------------------- | -------------------------------------------- | --------------------------------- |
+| repository DDL (baseline)                    | `PASS`                                       | the one pinned identity           |
+| extra `before update` attachment added       | `FAIL`, `count=2 identity=<not-exactly-one>` | both identities, joined with `;;` |
+| repository attachment dropped                | `FAIL`, `count=0 identity=<not-exactly-one>` | `<none>`                          |
+| re-attached under a new name, `after update` | `FAIL`, `count=1` with identity mismatch     | the `_v2` identity                |
+| repository DDL restored                      | `PASS`                                       | the one pinned identity           |
+
+After the apply leg `A-TRG-02` was `PASS` and `A-TRG-03` was byte-identical to the
+pre-apply capture, so "unchanged across the apply" is an observed result rather than
+an assertion. The twelve other `FAIL` rows on that post-apply run are the documented
+clean-slate rows (`A-CAP-01..09`, `A-CAP-11/12`, `A-COL-03`) reporting the objects
+now present, which is the expected post-application state in checklist §6.
+
+Other pages at repository state: page 00 → 18 rows with the single expected `FAIL`
+`C-SBA-11` (a plain engine has no Supabase migration ledger); page 02 → 17
+`CAPTURE`; page 03 → 33 `CAPTURE`; page 04 → 4 `CAPTURE` with statement 2 erroring on
+the same absent ledger; page 05 → 17 rows, `PASS=3 CAPTURE=12 UNPINNED=2`, the two
+`UNPINNED` being `P-H1-DIG`/`P-H2-DIG`, still unpinned (§11.1). The bare-engine
+negative control still discriminates, and shows the inversion clearly: on a bare
+engine the fixed page reports `rows=56 PASS=15 FAIL=36 CAPTURE=5` with
+`A-TRG-02 FAIL count=0`. The shipped expectation reported `A-TRG-02 PASS` on that
+same bare engine — §10.4's measured bare-engine FAIL list names `A-TRG-01` but not
+`A-TRG-02` — while reporting `FAIL` on a correct repository state, as measured above.
+The old row was wrong in both directions at once, which is the signature of an
+expectation that was never read off a database.
+
+Wrapper, installed in the repository-state database and called once per branch:
+satisfied `group_capacity_gate_satisfied run=f13-local-1 target=wkzclgmhrtecnpexfesr`;
+then 45001 `group_capacity_gate_run_undeclared`, 45002
+`group_capacity_gate_target_undeclared`, 45003
+`group_capacity_gate_target_out_of_scope target=pijslbchvstkoweslymr`, 45004
+`group_capacity_gate_target_unauthorized target=some-other-project`, 45005
+`group_capacity_gate_pages_incomplete target=wkzclgmhrtecnpexfesr`, 45006
+`group_capacity_gate_verdict_unsatisfied target=wkzclgmhrtecnpexfesr`, 45007
+`group_capacity_gate_pin_unrecorded target=wkzclgmhrtecnpexfesr`, 45008
+`group_capacity_gate_engine_unconfirmed target=wkzclgmhrtecnpexfesr`, 45009
+`group_capacity_gate_artifact_unverified target=wkzclgmhrtecnpexfesr`. A
+three-argument `create_group_and_invite` call on the same database still raised the
+client-facing `group_capacity_upgrade_required`, confirming the two token families
+stay distinct. Banned-construct scan on the changed page with SQL comments stripped:
+`DO` 0, leading `RAISE` 0, `SELECT … INTO` 0, `::regclass` 0, `CREATE TEMP` 0,
+hard-coded `search_path=` comparison 0, one terminating semicolon, 56 distinct ids.
+
 ## 11. What could not be verified
 
 ### 11.1 The authorized Test dry run was blocked
@@ -577,10 +684,27 @@ authorization. It does not authorize application, Test write, Main access of any
 kind, merge, ready transition, deployment, publication, or stub/legacy-wrapper
 cleanup.
 
+### 11.4 The F13 trigger pin is rehearsal-derived, not target-verified
+
+Page 01's `A-TRG-02` pin was derived from `supabase/schema.sql:354-357` and
+reproduced on a disposable PostgreSQL 17.12 cluster. Role 6 has contacted no project
+database in this or any earlier assignment, so the honest boundary is:
+
+- the trigger **count** on Test and on Main (1 and 1) is the coordinator's read-only
+  observation, reported-live, not re-derived here;
+- the trigger **identity** — name, table, timing, events, orientation, enabled — on
+  either project is **unverified by this task**;
+- therefore the pin is rehearsal-only. It must not be described as a pin against
+  CityLink Launch, and if an authorized read-only run returns an identity that
+  differs from it, that difference is a finding for Adam rather than a reason to
+  re-lower or silently re-record the expectation.
+
 ## 12. Disposition of the Stage 4 findings
 
-Adam's Stage 4 review produced F1–F11. Under option (b) the guard is retired, so
-their disposition is stated explicitly rather than left to inference.
+Adam's Stage 4 review produced F1–F11, this reshape's own 17.12 run produced F12, and
+Adam's 2026-11-23 decision plus the F13 fix produced F13–F15. Under option (b) the
+guard is retired, so their disposition is stated explicitly rather than left to
+inference.
 
 | ID  | Finding (as reviewed)                                                                                                                | Disposition now                                                                                                                                                           |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -596,6 +720,10 @@ their disposition is stated explicitly rather than left to inference.
 | F10 | The blob's own `begin;`/`commit;` makes `--single-transaction` or an outer `BEGIN` illegal                                           | **Moved to runbook obligation** — §9 step 4 states the prohibition and the two-timestamp requirement.                                                                     |
 | F11 | Instrument-shape question: guard versus reviewed SELECT-only checklist                                                               | **Decided by Adam as option (b)** and implemented here; the residual obligation is reviewer confirmation that row-level observation plus the wrapper is adequate control. |
 | F12 | New, found by this reshape's own 17.12 run: `.` matches a newline, so comment stripping without the `n` flag hashes a truncated body | **Fixed and published** — Rule 1 uses flags `gn`; Rule 5 (`btrim`) added; evidence in §6.1.                                                                               |
+
+| F13 | Page 01 `A-TRG-02` expected zero invitation-trigger attachments while every target that exists has one — a false stop that would have failed the release apply with 45006 | **Fixed by strengthening, at Adam's direction** — exactly one attachment **and** an identity match against a recorded pin (`A-TRG-02`), plus an attachment-set capture for the unchanged-across-apply comparison (`A-TRG-03`). Erratum in §14, evidence in §10.8. The reviewed blob is untouched. |
+| F14 | The wrapper hard-codes the Prototype ref and structurally refuses the release target (45003/45004), so as shipped it can never authorize the single real apply | **Open by decision, not by oversight** — the scope question is Adam's and the F13 assignment explicitly declined to settle it. This fix changed only emitted messages (ref-bearing), never the scope logic. Options are stated in §14's "what remains open". |
+| F15 | New, produced by this fix: both token tables named refusals 45002-45009 without the `_gate_` segment, so a recorded refusal copied from the document matched nothing the wrapper emits | **Fixed** — tables corrected against measured 17.12 output (§5.3, checklist §8); no SQL token name changed. |
 
 ## 13. Checked-in migration inventory (for the D-LDG-10 comparison)
 
@@ -646,3 +774,90 @@ identities in one document instead of three.
    Roy** for independent read-only confirmation that the row-level observation
    plus wrapper is an adequate control (F11's residual obligation) and that no
    client contract changed.
+
+## 14. F13 erratum — the "unattached guard" premise was false
+
+**What shipped.** Page 01 row `A-TRG-02` expected `0` non-internal triggers attached
+to `public.enforce_invitation_integrity()` and treated any attached target as a stop.
+
+**Why it was wrong.** The expectation was copied from prose in the repository rather
+than observed on a database. Three checked-in places assert the guard is unattached:
+the Stage 5 header note at `supabase/migrations/20261102131343_stage5_groups.sql:19-21`
+("has no trigger on Test or Main"), the reviewed blob's section 6 at
+`supabase/migrations/20261119090000_group_hard_max.sql:1167-1178` ("is currently
+unattached … the removal helper below remains safe while the guard is unattached"),
+and `docs/team/GROUP_CAPACITY_MIGRATION_DRAFT.md:57`. None of them is correct:
+`supabase/schema.sql:354-357` attaches the trigger,
+
+```sql
+drop trigger if exists invitations_enforce_integrity on public.invitations;
+create trigger invitations_enforce_integrity
+  before insert or update on public.invitations
+  for each row execute procedure public.enforce_invitation_integrity();
+```
+
+so a correct CityLink database reports **one** attachment. The consequence was a
+false stop on the very gate meant to authorize the release: page 01 `FAIL`ed, the
+declared verdict could not be a satisfaction statement, and the wrapper refused with
+`group_capacity_gate_verdict_unsatisfied` (45006).
+
+**The attribution, precisely.** The attachment comes from the **base schema file**,
+not from a Stage 5 migration; Stage 5 only reproduces the guard _function_ at
+`:385` for parity. The distinction matters because a project provisioned from
+`supabase/schema.sql` has the trigger regardless of Stage 5, and because it is the
+comment in Stage 5 that misled the drafting.
+
+**The corrected assertion (strengthen, not lower).** `A-TRG-02` requires exactly one
+non-internal attachment **and** an identity match against a recorded pin; `A-TRG-03`
+captures the whole attachment set for the before/after comparison. Identity is the
+six-field string `name;schema.table;timing;events;orientation;enabled`, so the pin is
+
+```
+invitations_enforce_integrity;public.invitations;before;insert+update;row;origin
+```
+
+It is decoded from `pg_trigger.tgtype` (`1` row, `2` before, `4` insert, `8` delete,
+`16` update, `32` truncate, `64` instead of) plus `tgenabled`, and was cross-checked
+against `pg_get_triggerdef` on 17.12: that function renders `CREATE TRIGGER
+invitations_enforce_integrity BEFORE INSERT OR UPDATE ON public.invitations FOR EACH
+ROW …` for `tgtype = 23` = 16 + 4 + 2 + 1, which is the decoded identity exactly.
+
+**Why this is strictly stronger than `count = 0`.** The old row passed on a bare
+engine and failed on a correct database. The new row fails on an addition (count 2),
+on a removal (count 0) and on a rename, retarget or retiming (count 1, identity
+mismatch); all three states were produced deliberately in §10.8 and observed to
+`FAIL`, and the row returned to `PASS` when the repository DDL was restored. An
+addition or removal across an apply is caught by `A-TRG-02` alone; `A-TRG-03` is what
+makes the difference visible to a reviewer instead of inferred from a number.
+
+**What was not touched.** No blob edit. The reviewed file is byte-identical at
+SHA-256 `5cf0a66a…`, verified before and after the local apply leg, and
+`git diff 7114b96..HEAD -- supabase` is empty, so no `supabase/` file changed at all.
+The false prose stays where it was reviewed — in applied Stage 5 history and in the
+reviewed blob — and is corrected here rather than silently rewritten in either.
+
+**A nuance this finding does not settle.** The attachment is on the legacy
+`public.invitations` table, not on `public.group_invitations`, which is what the
+capacity RPCs and the removal helper write (page 01 `A-TAB-05`). Measured locally:
+zero non-internal triggers on `group_invitations`. So the blob's _behavioural_
+conclusion — the removal helper is not obstructed by this guard — may well still hold,
+but its _stated reason_ ("the guard is unattached") is false and must never be quoted
+as the basis of a security argument. Whether the guard's allowed transitions interact
+with the capacity paths on a real target is live behaviour for the authorized
+signed-in Test QA, not something static or local work can close.
+
+**What remains open.**
+
+1. The pin is **rehearsal-derived** (§11.4): derived from repository DDL and observed
+   on a disposable engine. Test and Main have only ever had the trigger _counted_
+   (1 and 1) by the coordinator, never _named_. An authorized read-only identity
+   capture on the target must confirm it before it is called target-verified.
+2. **F14 stays open and undecided.** The wrapper still declares the Prototype ref as
+   the only acceptable target and still refuses Main with 45003, so it cannot
+   authorize the single real apply under Adam's 2026-11-23 00:08 sequencing. Making
+   the emitted token carry the ref does not change that. The three candidate
+   resolutions — a release-scoped wrapper variant, a declared-allowlist parameter, or
+   a runbook that records page verdicts without calling the wrapper — all need Adam's
+   decision; none was assumed here.
+
+## Adam's next action(s):

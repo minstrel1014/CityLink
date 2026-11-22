@@ -19,7 +19,7 @@
 --   A-RPL-*               replaces G7 (signatures the reviewed file replaces)
 --   A-LGC-*               replaces G6's legacy output-shape portion
 --   A-RUN-*               replaces G8 and G9 (runner legality, schema posture)
---   A-TRG-*               replaces G10 (invitation-integrity premise)
+--   A-TRG-*               replaces G10 (invitation-integrity attachment, F13)
 --   G1 moved to page 00, G4 to page 05, G11 to pages 03 and 04.
 --
 -- Construction notes a reviewer should check:
@@ -33,6 +33,28 @@
 --   * Output column sets use proargmodes ('t' table / 'o' out), not a comma
 --     count of a rendered string, and not proallargnames, which does not exist.
 --   * No application row, secret, or other project is read.
+--
+-- F13 ERRATUM (Adam's decision, 2026-11-23 00:40). As first shipped, the A-TRG
+--   rows asserted that public.enforce_invitation_integrity() had NO attached
+--   trigger, because the Stage 5 migration header note and the reviewed blob's
+--   section 6 comment both describe the guard as "currently unattached". That
+--   premise is wrong about every target that exists: supabase/schema.sql:354-357
+--   attaches `invitations_enforce_integrity` as a BEFORE INSERT OR UPDATE, FOR
+--   EACH ROW trigger on public.invitations, so the old expectation made this page
+--   FAIL, and the wrapper refuse with 45006, on a correct database. The rows
+--   below state the real condition, and more tightly than before: exactly one
+--   non-internal attachment whose identity equals the recorded pin, plus a
+--   capture of the whole attachment set so a silent re-attachment or a dropped
+--   guard across an apply is visible rather than merely countable. An addition
+--   fails the count, a removal fails the count, and a rename or retarget fails
+--   the identity, so the strengthened row discriminates states the old row could
+--   not have detected even when it passed. The reviewed blob is NOT edited here
+--   or anywhere: its section 6 comment stands as reviewed, and the correction
+--   lives in this instrument and in the package document's erratum section.
+--   Pin evidence class: derived from repository DDL at this head and reproduced
+--   on a disposable local PostgreSQL 17. It is a rehearsal pin. It is NOT a
+--   value observed by Role 6 on Test or on Main, and must not be described as
+--   target-verified until an authorized read-only run reproduces it.
 --
 -- SAFE TO RUN TWICE; identical rows are the expected outcome.
 -- =============================================================================
@@ -130,8 +152,49 @@ foreign_owned(count) as (
           union all
           select sig from legacy) rp
     join pg_proc p on p.oid = to_regprocedure(rp.sig)
-    join pg_roles r on r.oid = p.proowner
-   where not pg_has_role(session_user, r.oid, 'member')
+   join pg_roles r on r.oid = p.proowner
+  where not pg_has_role(session_user, r.oid, 'member')
+),
+-- F13: every non-internal trigger attached to the reviewed guard function,
+-- rendered as a six-field identity:
+--   name;schema.table;timing;event(+event);orientation;enabled
+-- pg_trigger.tgtype is a bit field: 1 row, 2 before, 4 insert, 8 delete,
+-- 16 update, 32 truncate, 64 instead of; neither before nor instead-of means
+-- after. tgenabled: 'O' origin, 'D' disabled, 'B' origin-unfired-backlink,
+-- 'R' replica-only. The decoding was checked against pg_get_triggerdef() on
+-- PostgreSQL 17.12 in the run recorded in the package document.
+trg_rows(ident) as (
+  select lower(t.tgname)
+         || ';' || n.nspname || '.' || c.relname
+         || ';' || case when t.tgtype & 2 <> 0 then 'before'
+                        when t.tgtype & 64 <> 0 then 'instead-of'
+                        else 'after' end
+         || ';' || btrim(
+              case when t.tgtype & 4  <> 0 then 'insert+'   else '' end
+           || case when t.tgtype & 16 <> 0 then 'update+'   else '' end
+           || case when t.tgtype & 8  <> 0 then 'delete+'   else '' end
+           || case when t.tgtype & 32 <> 0 then 'truncate+' else '' end, '+')
+         || ';' || case when t.tgtype & 1 <> 0 then 'row' else 'statement' end
+         || ';' || case t.tgenabled
+                     when 'O' then 'origin'
+                     when 'D' then 'disabled'
+                     when 'B' then 'origin-backlink'
+                     else 'replica' end
+    from pg_trigger t
+    join pg_class c on c.oid = t.tgrelid
+    join pg_namespace n on n.oid = c.relnamespace
+   where not t.tgisinternal
+     and t.tgfoid = to_regprocedure('public.enforce_invitation_integrity()')
+),
+trg_obs(cnt, one, all_set) as (
+  select count(*),
+         case when count(*) = 1 then min(ident) else '<not-exactly-one>' end,
+         coalesce(string_agg(ident, ' ;; ' order by ident), '<none>')
+    from trg_rows
+),
+trg_pin(pin) as (
+  values ('invitations_enforce_integrity;public.invitations;before;insert+update;'
+          || 'row;origin')
 )
 select '01' as page, b.id as check_id,
        'base object present: ' || b.sig as subject,
@@ -341,16 +404,31 @@ select '01', 'A-TRG-01', 'invitation-integrity function exists as reviewed',
             then 'FAIL' else 'PASS' end
 
 union all
-select '01', 'A-TRG-02', 'invitation-integrity trigger attachments',
-       '0 — the reviewed draft leaves it unattached; an attached target is a stop',
-       coalesce((select count(*)::text from pg_trigger t
-                  where not t.tgisinternal
-                    and t.tgfoid = to_regprocedure('public.enforce_invitation_integrity()')), '0'),
-       case when coalesce((select count(*) from pg_trigger t
-                             where not t.tgisinternal
-                               and t.tgfoid = to_regprocedure(
-                                   'public.enforce_invitation_integrity()')), 0) > 0
-            then 'FAIL' else 'PASS' end
+select '01', 'A-TRG-02',
+       'invitation-integrity guard: exactly one attachment, identity = pin',
+       (select 'count=1 identity=' || p.pin from trg_pin p),
+       (select 'count=' || o.cnt || ' identity=' || coalesce(o.one, '<none>')
+          from trg_obs o),
+       case when (select cnt from trg_obs) = 1
+             and (select one from trg_obs) is not null
+             and (select one from trg_obs) = (select pin from trg_pin)
+            then 'PASS' else 'FAIL' end
+
+union all
+-- F13, second half of Adam's instruction: the set must be UNCHANGED across the
+-- apply. This page is stateless and cannot remember a previous run, so the
+-- obligation is discharged by capture-and-compare: A-TRG-03 records the whole
+-- attachment set, and the runbook requires the post-apply re-run to be
+-- byte-identical to it. A-TRG-02 alone already fails on an addition (count 2)
+-- and on a removal (count 0); A-TRG-03 is what makes the difference visible to a
+-- reviewer instead of inferred from a number.
+select '01', 'A-TRG-03',
+       'invitation-integrity attachment set, for the unchanged-across-apply '
+       || 'comparison',
+       'identical to the pre-apply record for this run id; any addition or '
+       || 'removal is a stop',
+       (select all_set from trg_obs),
+       'CAPTURE'
 
  order by check_id
- limit 60;
+ limit 62;

@@ -66,7 +66,10 @@ recreate the exact failure the retired guard was criticized for.
 4. Declare the evidence markers and call
    `select private.citylink_capacity_apply_gate();` from `90_...DRAFT.sql`.
    Absent, malformed, incomplete or unsatisfied evidence all refuse, each with
-   its own stable token.
+   its own stable token. From 45003 onward the refusal message also carries
+   ` target=<ref>`, and the satisfaction row carries `run=<id> target=<ref>`: a
+   verdict that does not name the target it was produced for is not evidence.
+   Record the emitted message whole, not the token name alone.
 5. Only then, and only under Adam's separate Test-only application
    authorization naming the exact SQL head, apply the byte-identical reviewed
    blob in the same session — no `--single-transaction`, no outer `BEGIN`.
@@ -100,3 +103,12 @@ from reading documentation, and each one is a fail-open risk if it is forgotten:
 - **Check ids must be unique within a page and non-colliding across pages.**
   Three rows once shared the label `A-LGC-04`; ids are now derived so each row is
   distinct, and the `page` column makes every label globally unambiguous.
+- **An expectation copied from prose is an assumption, not a check.** Finding F13:
+  page 01 asserted zero attached invitation-integrity triggers because the Stage 5
+  header note and the reviewed blob's section 6 comment both described the guard as
+  "currently unattached". `supabase/schema.sql:354-357` attaches it, so that row
+  failed on every target that exists — including the correct one — while passing
+  vacuously on a bare engine. `A-TRG-02` now asserts exactly one attachment whose
+  identity equals a recorded pin, and `A-TRG-03` captures the whole set for the
+  unchanged-across-apply comparison. Before writing any expectation about a live
+  target, read it off a database in that state; package doc §14 is the erratum.

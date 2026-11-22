@@ -24,6 +24,27 @@
 --   group_capacity_gate_engine_unconfirmed 45008 engine major not 17
 --   group_capacity_gate_artifact_unverified 45009 declared blob identity differs
 -- =============================================================================
+-- REF-BEARING VERDICT RULE (Adam, 2026-11-23 00:40). A verdict produced here is
+-- evidence only if it names the target it was produced for, so no message leaves
+-- this function without the declared ref once a ref exists:
+--   * success carries `run=<id> target=<ref>`;
+--   * every refusal from 45003 onward carries ` target=<ref>` after its token;
+--   * 45001 and 45002 are the two states where the ref is by definition not yet
+--     known (no run id declared, or no target declared), so they name the missing
+--     marker instead and are identifiable only by token and SQLSTATE.
+-- Match a refusal on its SQLSTATE or on the leading token: the token is the first
+-- word of the message and context follows after a space. The token names and the
+-- 45001-45009 assignments are unchanged by this rule, and remain distinguishable
+-- from each other and from the client-facing group_capacity_upgrade_required
+-- (SQLSTATE 45000) that the reviewed blob raises.
+-- The ref is operator-declared, so it is not proof of which database answered:
+-- current_database() is `postgres` on both Supabase projects and cannot
+-- distinguish them. Pair the returned token with the archived page 00 rows
+-- C-MRK-13 (declared ref), C-DB-03 (current_database) and C-USR-04 (session_user)
+-- under the same run id. Deciding whether the gate should scope a real release
+-- target at all is finding F14, which is still open; this rule changes only the
+-- emitted text, not the scope logic.
+-- =============================================================================
 
 create or replace function private.citylink_capacity_apply_gate()
 returns text
@@ -61,7 +82,7 @@ begin
   end if;
 
   if v_target = c_main then
-    raise exception 'group_capacity_gate_target_out_of_scope'
+    raise exception 'group_capacity_gate_target_out_of_scope target=%', v_target
       using detail = 'the declared ref is Main, which is read-only under the '
                  || 'current boundary and structurally ineligible for the '
                  || 'reviewed blob (package document §4.2).',
@@ -71,7 +92,7 @@ begin
   end if;
 
   if v_target <> c_test then
-    raise exception 'group_capacity_gate_target_unauthorized'
+    raise exception 'group_capacity_gate_target_unauthorized target=%', v_target
       using detail = 'the declared ref "' || v_target || '" is not the disposable '
                  || 'Test ref named in Adam''s authorization.',
             errcode = '45004';
@@ -79,7 +100,7 @@ begin
 
   if position('00' in v_pages) = 0 or position('01' in v_pages) = 0
      or position('05' in v_pages) = 0 then
-    raise exception 'group_capacity_gate_pages_incomplete'
+    raise exception 'group_capacity_gate_pages_incomplete target=%', v_target
       using detail = 'a Test capacity application must declare pages 00, 01 and 05 '
                  || 'as run in this session; declared value was "'
                  || coalesce(nullif(v_pages, ''), '<none>') || '".',
@@ -87,7 +108,7 @@ begin
   end if;
 
   if v_verdict not in ('PASS', 'PASS_WITH_CAPTURED_OBSERVATIONS') then
-    raise exception 'group_capacity_gate_verdict_unsatisfied'
+    raise exception 'group_capacity_gate_verdict_unsatisfied target=%', v_target
       using detail = 'the recorded preflight verdict is "'
                  || coalesce(nullif(v_verdict, ''), '<undeclared>')
                  || '", which is not a clean result.',
@@ -95,14 +116,14 @@ begin
   end if;
 
   if v_pins = '' then
-    raise exception 'group_capacity_gate_pin_unrecorded'
+    raise exception 'group_capacity_gate_pin_unrecorded target=%', v_target
       using detail = 'no helper digest pin was declared. While G4 is unpinned the '
                  || 'gate refuses rather than passing by omission.',
             errcode = '45007';
   end if;
 
   if v_major <> '17' then
-    raise exception 'group_capacity_gate_engine_unconfirmed'
+    raise exception 'group_capacity_gate_engine_unconfirmed target=%', v_target
       using detail = 'the declared engine major version is "'
                  || coalesce(nullif(v_major, ''), '<undeclared>')
                  || '"; Adam''s real-parser gate targets major 17.',
@@ -110,7 +131,7 @@ begin
   end if;
 
   if v_blob <> c_blob then
-    raise exception 'group_capacity_gate_artifact_unverified'
+    raise exception 'group_capacity_gate_artifact_unverified target=%', v_target
       using detail = 'the declared blob identity is not the reviewed capacity file '
                  || '(object id and SHA-256, joined by a colon).',
             hint = 'Re-verify the exact head before requesting any application.',

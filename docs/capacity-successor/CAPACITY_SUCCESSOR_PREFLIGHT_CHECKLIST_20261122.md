@@ -102,7 +102,7 @@ output rather than summarising it.
 | Page | File                                     | Required?           | Rows                        | FAIL | UNPINNED | Raw output at |
 | ---- | ---------------------------------------- | ------------------- | --------------------------- | ---- | -------- | ------------- | --- |
 | 00   | `00_target_identity_and_engine.sql`      | yes                 | 18                          |      |          |               |
-| 01   | `01_track_a_capacity_prerequisites.sql`  | yes                 | 55                          |      |          |               |
+| 01   | `01_track_a_capacity_prerequisites.sql`  | yes                 | 56                          |      |          |               |
 | 02   | `02_track_b_row8_promotion.sql`          | if Track B in scope | 17                          | n/a  |          |               |
 | 03   | `03_track_c_grant_posture_survey.sql`    | if Track C in scope | 33                          | n/a  |          |               |
 | 04   | `04_track_d_ledger_identity_capture.sql` | if Track D in scope | 4 (+1 per recorded version) |      |          |               |     |
@@ -128,8 +128,16 @@ Page 01 stop conditions (any one stops the run):
       shape the blob re-declares.
 - [ ] `A-RUN-01/02` any `FAIL` — the executing role cannot legally replace or
       create what the reviewed file needs.
-- [ ] `A-TRG-01` reports an attached invitation-integrity trigger where the
-      reviewed draft assumes none — stop for review, do not proceed.
+- [ ] `A-TRG-01` any `FAIL` — the reviewed guard function is not present at all.
+- [ ] `A-TRG-02` any `FAIL` — the invitation-integrity guard is **not exactly the one
+      attachment recorded in the pin** (package doc §14). The observed string says
+      which case applies: `count=0` is a dropped guard, `count=2` or more is a
+      re-attachment or duplicate, and `count=1` with a mismatched identity is a
+      rename, retarget or retiming. Every one of these is a stop for review. Do not
+      edit the pin to make the row pass: the pin is evidence-derived, and a target
+      that disagrees with it is a finding for Adam, not an inconvenience.
+- [ ] `A-TRG-03` differs between the pre-apply capture and the post-apply re-run —
+      a trigger change across the apply. Stop and record both strings verbatim.
 
 Marker declaration (same session, copied from the captured output only):
 
@@ -145,9 +153,12 @@ Marker declaration (same session, copied from the captured output only):
 
 Gate call: `select private.citylink_capacity_apply_gate();`
 
-- [ ] Returned `group_capacity_gate_satisfied run=… target=…` (record verbatim)
-- [ ] Refused — record token and SQLSTATE verbatim; do not re-declare markers
-      until the underlying cause is understood: `_______________________`
+- [ ] Returned `group_capacity_gate_satisfied run=… target=…` — record the **whole
+      message** verbatim. Per Adam's 2026-11-23 rule, a record that drops the
+      `target=` context is not evidence and cannot support an apply request.
+- [ ] Refused — record token, SQLSTATE **and the emitted `target=` context**
+      verbatim (45001 and 45002 carry no ref, because none was declared); do not
+      re-declare markers until the underlying cause is understood: `_____________`
 
 ## 4. Decision point
 
@@ -192,7 +203,8 @@ Re-run pages 00, 01 and 05 in the same session, and record before/after:
 | `A-LGC-01/03/05` (legacy read shapes)                    | five, six and fourteen columns as reviewed                                                                                  |        |       |
 | Three `_capacity` read names                             | `list_course_group_summaries_capacity`, `list_current_term_course_groups_capacity`, `list_group_recruitment_posts_capacity` |        |       |
 | Three-argument create behaviour                          | `group_capacity_upgrade_required`, SQLSTATE `45000` — unchanged                                                             |        |       |
-| `A-TRG-01/02` (invitation trigger state)                 | unchanged from preflight                                                                                                    |        |       |
+| `A-TRG-02` (invitation guard identity)                   | still `PASS` against the same pin; identity string unchanged                                                                |        |       |
+| `A-TRG-03` (attachment set capture)                      | **byte-identical** to the pre-apply capture: no addition, no removal                                                        |        |       |
 | `P-H1-DIG` / `P-H2-DIG`                                  | identical to §2                                                                                                             |        |       |
 | `D-LDG-10` (recorded ledger versions)                    | recorded and compared against package doc §13 — **recorded, not repaired** (Track D needs its own Adam authorization)       |        |       |
 
@@ -217,21 +229,32 @@ inferred from this table.
   operator-declared markers, performs no catalog observation, and must never be
   described as a substitute for RLS, ownership or Adam's authorization.
 - A locally reproduced digest is not a Test pin (package doc §6.2).
+- A locally derived trigger identity is not a target-verified pin: `A-TRG-02`'s pin
+  comes from `supabase/schema.sql` and a disposable 17.12 rehearsal, and the trigger
+  on Test or Main has only ever been **counted** (1 and 1), never named. Confirm the
+  identity read-only on the authorized target before treating the pin as verified
+  (package doc §11.4, §14).
 
 ## 8. Fail-closed token quick reference
 
-| Token                                | SQLSTATE | Meaning                                                                                                             |
-| ------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------- |
-| `group_capacity_gate_run_undeclared` | 45001    | no run id declared                                                                                                  |
-| `group_capacity_target_undeclared`   | 45002    | no target ref declared                                                                                              |
-| `group_capacity_target_out_of_scope` | 45003    | declared target is Main                                                                                             |
-| `group_capacity_target_unauthorized` | 45004    | declared target is some other ref than the authorized Test ref                                                      |
-| `group_capacity_pages_incomplete`    | 45005    | pages 00, 01 or 05 not declared as run                                                                              |
-| `group_capacity_verdict_unsatisfied` | 45006    | declared verdict is not a satisfaction statement                                                                    |
-| `group_capacity_pin_unrecorded`      | 45007    | pin missing, malformed, or an `UNPINNED` placeholder                                                                |
-| `group_capacity_engine_unconfirmed`  | 45008    | declared engine major is not 17                                                                                     |
-| `group_capacity_artifact_unverified` | 45009    | declared blob identity is not the reviewed pair                                                                     |
-| `group_capacity_upgrade_required`    | 45000    | **client-facing** stale-contract signal inside the reviewed blob; never a preflight signal and never to be remapped |
+Token names and message shapes below are the strings measured from the wrapper on
+PostgreSQL 17.12 (package doc §10.8). They previously omitted the `_gate_` segment
+from 45002 onward — finding F15 — which would have made every recorded refusal
+disagree with the runner output.
+
+| Token                                     | SQLSTATE | Meaning as emitted                                                                                                  |
+| ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `group_capacity_gate_run_undeclared`      | 45001    | no run id declared (no ref to carry yet, so the message is bare)                                                    |
+| `group_capacity_gate_target_undeclared`   | 45002    | no target ref declared (the message cannot name a ref that was never declared)                                      |
+| `group_capacity_gate_target_out_of_scope` | 45003    | `target=<ref>`: declared target is Main                                                                             |
+| `group_capacity_gate_target_unauthorized` | 45004    | `target=<ref>`: declared target is some other ref than the authorized Test ref                                      |
+| `group_capacity_gate_pages_incomplete`    | 45005    | `target=<ref>`: pages 00, 01 or 05 not declared as run                                                              |
+| `group_capacity_gate_verdict_unsatisfied` | 45006    | `target=<ref>`: declared verdict is not a satisfaction statement                                                    |
+| `group_capacity_gate_pin_unrecorded`      | 45007    | `target=<ref>`: pin missing, malformed, or an `UNPINNED` placeholder                                                |
+| `group_capacity_gate_engine_unconfirmed`  | 45008    | `target=<ref>`: declared engine major is not 17                                                                     |
+| `group_capacity_gate_artifact_unverified` | 45009    | `target=<ref>`: declared blob identity is not the reviewed pair                                                     |
+| `group_capacity_gate_satisfied`           | —        | `run=<id> target=<ref>`: the satisfaction row; the ref has been carried here since the reshape head                 |
+| `group_capacity_upgrade_required`         | 45000    | **client-facing** stale-contract signal inside the reviewed blob; never a preflight signal and never to be remapped |
 
 ## Adam's next action(s):
 
