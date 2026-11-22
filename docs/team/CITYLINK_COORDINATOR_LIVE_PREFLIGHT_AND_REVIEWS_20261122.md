@@ -312,3 +312,26 @@ F4 wording now states explicitly that:
 - browse-row `false` must not be interpreted as an actual authorization denial;
 - the private helpers are absent from checked-in migrations but present in live Test/Main, so their origin remains unreconciled;
 - Adam's 2026-11-22 QA/security authorization does not authorize applying PR #41.
+
+## 14. Coordinator reconciliation snapshot — 2026-11-22 17:09 HKT
+
+Current exact refs:
+
+- `main`: `1a583e30c019733d1880d2614ca853481509fdad`
+- client integration / PR #37: `344c1058e78fd2cccfde89574e226f3e65a1457c`
+- migration base / PR #34: `5537baa40ecc2bd2dc05bc2eeca07f14bfcc7c2d`
+- PR #41 docs-inclusive head: `2bb659d6e565ba74c49c124f0f17a326877e66ae`
+- this evidence PR #48 base commit: `9da4a9fad099d669110145e54410387f79f63e06`
+
+The coordinator fast-forwarded PR #41's existing head branch to the verified F4 commit. This did not alter the SQL blob or merge any branch.
+
+Role 6 received a new finite baseline-reconciliation assignment. It is authorized to create a documentation branch and draft PR stacked on this evidence branch, and to use metadata-only catalog inspection against the exact Test/Main targets if required. It is not authorized to apply migrations, change Test/Main, read application rows, edit code, merge, deploy or publish. Its result will determine whether a successor capacity SQL/client pairing can be proposed.
+
+The capacity migration remains stopped. Current Test does not contain capacity functions or `max_members`, so signed-in capacity QA cannot yet exercise the integrated capacity client against the live database.
+
+Remaining F2 decisions for Adam:
+
+1. proactive version-mismatch notice: use a second string or reuse only the create-path message;
+2. refresh action: in-app user-clicked control or browser-reload instruction;
+3. compatibility/cache window length and who declares completion;
+4. named owner for signed-in multi-account capacity QA after migration readiness.
