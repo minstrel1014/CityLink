@@ -1,0 +1,11 @@
+ page | check_id |                       subject                        |                                expected                                |                                                                     observed                                                                     | verdict 
+------+----------+------------------------------------------------------+------------------------------------------------------------------------+--------------------------------------------------------------------------------------------------------------------------------------------------+---------
+ 04   | D-LDG-01 | ledger table identity                                | present on a project whose migrations were applied by the Supabase CLI | <absent>                                                                                                                                         | CAPTURE
+ 04   | D-LDG-02 | ledger table columns as this engine sees them        | recorded; column sets differ across CLI versions                       | <table absent>                                                                                                                                   | CAPTURE
+ 04   | D-LDG-03 | ledger schema present                                | recorded                                                               | <absent>                                                                                                                                         | CAPTURE
+ 04   | D-LDG-04 | repository migration files are NOT readable from SQL | this page states the limit instead of inventing a comparison           | compare D-LDG-10 against the repository inventory recorded in docs/capacity-successor/CAPACITY_SUCCESSOR_MIGRATION_PACKAGE_ROLE6_20261122.md §13 | CAPTURE
+(4 rows)
+
+psql:/tmp/pg-04_track_d_ledger_identity_capture.sql:77: ERROR:  relation "supabase_migrations.schema_migrations" does not exist
+LINE 8:   from supabase_migrations.schema_migrations m
+               ^

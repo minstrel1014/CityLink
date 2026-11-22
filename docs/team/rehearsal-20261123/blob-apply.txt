@@ -1,0 +1,2 @@
+psql:/tmp/rehearsal-blob.sql:245: NOTICE:  function public.create_group_and_invite(uuid,uuid) does not exist, skipping
+psql:/tmp/rehearsal-blob.sql:971: NOTICE:  schema "private" already exists, skipping
