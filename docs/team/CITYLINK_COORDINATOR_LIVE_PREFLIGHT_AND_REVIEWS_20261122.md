@@ -382,3 +382,41 @@ The live result confirms all three technical points needed for the next Role 6 s
 The parity report also compares current code heads with live catalogs. `main` client code calls the three-argument `create_group_and_invite`, while live Main has only a two-argument overload; PR #37 client code calls the four-argument capacity overload, while neither live target has it. The first mismatch becomes an actual production break only if a confirmed live surface currently serves the `main` client against Main. That deployment fact remains Adam's to confirm; it must not be inferred from repository code alone.
 
 Consequently, the next finite database action is not to apply PR #41. Role 6 should first use the parity report to define a forward-only successor with explicit per-target prerequisite assertions and keep Main security/grant remediation, ledger repair and capacity DDL as separately reviewed changes. PR #41's helper-origin docs correction is still outstanding.
+Consequently, the next finite database action is not to apply PR #41. Role 6 should first use the parity report to define a forward-only successor with explicit per-target prerequisite assertions and keep Main security/grant remediation, ledger repair and capacity DDL as separately reviewed changes. PR #41's helper-origin docs correction was still outstanding when this subsection was written; Section 17 records that it was subsequently completed and independently verified.
+
+## 17. PR #41 helper-origin docs correction — independently verified, 2026-11-22 18:04 HKT
+
+Role 6 completed the bounded docs-only correction requested in Section 15. The coordinator independently verified the pushed result in a clean detached worktree at the new remote head.
+
+Exact Git evidence:
+
+- previous PR #41 head: `2bb659d6e565ba74c49c124f0f17a326877e66ae`;
+- new PR #41 head: `65058a8077ad89f5796151e7eeb539ba7b616d0c`;
+- the new commit's parent is exactly the previous head;
+- the existing head branch `feature/role6-capacity-compatibility-migration-20261121` advanced by a normal fast-forward push, with no force-push, new branch or replacement PR;
+- `git diff --name-only` between the two commits contains exactly:
+  - `docs/team/CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md`;
+  - `docs/team/GROUP_CAPACITY_MIGRATION_DRAFT.md`;
+- the diff contains 78 added and 33 removed lines across only those two documents;
+- changes under `supabase`, `client`, `server`, `package.json`, `pnpm-lock.yaml`, `vite.config.ts` and `docs/team/DECISIONS.md`: 0 paths;
+- `git diff --check 2bb659d...65058a8` exited 0;
+- `supabase/migrations/20261119090000_group_hard_max.sql` is unchanged from the previous head;
+- its Git blob remains `a04048e90d6b64c692f03c722b9eea2849058aab`;
+- its file SHA-256 remains `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887`;
+- Prettier 3.6.2 `--check` passed for both changed documents;
+- the verification worktree remained clean.
+
+The corrected documents now identify `20261118050000_stage6_chat_recruitment.sql` as the checked-in origin of `private.can_browse_current_term_group` and `private.can_manage_recruitment_post`, with definitions at `:133` and `:160` and browser-role revocations at `:931`–`:932`. The earlier repository-absence judgement is expressly labelled factually wrong and superseded by the coordinator's 2026-11-22 metadata-only parity record. They also retain the live-posture facts as evidence: both helpers exist in Test and Main, are `postgres`-owned, `SECURITY DEFINER`, use an empty `search_path`, have `EXECUTE` false for `anon`, `authenticated` and `service_role`, and match the checked-in body after comment/whitespace/token-spacing normalization.
+
+Evidence class remains important. Role 6 had zero Supabase access in its session; the live catalog facts are coordinator-reported under Adam's 2026-11-22 read-only authorization. The correction fixes the repository-history statement in PR #41's documents. It does not apply SQL, change PR #41's migration content or its unapplied status, and does not approve Role 6's recommendation to avoid a helper-redefinition migration. Both corrected files explicitly leave that recommendation pending Adam's decision.
+
+GitHub state re-read after verification:
+
+- PR #41 remains OPEN/draft;
+- base remains `feature/group-capacity-migration` at `5537baa40ecc2bd2dc05bc2eeca07f14bfcc7c2d`;
+- head is `65058a8077ad89f5796151e7eeb539ba7b616d0c`;
+- PR status remains mergeable and clean;
+- the PR file list contains the two corrected documents plus the unchanged Option A SQL file;
+- no PR was transitioned from draft, merged, deployed or published.
+
+This evidence-branch update integrates the already-pushed PR #41 correction into the coordinator's record. It is not a merge of PR #41 into `main`, an approval of its SQL, a database migration action, or release authorization. Adam's remaining decisions listed in Section 15 still stand, except that the finite docs-only correction item itself is complete.
