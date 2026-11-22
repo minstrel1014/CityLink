@@ -132,10 +132,28 @@ each needs owner acknowledgement before release:
 | `list_course_group_summaries.group_size`              | raw active-membership count                           | canonical capacity count (active memberships plus the narrow forming-creator bonus) | Same column, same type; the approved forming-group creator rule.                                                                                              |
 | `list_course_group_summaries` rows                    | one-person forming groups appeared                    | a forming group with only its creator and no active membership row is hidden        | Matches the required verification case already in `GROUP_CAPACITY_MIGRATION_DRAFT.md`.                                                                        |
 | `list_current_term_course_groups.active_member_count` | raw active-membership count                           | canonical capacity count                                                            | Column retained for allowlist compatibility only.                                                                                                             |
-| `list_current_term_course_groups.can_create_post`     | computed, structurally always false for returned rows | still structurally always false                                                     | **Legacy client allowlist compatibility field only; never security authority.** Real authority is `private.can_manage_recruitment_post` plus the membership check. A `false` here is **not** a server denial: browse rows exclude the viewer’s own active group, so the historical computation is structurally misleading for those rows. Reviewed evidence at client `d4558a73dccfa0878dc43ed78271c44865574d5b`: mapped/parsed for allowlist compatibility, no production UI authority consumer identified — a statement about that exact revision, not a product claim. See `GROUP_CAPACITY_MIGRATION_DRAFT.md`, “Remaining integration issue”. |
+| `list_current_term_course_groups.can_create_post`     | computed, structurally always false for returned rows | still structurally always false                                                     | **Legacy client allowlist field only; never security authority.** See the note below and `GROUP_CAPACITY_MIGRATION_DRAFT.md`.                                 |
 | `list_group_recruitment_posts.active_member_count`    | raw active-membership count                           | canonical capacity count                                                            | As above.                                                                                                                                                     |
 | `list_group_recruitment_posts.apply_enabled`          | true whenever the pre-capacity rules allowed it       | capacity-aware: false for full, unset-maximum and over-limit groups                 | An old client therefore disables Apply instead of offering an action the write RPCs would reject. The write path remains the authority.                       |
 | `list_group_recruitment_posts.apply_block_reason`     | not exposed on the legacy name                        | still not exposed on the legacy name                                                | Available only on `…_posts_capacity`.                                                                                                                         |
+
+**`can_create_post` safety contract (Adam, recorded 2026-11-22).** The column is
+retained **only** so older strict client allowlists can still parse the row; it is
+**never** security authority. Real server-side authority for creating a recruitment
+post is `private.can_manage_recruitment_post` together with the relevant membership
+check, and a write attempt is decided by those server checks alone. A
+`can_create_post = false` value on the browse contract must therefore **not** be
+interpreted as an actual server denial: browse rows intentionally exclude the
+viewer’s own active group, so the field’s historical computation is structurally
+misleading for exactly the rows a viewer could post in.
+
+Reviewed evidence, not a product claim: at client head
+`d4558a73dccfa0878dc43ed78271c44865574d5b` the coordinator/Role 6 review found the
+field mapped and parsed for legacy allowlist compatibility and did **not** identify
+it as a production UI authority consumer. This documentation correction alters no
+SQL and does not resolve the future API redesign choice — whether to drop the flag
+from the browse contract and source create capability from My Groups, or to change
+the RPC audience deliberately.
 
 ## 5. Revised rollout sequence
 
