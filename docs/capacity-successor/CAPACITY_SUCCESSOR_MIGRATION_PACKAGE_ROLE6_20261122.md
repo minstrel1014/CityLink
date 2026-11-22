@@ -69,13 +69,13 @@ recorded in §10.
 
 ## 2. Evidence classes used in this document
 
-| Class                       | Meaning in this package                                                                                                                                                                                  |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Reported live               | Coordinator-performed SELECT-only catalog results quoted from the parity record. Not re-verified here.                                                                                                   |
-| Statically reviewed         | Facts read from the exact head in this task's own worktree (line anchors, signatures, transaction structure, languages).                                                                                 |
-| Independently computed here | Deterministic offline normalizations and statement scans run in this sandbox (no database).                                                                                                              |
-| Executed locally on PG 17   | Every page and the wrapper were run twice against a data-free, disposable local PostgreSQL 17.12 cluster. Proves parse validity, syntax, determinism and fail-closed behaviour of the instrument itself. |
-| Not executed                | Any run against Test `wkzclgmhrtecnpexfesr` or Main `pijslbchvstkoweslymr`. The authorized read-only Test dry run was **blocked**: the Supabase connector is not enabled in this task (§11.1).           |
+| Class                       | Meaning in this package                                                                                                                                                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reported live               | Coordinator-performed SELECT-only catalog results quoted from the parity record. Not re-verified here.                                                                                                                                                                    |
+| Statically reviewed         | Facts read from the exact head in this task's own worktree (line anchors, signatures, transaction structure, languages).                                                                                                                                                  |
+| Independently computed here | Deterministic offline normalizations and statement scans run in this sandbox (no database).                                                                                                                                                                               |
+| Executed locally on PG 17   | Every page and the wrapper were run twice against a data-free, disposable local PostgreSQL 17.12 cluster. Proves parse validity, syntax, determinism and fail-closed behaviour of the instrument itself.                                                                  |
+| Not executed                | Any page set against CityLink Launch `pijslbchvstkoweslymr` or the frozen Prototype `wkzclgmhrtecnpexfesr`. The authorized read-only _identity capture_ has since run on the Prototype (§11.4); no page has been executed against either project and nothing was written. |
 
 No item in this package is "live-verified by Role 6", "applied", "tested against
 a project target", "merged" or "released".
@@ -98,20 +98,28 @@ single raising instrument in this package is the operator-facing refusal wrapper
 
 ## 4. Per-target eligibility
 
-### 4.1 Disposable Test `wkzclgmhrtecnpexfesr` — designable now, not authorized
+### 4.1 Frozen Prototype `wkzclgmhrtecnpexfesr` — out of scope, refused by the gate
 
-Per the reported parity facts, Test already satisfies the prerequisites the
-reviewed blob depends on: the two Stage 6 private helpers exist with `postgres`
-ownership, `SECURITY DEFINER`, empty `search_path`, and no browser or
-`service_role` `EXECUTE`; the row-8 subject contract and the `(uuid,uuid,text)`
-create overload exist; no capacity object exists yet. Pages 00, 01 and 05 observe
-each of those again immediately before any future application, and the wrapper
-refuses to report satisfaction unless the operator declares them.
+The Prototype is kept as a historical reference and must not be migrated. Since
+Adam's F14 decision (2026-11-23 01:50) the wrapper refuses it explicitly with
+`group_capacity_gate_target_out_of_scope` (45003), so a run that declares this ref
+stops before any later gate is consulted.
 
-### 4.2 Main `pijslbchvstkoweslymr` — structurally ineligible for this blob
+That is a scope decision, not a verdict on the project. The Prototype's reported
+state is still the shape this package was first designed against — the two Stage 6
+private helpers with `postgres` ownership, `SECURITY DEFINER`, empty `search_path`
+and no browser or `service_role` `EXECUTE`; the row-8 subject contract and the
+`(uuid,uuid,text)` create overload; no capacity object yet — and the authorized
+read-only identity capture of §11.4 was taken there. What the Prototype can no
+longer be is the application target.
 
-Two static findings, both derived from the exact head plus the reported Main
-state, mean the reviewed blob must not be applied to Main:
+### 4.2 CityLink Launch `pijslbchvstkoweslymr` — the authorised target, with blockers that scope does not clear
+
+"Main" in this document is the CityLink Launch project. It is now the authorised
+target and the wrapper accepts it (§11.5). Two static findings, both derived from
+the exact head plus the reported Launch state, still mean the reviewed blob cannot
+be applied there as it stands. Re-scoping the gate changed which ref the gate
+accepts; it changed nothing about these:
 
 1. **Return-type collision.** Main's released
    `list_group_recruitment_posts(uuid, timestamptz, uuid, integer)` result
@@ -619,7 +627,8 @@ same bare engine — §10.4's measured bare-engine FAIL list names `A-TRG-01` bu
 The old row was wrong in both directions at once, which is the signature of an
 expectation that was never read off a database.
 
-Wrapper, installed in the repository-state database and called once per branch:
+Wrapper, installed in the repository-state database and called once per branch
+(these observations predate F14's inversion; §11.5 records the re-scoped mapping):
 satisfied `group_capacity_gate_satisfied run=f13-local-1 target=wkzclgmhrtecnpexfesr`;
 then 45001 `group_capacity_gate_run_undeclared`, 45002
 `group_capacity_gate_target_undeclared`, 45003
@@ -725,6 +734,70 @@ What remains unverified, and must keep being said plainly:
 - This capture is evidence about a pin, not authorization to apply anything: no
   migration ran, no row was written, and the write boundary is unchanged.
 
+### 11.5 F14 resolved: the gate accepts CityLink Launch and refuses the frozen Prototype
+
+Adam decided F14 on 2026-11-23 01:50. The authorised target is CityLink Launch
+`pijslbchvstkoweslymr`, which must pass the scope check. The frozen Prototype
+`wkzclgmhrtecnpexfesr` is explicitly out of scope and draws the out-of-scope
+refusal (45003), not the generic unauthorised one (45004) — the exact inversion of
+the pre-F14 behaviour, in which the Prototype was the only accepted ref and Launch
+drew 45003.
+
+| Declared `citylink.capacity_target_ref`   | Token                                              | SQLSTATE |
+| ----------------------------------------- | -------------------------------------------------- | -------- |
+| `pijslbchvstkoweslymr` (CityLink Launch)  | passes the scope check; later gates then apply     | —        |
+| `wkzclgmhrtecnpexfesr` (frozen Prototype) | `group_capacity_gate_target_out_of_scope target=…` | 45003    |
+| any other value                           | `group_capacity_gate_target_unauthorized target=…` | 45004    |
+| undeclared                                | `group_capacity_gate_target_undeclared`            | 45002    |
+
+Everything else about the instrument is unchanged: 45001-45009 keep their
+assignments and stay distinguishable from each other and from the client-facing
+`group_capacity_upgrade_required` (45000); every refusal from 45003 onward carries
+` target=<ref>`; 45001 and 45002 stay bare because no ref is known in those states;
+the success token still carries both `run=` and `target=`.
+
+**Measured on a disposable PostgreSQL 17.12** (`17.12-1.pgdg24.04+1`) brought to
+repository schema state (auth stand-in, `supabase/schema.sql`, fictional seed, 8/8
+pre-blob migrations, 12 public tables; the reviewed blob was never applied). The
+wrapper was installed by the real parser (exit 0) and then called once per case, 13
+calls, with the exact emitted message recorded:
+
+| Case                                         | Declared ref and other markers                                           | Emitted                                                                      |
+| -------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| all markers valid                            | Launch                                                                   | `group_capacity_gate_satisfied run=f14-local-1 target=pijslbchvstkoweslymr`  |
+| scope only                                   | frozen Prototype, everything else valid                                  | 45003 `…target_out_of_scope target=wkzclgmhrtecnpexfesr`                     |
+| scope only                                   | `some-other-project`, everything else valid                              | 45004 `…target_unauthorized target=some-other-project`                       |
+| target empty                                 | —                                                                        | 45002 `group_capacity_gate_target_undeclared`                                |
+| run empty                                    | Launch                                                                   | 45001 `group_capacity_gate_run_undeclared`                                   |
+| scope wins                                   | frozen Prototype **and** pages, verdict, pins, engine and blob all wrong | 45003 (scope short-circuits)                                                 |
+| scope wins                                   | `some-other-project` **and** the same defects                            | 45004 (scope short-circuits)                                                 |
+| later gates still fire on the authorised ref | Launch + pages `00,01`                                                   | 45005 `…pages_incomplete target=pijslbchvstkoweslymr`                        |
+| "                                            | Launch + verdict `FAIL`                                                  | 45006 `…verdict_unsatisfied target=…`                                        |
+| "                                            | Launch + no pin                                                          | 45007 `…pin_unrecorded target=…`                                             |
+| "                                            | Launch + engine `16`                                                     | 45008 `…engine_unconfirmed target=…`                                         |
+| "                                            | Launch + wrong blob identity                                             | 45009 `…artifact_unverified target=…`                                        |
+| satisfied variant                            | Launch + `PASS_WITH_CAPTURED_OBSERVATIONS`                               | `group_capacity_gate_satisfied run=f14-local-13 target=pijslbchvstkoweslymr` |
+
+Instrument properties re-checked in the same run: `provolatile = s` (stable),
+`prosecdef = f` (security invoker), `proconfig = {search_path=""}`, owner
+`postgres`, and `EXECUTE` withheld from `anon` and `authenticated`. The six page
+files contain **zero** ref literals, so no page assumes either project. Teardown
+left 0 postgres processes, 0 TCP listeners and no data directory.
+
+**A local run declaring the Launch ref is a logic-path test, not a claim about
+CityLink Launch.** Nothing here contacted either project. The gate reads
+operator-declared markers and nothing else, so a passing call proves the operator
+typed the expected ref — not which database answered. `current_database()` is
+`postgres` on both projects, which is why the returned token must be paired with
+page 00 rows `C-MRK-13` (declared ref), `C-DB-03` (`current_database`) and `C-USR-04`
+(`session_user`) under the same run id.
+
+**What F14's resolution does not establish.** Re-scoping the gate does not make the
+apply safe, legal or authorised. §4.2's static blockers still stand between the
+gate and a real application; F9's digests still read `UNPINNED`, so no application
+may be requested at all; and no application authorization exists for any target.
+Scope was the whole of F14.
+
 ## 12. Disposition of the Stage 4 findings
 
 Adam's Stage 4 review produced F1–F11, this reshape's own 17.12 run produced F12, and
@@ -748,7 +821,7 @@ inference.
 | F12 | New, found by this reshape's own 17.12 run: `.` matches a newline, so comment stripping without the `n` flag hashes a truncated body | **Fixed and published** — Rule 1 uses flags `gn`; Rule 5 (`btrim`) added; evidence in §6.1.                                                                               |
 
 | F13 | Page 01 `A-TRG-02` expected zero invitation-trigger attachments while every target that exists has one — a false stop that would have failed the release apply with 45006 | **Fixed by strengthening, at Adam's direction** — exactly one attachment **and** an identity match against a recorded pin (`A-TRG-02`), plus an attachment-set capture for the unchanged-across-apply comparison (`A-TRG-03`). Erratum in §14, evidence in §10.8. The reviewed blob is untouched. The pin itself is now **measured on Test** by an authorized read-only capture and matched the rehearsal exactly; Main is still unverified by this task (§11.4). |
-| F14 | The wrapper hard-codes the Prototype ref and structurally refuses the release target (45003/45004), so as shipped it can never authorize the single real apply | **Open by decision, not by oversight** — the scope question is Adam's and the F13 assignment explicitly declined to settle it. This fix changed only emitted messages (ref-bearing), never the scope logic. Options are stated in §14's "what remains open". |
+| F14 | The wrapper hard-coded the Prototype ref and structurally refused the release target (45003/45004), so as shipped it could never authorise the single real apply | **Decided by Adam 2026-11-23 01:50 and implemented (§11.5)** — CityLink Launch is the authorised target and must pass; the frozen Prototype draws 45003; any other ref draws 45004. Scope was the whole of F14: §4.2's static blockers are untouched, so a passing gate still does not make the apply possible, and this authorises no application. |
 | F15 | New, produced by this fix: both token tables named refusals 45002-45009 without the `_gate_` segment, so a recorded refusal copied from the document matched nothing the wrapper emits | **Fixed** — tables corrected against measured 17.12 output (§5.3, checklist §8); no SQL token name changed. |
 
 ## 13. Checked-in migration inventory (for the D-LDG-10 comparison)
@@ -874,16 +947,23 @@ signed-in Test QA, not something static or local work can close.
 
 **What remains open.**
 
-1. The pin is **rehearsal-derived** (§11.4): derived from repository DDL and observed
-   on a disposable engine. Test and Main have only ever had the trigger _counted_
-   (1 and 1) by the coordinator, never _named_. An authorized read-only identity
-   capture on the target must confirm it before it is called target-verified.
-2. **F14 stays open and undecided.** The wrapper still declares the Prototype ref as
-   the only acceptable target and still refuses Main with 45003, so it cannot
-   authorize the single real apply under Adam's 2026-11-23 00:08 sequencing. Making
-   the emitted token carry the ref does not change that. The three candidate
-   resolutions — a release-scoped wrapper variant, a declared-allowlist parameter, or
-   a runbook that records page verdicts without calling the wrapper — all need Adam's
-   decision; none was assumed here.
+1. The pin is now **measured on Test** (§11.4): an authorized read-only identity
+   capture named the attachment and it matched the rehearsal exactly. It is still
+   **not measured on CityLink Launch**, which has only ever had the trigger
+   _counted_ (1) by the coordinator and never _named_ by this task, which holds no
+   access there.
+2. **F14 is decided and implemented (§11.5).** Adam chose the release-scoped variant:
+   the wrapper accepts CityLink Launch and refuses the frozen Prototype with 45003.
+   What that does _not_ do is make the apply possible or authorised — §4.2's static
+   blockers still stand, F9's digests still read `UNPINNED`, no application
+   authorization exists, and the declared ref remains operator-typed rather than
+   proof of which database answered.
+3. **New, F16:** page 01's replaced-signature expectations were derived from the
+   frozen Prototype's state, and at least `A-RPL-06` asserts an absence that the
+   reported Launch state contradicts (the two-argument create is expected present
+   there). On the authorised target that row is expected to FAIL until the
+   expectation is re-derived from Launch's own captured rows. It was left unrelaxed
+   on purpose: re-deriving an expectation from evidence is the fix, editing it to
+   match a guess is the defect.
 
 ## Adam's next action(s):

@@ -1,7 +1,9 @@
 # Successor preflight pages — index and rules
 
 **Status: DRAFT REVIEW ARTIFACTS. Nothing here is a migration, nothing here is
-authorization, and no page has been run against Test or Main by Role 6.**
+authorization, and no page has been run against either project by Role 6. An
+authorized read-only _identity capture_ was taken on the frozen Prototype
+(package doc §11.4); that is not a page run and it authorizes nothing.**
 
 This directory replaces the retired `do $capacity_guard$` block. Adam's
 2026-11-22 22:04 decision chose instrument shape option (b): observation pages
@@ -70,9 +72,10 @@ recreate the exact failure the retired guard was criticized for.
    ` target=<ref>`, and the satisfaction row carries `run=<id> target=<ref>`: a
    verdict that does not name the target it was produced for is not evidence.
    Record the emitted message whole, not the token name alone.
-5. Only then, and only under Adam's separate Test-only application
-   authorization naming the exact SQL head, apply the byte-identical reviewed
-   blob in the same session — no `--single-transaction`, no outer `BEGIN`.
+5. Only then, and only under a separate Adam application authorization naming the
+   exact SQL head and the exact target — CityLink Launch since F14 (package doc
+   §11.5) — apply the byte-identical reviewed blob in the same session: no
+   `--single-transaction`, no outer `BEGIN`.
 
 Creating the gate function in step 4 is itself DDL. Until that DDL is applied
 under an explicit authorization, the fail-closed state is "the gate does not
@@ -112,3 +115,12 @@ from reading documentation, and each one is a fail-open risk if it is forgotten:
   identity equals a recorded pin, and `A-TRG-03` captures the whole set for the
   unchanged-across-apply comparison. Before writing any expectation about a live
   target, read it off a database in that state; package doc §14 is the erratum.
+- **Re-scoping the target invalidates expectations that were read off the old
+  one.** Finding F16: the gate now authorises CityLink Launch (package doc §11.5),
+  but page 01's replaced-signature rows were derived from the frozen Prototype's
+  state, and `A-RPL-06` asserts that the two-argument `create_group_and_invite` is
+  _absent_ — which the reported Launch state contradicts. Expect that row to FAIL
+  on the authorised target until its expectation is re-derived from Launch's own
+  captured rows. Do not relax it in place: an expectation that fails on the
+  correct target is a question for review, and one edited to match a guess is a
+  defect.

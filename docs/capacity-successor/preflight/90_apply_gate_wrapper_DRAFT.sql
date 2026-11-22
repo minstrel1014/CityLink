@@ -2,7 +2,7 @@
 -- CityLink capacity successor — refusal wrapper (the only instrument that raises)
 -- =============================================================================
 -- DRAFT REVIEW ARTIFACT. DDL to be created ONLY inside a separately authorized
--- Test application session; nothing in this package applies it.
+-- application session; nothing in this package applies it.
 --
 -- Contract: it reads the operator-declared evidence markers and nothing else.
 -- It never queries a catalog, never inspects a function, never re-derives a
@@ -16,8 +16,8 @@
 -- approved stale-client string):
 --   group_capacity_gate_run_undeclared     45001  no declared run id
 --   group_capacity_gate_target_undeclared  45002  no declared target ref
---   group_capacity_gate_target_out_of_scope 45003 declared ref is Main
---   group_capacity_gate_target_unauthorized 45004 declared ref is neither
+--   group_capacity_gate_target_out_of_scope 45003 declared ref is the frozen Prototype
+--   group_capacity_gate_target_unauthorized 45004 declared ref is not CityLink Launch
 --   group_capacity_gate_pages_incomplete   45005 required pages not declared run
 --   group_capacity_gate_verdict_unsatisfied 45006 preflight verdict not clean
 --   group_capacity_gate_pin_unrecorded     45007 no digest pin declared
@@ -42,8 +42,21 @@
 -- distinguish them. Pair the returned token with the archived page 00 rows
 -- C-MRK-13 (declared ref), C-DB-03 (current_database) and C-USR-04 (session_user)
 -- under the same run id. Deciding whether the gate should scope a real release
--- target at all is finding F14, which is still open; this rule changes only the
--- emitted text, not the scope logic.
+-- target at all was finding F14, which Adam decided on 2026-11-23 01:50.
+--
+-- SCOPE (F14 decided by Adam, 2026-11-23 01:50). The authorised target is
+-- CityLink Launch `pijslbchvstkoweslymr`, which must pass this check. The frozen
+-- Prototype `wkzclgmhrtecnpexfesr` is explicitly OUT OF SCOPE and is refused with
+-- 45003 — not the generic 45004 — which is the exact inversion of the pre-F14
+-- behaviour, where the Prototype was the only accepted target and Main drew 45003.
+-- Any other declared ref draws 45004.
+--
+-- Re-scoping the gate does not make the apply safe, legal or authorised. Passing
+-- 45003/45004 proves only that an operator typed the expected ref into a session
+-- variable; authorisation still comes from Adam's recorded decision, and target
+-- identity still comes from page 00's captured rows (C-MRK-13, C-DB-03, C-USR-04).
+-- The static blockers recorded in the package document §4.2 are untouched by this
+-- change and still stand between the gate and a real application.
 -- =============================================================================
 
 create or replace function private.citylink_capacity_apply_gate()
@@ -62,8 +75,11 @@ declare
   v_major   text := btrim(coalesce(current_setting('citylink.capacity_engine_major', true), ''));
   v_blob    text := btrim(coalesce(current_setting('citylink.capacity_blob_identity', true), ''));
 
-  c_test constant text := 'wkzclgmhrtecnpexfesr';
-  c_main constant text := 'pijslbchvstkoweslymr';
+  -- F14: the authorised target is CityLink Launch; the frozen Prototype is the
+  -- explicit out-of-scope ref. Neither constant is proof of identity — see the
+  -- operator-declared caveat in the header.
+  c_launch constant text := 'pijslbchvstkoweslymr';
+  c_frozen constant text := 'wkzclgmhrtecnpexfesr';
   c_blob constant text := 'a04048e90d6b64c692f03c722b9eea2849058aab'
                           || ':5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887';
 begin
@@ -81,27 +97,28 @@ begin
             errcode = '45002';
   end if;
 
-  if v_target = c_main then
+  if v_target = c_frozen then
     raise exception 'group_capacity_gate_target_out_of_scope target=%', v_target
-      using detail = 'the declared ref is Main, which is read-only under the '
-                 || 'current boundary and structurally ineligible for the '
-                 || 'reviewed blob (package document §4.2).',
-            hint = 'Any Main capacity path needs a new explicit Adam decision in '
-                || 'docs/team/DECISIONS.md, plus Tracks B and C.',
+      using detail = 'the declared ref is the frozen Prototype project, which is '
+                 || 'out of scope for the capacity release apply: it is kept as a '
+                 || 'historical reference and must not be migrated (package '
+                 || 'document §4.1).',
+            hint = 'Declare the CityLink Launch ref instead. Out of scope is a '
+                || 'scope decision, not a judgement that the Prototype is broken.',
             errcode = '45003';
   end if;
 
-  if v_target <> c_test then
+  if v_target <> c_launch then
     raise exception 'group_capacity_gate_target_unauthorized target=%', v_target
-      using detail = 'the declared ref "' || v_target || '" is not the disposable '
-                 || 'Test ref named in Adam''s authorization.',
+      using detail = 'the declared ref "' || v_target || '" is not CityLink Launch, '
+                 || 'the only authorised target for this capacity apply.',
             errcode = '45004';
   end if;
 
   if position('00' in v_pages) = 0 or position('01' in v_pages) = 0
      or position('05' in v_pages) = 0 then
     raise exception 'group_capacity_gate_pages_incomplete target=%', v_target
-      using detail = 'a Test capacity application must declare pages 00, 01 and 05 '
+      using detail = 'a capacity application must declare pages 00, 01 and 05 '
                  || 'as run in this session; declared value was "'
                  || coalesce(nullif(v_pages, ''), '<none>') || '".',
             errcode = '45005';

@@ -3,8 +3,9 @@
 **Status: blank template for a future, separately authorized run. Do not fill it
 in retroactively from memory, and do not treat a completed template as
 authorization for anything. It has never been filled in: Role 6's authorized
-read-only Test dry run was blocked because no Supabase connector is enabled in
-this task (package doc §11.1).**
+read-only _identity capture_ has since run against the frozen Prototype (package
+doc §11.4), but no page has been executed against any project. A connector being
+enabled does not authorize a run.**
 
 - Instrument of record: `docs/capacity-successor/preflight/` pages 00–05 plus
   `90_apply_gate_wrapper_DRAFT.sql`. Design rationale and finding dispositions
@@ -19,39 +20,39 @@ this task (package doc §11.1).**
 
 ## 0. Preconditions for using this page at all
 
-| Condition            | Requirement                                                                                                                                                                         |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Approval recorded    | Adam's 2026-11-22 helper policy and the 22:04 instrument-shape decision (option b: SELECT-only pages plus a thin refusal wrapper)                                                   |
-| Exact SQL head       | `supabase/migrations/20261119090000_group_hard_max.sql` blob `a04048e90d6b64c692f03c722b9eea2849058aab`, SHA-256 `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887` |
-| Exact successor head | the PR #51 head recorded in §1, which must contain these pages unchanged                                                                                                            |
-| Recipe pinned        | §2 complete; while `P-H1-DIG`/`P-H2-DIG` read `UNPINNED`, no application may be requested                                                                                           |
-| Target               | disposable Test `wkzclgmhrtecnpexfesr` only. Main is out of scope and the wrapper refuses it with `group_capacity_target_out_of_scope`                                              |
-| Engine major         | 17 on the target (Adam's 22:04 decision: Test 17.11.0.011, Main 17.11.0.003); page 00 `C-MAJ-01` and page 05 `P-ENG-01` must agree                                                  |
-| Authorization        | a separate, explicit Adam authorization naming the exact SQL head and the exact target, recorded before execution                                                                   |
-| Fresh review         | exact-head Role 6 review still current for the pages, the wrapper and the reviewed blob, plus Roy/Jeffery client-contract confirmation and Eunice's independent read                |
+| Condition            | Requirement                                                                                                                                                                                                                                        |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approval recorded    | Adam's 2026-11-22 helper policy and the 22:04 instrument-shape decision (option b: SELECT-only pages plus a thin refusal wrapper)                                                                                                                  |
+| Exact SQL head       | `supabase/migrations/20261119090000_group_hard_max.sql` blob `a04048e90d6b64c692f03c722b9eea2849058aab`, SHA-256 `5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887`                                                                |
+| Exact successor head | the PR #51 head recorded in §1, which must contain these pages unchanged                                                                                                                                                                           |
+| Recipe pinned        | §2 complete; while `P-H1-DIG`/`P-H2-DIG` read `UNPINNED`, no application may be requested                                                                                                                                                          |
+| Target               | CityLink Launch `pijslbchvstkoweslymr` only (F14, Adam 2026-11-23 01:50). The frozen Prototype `wkzclgmhrtecnpexfesr` is out of scope and the wrapper refuses it with `group_capacity_gate_target_out_of_scope` (45003); any other ref draws 45004 |
+| Engine major         | 17 on the target (Adam's 22:04 decision: Test 17.11.0.011, Main 17.11.0.003); page 00 `C-MAJ-01` and page 05 `P-ENG-01` must agree                                                                                                                 |
+| Authorization        | a separate, explicit Adam authorization naming the exact SQL head and the exact target, recorded before execution                                                                                                                                  |
+| Fresh review         | exact-head Role 6 review still current for the pages, the wrapper and the reviewed blob, plus Roy/Jeffery client-contract confirmation and Eunice's independent read                                                                               |
 
 ## 1. Run header (operator fills in)
 
-| Field                                                 | Value                  |
-| ----------------------------------------------------- | ---------------------- |
-| Run id (declare as `citylink.capacity_run_id`)        |                        |
-| Date and time, start and end (with timezone)          |                        |
-| Executor task and human lead                          |                        |
-| Adam authorization reference                          |                        |
-| Authorized target ref                                 | `wkzclgmhrtecnpexfesr` |
-| Target ref read from the tool's own response          |                        |
-| Target display name / status as reported              |                        |
-| Connector/tool used (no credential value recorded)    |                        |
-| Successor branch head                                 |                        |
-| Reviewed blob object id re-verified                   |                        |
-| Engine major / full version (`C-MAJ-01` / `C-MAJ-02`) |                        |
-| Database (`C-DB-03`)                                  |                        |
-| Session user / current user (`C-USR-04` / `C-USR-05`) |                        |
-| Locale collate / ctype (`C-LOC-07`)                   |                        |
-| Encoding (`C-ENC-08`)                                 |                        |
-| Session `search_path` verbatim (`C-CFG-06`)           |                        |
-| Transaction form actually used                        |                        |
-| Raw output storage location for every page            |                        |
+| Field                                                 | Value                                    |
+| ----------------------------------------------------- | ---------------------------------------- |
+| Run id (declare as `citylink.capacity_run_id`)        |                                          |
+| Date and time, start and end (with timezone)          |                                          |
+| Executor task and human lead                          |                                          |
+| Adam authorization reference                          |                                          |
+| Authorized target ref                                 | `pijslbchvstkoweslymr` (CityLink Launch) |
+| Target ref read from the tool's own response          |                                          |
+| Target display name / status as reported              |                                          |
+| Connector/tool used (no credential value recorded)    |                                          |
+| Successor branch head                                 |                                          |
+| Reviewed blob object id re-verified                   |                                          |
+| Engine major / full version (`C-MAJ-01` / `C-MAJ-02`) |                                          |
+| Database (`C-DB-03`)                                  |                                          |
+| Session user / current user (`C-USR-04` / `C-USR-05`) |                                          |
+| Locale collate / ctype (`C-LOC-07`)                   |                                          |
+| Encoding (`C-ENC-08`)                                 |                                          |
+| Session `search_path` verbatim (`C-CFG-06`)           |                                          |
+| Transaction form actually used                        |                                          |
+| Raw output storage location for every page            |                                          |
 
 ## 2. Recipe pinning (must be complete before any application request)
 
@@ -94,7 +95,7 @@ Rules for this section:
 - Main may be compared only inside its existing read-only boundary and only under
   the same pinned recipe; agreement under two different recipes proves nothing.
 
-## 3. Preflight run (Test)
+## 3. Preflight run (authorised target)
 
 Run each page as its own statement batch, in this order, and attach the raw
 output rather than summarising it.
@@ -122,8 +123,14 @@ Page 01 stop conditions (any one stops the run):
       the reviewed state.
 - [ ] `A-CAP-*` any `FAIL` — a capacity object already exists; do not re-apply.
 - [ ] `A-RPL-01..05` any `FAIL`, or `A-RPL-06` `FAIL` — the replaced-signature set
-      is not what the blob expects (the two-argument create must be absent on Test
-      and is present on Main).
+- [ ] `A-RPL-01..05` any `FAIL`, or `A-RPL-06` `FAIL` — the replaced-signature set
+      is not what the blob expects. **Caveat for the re-scoped target (F16):**
+      these expectations were derived from the frozen Prototype's state. Per the
+      reported project state the two-argument create is _absent_ on the Prototype
+      and _present_ on CityLink Launch, while `A-RPL-06` asserts absence — so on
+      the authorised target that row is expected to FAIL. Treat it as a question
+      to re-derive from the target's own captured rows, never as a row to relax in
+      place, and never as a licence to edit the expectation to match.
 - [ ] `A-LGC-01/03/05` any `FAIL` — a legacy read result shape is not the released
       shape the blob re-declares.
 - [ ] `A-RUN-01/02` any `FAIL` — the executing role cannot legally replace or
@@ -167,7 +174,7 @@ Gate call: `select private.citylink_capacity_apply_gate();`
 | Any page row `FAIL`                             | **Stop.** No capacity DDL. Report which track owns the failure (capacity DDL / row-8 promotion / grant normalization / ledger repair). Never "fix" it inside capacity work |
 | Any row `UNPINNED` in pages 00, 01 or 05        | **Stop.** Return to §2 or declare the marker from evidence. Do not substitute a whitespace-insensitive comparison for the pinning step                                     |
 | Wrapper refused                                 | **Stop.** The refusal token is the finding; a re-declaration that makes it disappear is not a fix                                                                          |
-| Every required row PASS/CAPTURE and §2 complete | The application may be _requested_, only under Adam's separate Test-only authorization naming the exact SQL head                                                           |
+| Every required row PASS/CAPTURE and §2 complete | The application may be _requested_, only under a separate Adam authorization naming the exact SQL head and the exact target (now CityLink Launch)                          |
 | Anything unexpected during the run              | **Stop** and record it. An unexplained difference is a finding, not noise to average away                                                                                  |
 
 ## 5. Application (only after an explicit Adam authorization)
@@ -246,8 +253,8 @@ disagree with the runner output.
 | ----------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
 | `group_capacity_gate_run_undeclared`      | 45001    | no run id declared (no ref to carry yet, so the message is bare)                                                    |
 | `group_capacity_gate_target_undeclared`   | 45002    | no target ref declared (the message cannot name a ref that was never declared)                                      |
-| `group_capacity_gate_target_out_of_scope` | 45003    | `target=<ref>`: declared target is Main                                                                             |
-| `group_capacity_gate_target_unauthorized` | 45004    | `target=<ref>`: declared target is some other ref than the authorized Test ref                                      |
+| `group_capacity_gate_target_out_of_scope` | 45003    | `target=<ref>`: declared target is the frozen Prototype (out of scope since F14)                                    |
+| `group_capacity_gate_target_unauthorized` | 45004    | `target=<ref>`: declared target is not CityLink Launch, the only authorised target                                  |
 | `group_capacity_gate_pages_incomplete`    | 45005    | `target=<ref>`: pages 00, 01 or 05 not declared as run                                                              |
 | `group_capacity_gate_verdict_unsatisfied` | 45006    | `target=<ref>`: declared verdict is not a satisfaction statement                                                    |
 | `group_capacity_gate_pin_unrecorded`      | 45007    | `target=<ref>`: pin missing, malformed, or an `UNPINNED` placeholder                                                |
