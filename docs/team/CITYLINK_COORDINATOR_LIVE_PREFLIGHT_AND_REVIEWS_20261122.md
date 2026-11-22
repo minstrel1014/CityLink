@@ -160,44 +160,44 @@ Consequences:
 
 Checked-in repository files at `main`, client `d4558a7`/`344c105`, PR #34 `5537baa`:
 
-| Repository version | Name |
-|---|---|
-| `20261102090000` | `stage5_term_model` |
-| `20261102131343` | `stage5_groups` |
-| `20261102140927` | `stage5_course_roster_rpc` |
-| `20261114163512` | `20261114162301_stage5_group_authority_and_succession` |
-| `20261117043100` | `stage5_course_group_invite_candidates` |
-| `20261117205600` | `stage5_course_detail_group_views` |
-| `20261118050000` | `stage6_chat_recruitment` |
-| `20261118083000` | `stage6_people_page_naming` |
+| Repository version | Name                                                   |
+| ------------------ | ------------------------------------------------------ |
+| `20261102090000`   | `stage5_term_model`                                    |
+| `20261102131343`   | `stage5_groups`                                        |
+| `20261102140927`   | `stage5_course_roster_rpc`                             |
+| `20261114163512`   | `20261114162301_stage5_group_authority_and_succession` |
+| `20261117043100`   | `stage5_course_group_invite_candidates`                |
+| `20261117205600`   | `stage5_course_detail_group_views`                     |
+| `20261118050000`   | `stage6_chat_recruitment`                              |
+| `20261118083000`   | `stage6_people_page_naming`                            |
 
 PR #34/#41 additionally contain `20261119090000_group_hard_max.sql`.
 
 Live Test ledger:
 
-| Version | Name |
-|---|---|
-| `20261102131343` | `20261102_stage5_groups` |
-| `20261102140927` | `20261102_stage5_course_roster_rpc` |
+| Version          | Name                                                   |
+| ---------------- | ------------------------------------------------------ |
+| `20261102131343` | `20261102_stage5_groups`                               |
+| `20261102140927` | `20261102_stage5_course_roster_rpc`                    |
 | `20261114163512` | `20261114162301_stage5_group_authority_and_succession` |
-| `20261117044721` | `stage5_course_group_invite_candidates` |
-| `20261117133731` | `stage5_course_detail_group_views` |
-| `20261118043211` | `stage6_chat_recruitment` |
-| `20261118082247` | `stage6_people_page_naming` |
+| `20261117044721` | `stage5_course_group_invite_candidates`                |
+| `20261117133731` | `stage5_course_detail_group_views`                     |
+| `20261118043211` | `stage6_chat_recruitment`                              |
+| `20261118082247` | `stage6_people_page_naming`                            |
 
 Test has no exact ledger row for repository `20261102090000_stage5_term_model`, although its stage5 migration statement records internal marker `20261102_stage5_groups`.
 
 Live Main ledger:
 
-| Version | Name |
-|---|---|
-| `20261118033916` | `stage5_term_model` |
-| `20261118033944` | `stage5_groups` |
-| `20261118034001` | `stage5_course_roster_rpc` |
+| Version          | Name                                    |
+| ---------------- | --------------------------------------- |
+| `20261118033916` | `stage5_term_model`                     |
+| `20261118033944` | `stage5_groups`                         |
+| `20261118034001` | `stage5_course_roster_rpc`              |
 | `20261118034447` | `stage5_group_authority_and_succession` |
 | `20261118034458` | `stage5_course_group_invite_candidates` |
-| `20261118034505` | `stage5_course_detail_group_views` |
-| `20261118080722` | `stage6_chat_recruitment` |
+| `20261118034505` | `stage5_course_detail_group_views`      |
+| `20261118080722` | `stage6_chat_recruitment`               |
 
 Main has no `stage6_people_page_naming` row. No single identity among repository/Test/Main has the same version/name series.
 
@@ -207,12 +207,12 @@ Exact target was re-verified as `wkzclgmhrtecnpexfesr` / `CityLink-Stage5-Test` 
 
 Relevant tables are all `postgres`-owned, RLS enabled and not forced. Effective direct-role posture:
 
-| Role | Public USAGE | Private USAGE | Bypass | Current group table SELECT | Direct INSERT on current group tables |
-|---|---:|---:|---:|---:|---:|
-| anon | yes | no | no | no | no |
-| authenticated | yes | yes | no | yes | no |
-| service_role | yes | no | yes | yes | yes |
-| postgres | yes | yes | yes | yes | yes |
+| Role          | Public USAGE | Private USAGE | Bypass | Current group table SELECT | Direct INSERT on current group tables |
+| ------------- | -----------: | ------------: | -----: | -------------------------: | ------------------------------------: |
+| anon          |          yes |            no |     no |                         no |                                    no |
+| authenticated |          yes |           yes |     no |                        yes |                                    no |
+| service_role  |          yes |            no |    yes |                        yes |                                   yes |
+| postgres      |          yes |           yes |    yes |                        yes |                                   yes |
 
 Legacy `invitations` additionally gives authenticated INSERT/UPDATE, with table policy and BEFORE trigger guards. Current `group_chat_messages` and `group_recruitment_posts` have no RLS policy rows, so direct authenticated access is blocked and behavior is RPC-mediated.
 
@@ -240,18 +240,18 @@ Exact target was re-verified as `pijslbchvstkoweslymr` / `CityLink Project` / `A
 
 Table RLS/role posture is materially close to Test for current group tables, but Main's explicit RPC grants are broader:
 
-| RPC | authenticated | service_role | anon |
-|---|---:|---:|---:|
-| `create_group_and_invite(uuid,uuid)` | true | true | false |
-| `list_course_group_summaries(uuid)` | true | true | false |
-| `list_current_term_course_groups(...)` | true | true | false |
-| `list_group_recruitment_posts(...)` | true | true | false |
-| `list_group_chat_messages(...)` | true | true | false |
-| `send_group_chat_message(...)` | true | true | false |
-| `respond_to_group_invitation(...)` | true | true | false |
-| `review_group_join_request(...)` | true | true | **true** |
-| `send_group_invitation(...)` | true | true | **true** |
-| `request_to_join_group(...)` | true | true | **true** |
+| RPC                                    | authenticated | service_role |     anon |
+| -------------------------------------- | ------------: | -----------: | -------: |
+| `create_group_and_invite(uuid,uuid)`   |          true |         true |    false |
+| `list_course_group_summaries(uuid)`    |          true |         true |    false |
+| `list_current_term_course_groups(...)` |          true |         true |    false |
+| `list_group_recruitment_posts(...)`    |          true |         true |    false |
+| `list_group_chat_messages(...)`        |          true |         true |    false |
+| `send_group_chat_message(...)`         |          true |         true |    false |
+| `respond_to_group_invitation(...)`     |          true |         true |    false |
+| `review_group_join_request(...)`       |          true |         true | **true** |
+| `send_group_invitation(...)`           |          true |         true | **true** |
+| `request_to_join_group(...)`           |          true |         true | **true** |
 
 No capacity functions, no `max_members`, and only the two-argument create overload exists.
 
@@ -273,7 +273,9 @@ The blocker is stronger than “no capacity migration”:
 3. Test has people-page naming while Main does not;
 4. Main's create arity is two arguments, while Test/repo baseline has three;
 5. Main has broader RPC grants including anon on three writes;
-6. private helpers exist live in both but checked-in migrations do not define them.
+6. the two private helpers exist live in both and **are** defined by checked-in migration `20261118050000_stage6_chat_recruitment.sql` (`:133` and `:160`, `SECURITY DEFINER SET search_path = ''`, grants revoked at `:931`–`:932`), which both targets recorded an apply for; their origin is therefore explained, not out-of-band.
+
+Role 6 correction, 2026-11-22: the earlier wording of item 6 (“checked-in migrations do not define them”) was factually wrong and has been replaced above. The narrowed residual question is whether the live helper bodies are byte-identical to the committed text, which still needs a metadata-only `pg_get_functiondef` comparison per target. See `CAPACITY_BASELINE_RECONCILIATION_ROLE6_20261122.md` §4, §7 and §11 for the full three-way ledger mapping, the reason version identifiers diverge (the migration tool records its own execution timestamp), and the replay-safety conclusion.
 
 Therefore the capacity migration cannot be inferred or blindly replayed. Role 6 must first produce a baseline reconciliation that maps actual objects/migration intent to a reviewed successor sequence. Only after that and Adam's exact SQL-head authorization can migration planning continue.
 
