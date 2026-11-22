@@ -420,3 +420,47 @@ GitHub state re-read after verification:
 - no PR was transitioned from draft, merged, deployed or published.
 
 This evidence-branch update integrates the already-pushed PR #41 correction into the coordinator's record. It is not a merge of PR #41 into `main`, an approval of its SQL, a database migration action, or release authorization. Adam's remaining decisions listed in Section 15 still stand, except that the finite docs-only correction item itself is complete.
+
+## 18. Adam's 2026-11-22 decisions and Stage 6 Main evidence reconciliation — 18:52 HKT
+
+Adam answered the outstanding decisions in Section 15. This section records the exact result and distinguishes located evidence from remaining gaps.
+
+**Helper policy — approved.** `20261118050000_stage6_chat_recruitment.sql` is the authoritative origin of both private helpers. The successor capacity migration must not redefine them; each target must pass per-target prerequisite assertions immediately before any separately authorized application. This unblocks successor drafting, not application.
+
+**Stage 6 Main question — option C, with a narrower gap than initially believed.** Adam directed the team to retain the old Test-only document as a dated phase record and record the later Main action, while checking evidence. The coordinator located:
+
+| Evidence                                     | Result                                                                                                                                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authorization commit                         | `c3d65e40310a9282dc0ea020dc08d972915b6721`, 2026-11-18T08:04:12Z, `docs(team): record Adam's Stage 6 Main migration authorization`                                                                |
+| Result commit                                | `0fd6926be6796b6c1537de70d11bb3967ae1c561`, child of the authorization commit, 2026-11-18T08:08:07Z, `docs(team): report Stage 6 Main migration result`                                           |
+| Migration source                             | `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` at `d667b6f`                                                                                                                     |
+| Reported and independently re-hashed SHA-256 | `861f0042392a8142b8cfe19f9d9f768a2d1ef91ce4f2e359e26b816c1db6d87f`                                                                                                                                |
+| Live Main ledger                             | `20261118080722 / stage6_chat_recruitment`, success at 16:07 +08:00                                                                                                                               |
+| Reported post-apply checks                   | both tables with RLS, no browser direct table grants, ten RPCs with authenticated-only EXECUTE, three close triggers, no browser EXECUTE on private helpers, direct REST reads HTTP 401           |
+| Explicit remaining risks                     | Main runtime RPC behavior was not exercised; Stage 5 profile-history trigger gap remained; pre-existing Main `rename_study_group(uuid, text)` had to be handled by the later people-page proposal |
+
+Both commits are reachable on remote branch `docs/people-page-decisions` (tip `0772d7b03402c16f17d66eaf9a046ff2ab2525cb`) but are not ancestors of current `main` (`1a583e30c019733d1880d2614ca853481509fdad`). GitHub's branch view did not associate a PR with that branch. Thus the live Main row is **explained and not an unexplained out-of-band application**; the remaining defect is documentary — current-main history omitted the later authorization/report. The new `DECISIONS.md` section and dated note in this file reconcile it without treating the old unmerged branch as release authority or reactivating the expired authorization.
+
+The coordinator also checked the separate file-5 concern. Current-main `DECISIONS.md` already records Adam's 2026-11-18 authorization to apply all six Stage 5 migrations, continuation through files 4–6, and a completion report. Live Main has `20261118034458 / stage5_course_group_invite_candidates`. Adam confirmed that the six-file authorization superseded the earlier “must never be applied to Main” restriction, and a dated supersession note was added immediately after the historical wording in `docs/SUPABASE_SETUP.md`. No present Main change is implied.
+
+**Main client question — answer received and finding retained.** Adam confirmed that no live client surface currently uses Main, so Main's two-argument create function versus the newer client expectations is latent configuration/environment debt rather than a present outage. Separately, Main's broader RPC grants (notably `anon` EXECUTE on three join/invitation/review write RPCs) must remain a standalone security remediation item and cannot be bundled into capacity DDL.
+
+**F2 decisions.** Adam selected a user-visible browser-refresh direction instead of an in-app refresh action, approved the owner matrix below, and assigned Eunice as future signed-in multi-account capacity QA owner. The existing approved group-creation string remains exactly:
+
+```text
+CityLink needs an update. Refresh before creating a group.
+```
+
+Adam approved the direction of a second proactive notice and gave examples, but both 5a and 5b used “for example” wording. Until Adam selects the final mapping, only the create-path string above is implementable as an exact product string; proactive and refresh-instruction wording must remain blocked for one confirmation. No automatic reload/retry/forced refresh, draft recovery or storage persistence is authorized.
+
+| Responsibility                       | Owner       |
+| ------------------------------------ | ----------- |
+| Checklist and final evidence summary | Coordinator |
+| Compatibility-stub removal review    | Role 6      |
+| Group-creation client-path review    | Roy         |
+| Recruitment/post read-path review    | Jeffery     |
+| Independent QA evidence review       | Eunice      |
+
+A seven-day observation window supplements but does not replace the technical gates. Cleanup can be proposed only after the coordinator records that every owner condition is complete, and actual cleanup still requires a new explicit Adam approval and separate migration review.
+
+**Independent verification in this docs-only update.** The evidence branch started from clean remote head `394e3919105991a5d6c52c28385450bd51350c3e`. This Section 18 change edits only Markdown: `docs/team/DECISIONS.md`, `docs/SUPABASE_SETUP.md`, `docs/stage6/STAGE6_TEST_MIGRATION.md` and this evidence report. The commit history for `d667b6f` was re-extracted in the coordinator's canonical clone, and the SHA-256 above was re-computed from that exact object. No Supabase call, migration, signed-in QA, merge, PR-ready transition, deployment or publication occurred.

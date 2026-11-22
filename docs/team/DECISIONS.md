@@ -314,3 +314,59 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Authorization:** apply `20261118050000_stage6_chat_recruitment.sql` to the disposable Test project (ref `wkzclgmhrtecnpexfesr`) only, after Role 6 re-checks the exact file. Conditions: forward-only, one migration, no reset/TRUNCATE, no Main access, stop on error, verification queries after apply; Test data writes or accounts need separate approval.
 - **Role 6 items:** 2 (group-row locks and open-status guards) and 3 (clear creator_id on abandonment) applied; 4 verified (private schema not exposed by PostgREST).
 - **Files:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`, `docs/stage6/STAGE6_TEST_MIGRATION.md`.
+
+## 2026-11-22 — Capacity private-helper origin policy (Adam)
+
+- **Decision (Adam, project lead, 2026-11-22):** `20261118050000_stage6_chat_recruitment.sql` is the authoritative checked-in origin of `private.can_browse_current_term_group(uuid)` and `private.can_manage_recruitment_post(uuid)`. The successor capacity migration must not redefine either helper. Immediately before any separately authorized application to a named target, a SELECT-only preflight must assert the expected signature, owner, `SECURITY DEFINER` setting, empty `search_path`, effective grants and reviewed body normalization. A material mismatch stops application.
+- **Evidence class:** this is a product/rollout decision recorded from Adam. The live-posture facts supporting it were independently observed by the coordinator under its SELECT-only Test/Main authorization; Role 6's baseline task itself had zero Supabase access.
+- **Scope:** successor drafting and preflight design only. No migration is approved, applied or copied by this decision.
+
+## 2026-11-22 — Stage 6 Main governance reconciliation (Adam selected option C)
+
+- **Conflict resolved:** live Main records `20261118080722 / stage6_chat_recruitment`, while `docs/stage6/STAGE6_TEST_MIGRATION.md` recorded Main as never touched and the Main ledger row appeared to have no current-main authorization report.
+- **Decision (Adam, project lead, 2026-11-22):** option C is approved — retain the earlier Test-only document as a dated phase record and record the subsequent authorized Main promotion, then check for remaining evidence gaps.
+- **Evidence located:**
+  - Authorization commit `c3d65e40310a9282dc0ea020dc08d972915b6721` (2026-11-18T08:04:12Z), `docs(team): record Adam's Stage 6 Main migration authorization`, records a fresh backup plus only `20261118050000_stage6_chat_recruitment.sql`, forward-only and one migration, with no reset/TRUNCATE, drop of existing objects, Auth/secret changes or Test access; authorization ends on report delivery.
+  - Result commit `0fd6926be6796b6c1537de70d11bb3967ae1c561` (2026-11-18T08:08:07Z), `docs(team): report Stage 6 Main migration result`, records backup directory `/home/ubuntu/backups/main_20261118_stage6/`, migration source commit `d667b6f`, SHA-256 `861f0042392a8142b8cfe19f9d9f768a2d1ef91ce4f2e359e26b816c1db6d87f`, recorded version `20261118080722`, start `16:07 +08:00`, success with no errors, and post-apply RLS/grants/RPC/trigger/REST 401 verification.
+  - The report's remaining risks explicitly say Main runtime RPC behavior was not exercised, the Stage 5 profile-history trigger gap remained open, and Main had a pre-existing `rename_study_group(uuid, text)` function outside the six Stage 5 migrations. It then states that the one-time authorization ended.
+- **Independent reproduction:** the coordinator re-extracted `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` at `d667b6f` and obtained the same SHA-256 `861f0042392a8142b8cfe19f9d9f768a2d1ef91ce4f2e359e26b816c1db6d87f`. The live Main ledger version `20261118080722` corroborates the report.
+- **Remaining documentation gap:** these commits are reachable only on remote branch `docs/people-page-decisions` (tip `0772d7b03402c16f17d66eaf9a046ff2ab2525cb`) and are not ancestors of current `main` `1a583e30c019733d1880d2614ca853481509fdad`; GitHub's branch view did not associate a PR with it. Therefore the live Main promotion is no longer an unexplained out-of-band change, but its authorization/report were not carried into current-main's decision log. This section reconciles the gap in the evidence branch without merging the old branch or re-authorizing Main.
+- **Boundary:** this record explains a completed, time-limited historical authorization. It does not currently authorize any Main write, migration, deletion, schema change, runtime exercise, merge, deployment or publication. Current Main remains read-only inspection/verification only until official launch or a new explicit Adam authorization recorded here.
+
+## 2026-11-22 — Stage 5 file 5 Main restriction superseded
+
+- **Adam's decision text (verbatim):** "The ‘must never be applied to Main’ rule was the earlier standing restriction.
+  It was superseded by Adam’s 2026-11-18 Main migration authorization for the
+  six Stage 5 files, including file 5: stage5_course_group_invite_candidates.
+  Live Main inspection confirms the corresponding migration ledger row.
+  Current Main changes remain prohibited without a new explicit Adam authorization."
+- **Corroborating current-main record:** `docs/team/DECISIONS.md` already contains Adam's 2026-11-18 authorization to apply six Stage 5 migrations in order, including invite candidates, followed by continuation through files 4–6 and a report that six migrations were applied and verified with that authorization expired.
+- **Live ledger:** Main row `20261118034458 / stage5_course_group_invite_candidates` corresponds to that promotion. Repository filename `20261117043100_stage5_course_group_invite_candidates.sql` and the earlier Test recorded timestamp/name are execution-identifier variants, not evidence that the object is missing.
+- **Documentation correction:** the earlier `must never be applied to Main` sentence in `docs/SUPABASE_SETUP.md` is retained as the historical restriction at its 2026-11-17 phase, but is superseded by the 2026-11-18 six-file Main authorization for this exact intent. The corrected wording must not be read as permission for any present or future Main change.
+
+## 2026-11-22 — Main RPC grant finding is latent security debt
+
+- **Decision (Adam, project lead, 2026-11-22):** no live client surface currently uses Main, so the observed create-function arity mismatch is not an active production outage. Adam's own wording was: "not clint using main, but record the main rpc issue." The coordinator reads `clint` as a typo for `client`.
+- **Recorded finding:** Main's Stage 5 promotion is historical and was authorized, but Main's effective RPC grants are broader than Test in reviewed cases, including `anon` EXECUTE on `request_to_join_group`, `review_group_join_request` and `send_group_invitation`.
+- **Required handling:** keep this as a separate security remediation review. It must not be bundled into capacity DDL or treated as resolved by capacity rollout. Any Main grant change requires a new, explicit Main-write authorization from Adam plus a fresh exact-head review and immediately preceding authorized preflight.
+
+## 2026-11-22 — F2 proactive update strings, refresh guidance and observation ownership (Adam)
+
+- **Existing approved create-path string:** `CityLink needs an update. Refresh before creating a group.` remains the exact stale-client message in the group-creation path.
+- **5a second-string direction:** Adam approved adding a shorter proactive update notice, citing `CityLink needs an update.` and, in a group-creation-adjacent context, `CityLink needs an update before group creation continues.` The examples improve clarity but were introduced as examples, so the exact mapping of each surface to its final string must be confirmed before implementation.
+- **5b refresh guidance:** Adam approved telling the user to refresh the browser instead of adding an automatic reload/retry. Examples were `Please refresh this page before creating a group.` or instructing F5/the browser refresh button. The exact user-facing wording likewise needs one final selection.
+- **5c compatibility and cache cleanup ownership:**
+
+  | Responsibility                       | Owner       |
+  | ------------------------------------ | ----------- |
+  | Checklist and final evidence summary | Coordinator |
+  | Compatibility-stub removal review    | Role 6      |
+  | Group-creation client-path review    | Roy         |
+  | Recruitment/post read-path review    | Jeffery     |
+  | Independent QA evidence review       | Eunice      |
+
+  A cleanup proposal requires every technical condition and associated evidence to be complete; no elapsed-time window alone can authorize it. A separate seven-day observation window is coordinated and summarized by this coordinator, and Adam must approve any actual cleanup migration separately.
+
+- **5d signed-in capacity QA:** Adam selected Eunice `Vf6CvKBQkfUjdqFWDs9JWX` as the future signed-in multi-account capacity QA owner. She remains blocked until an exact approved client/schema combination and an authorized Test capacity migration exist.
+- **Preserved F2 safety contract:** no automatic reload, automatic retry, forced refresh, storage preservation or draft recovery is authorized. An unsaved group-creation draft may be lost when the user manually refreshes. A verifiable build/version marker—not browser-cache-time inference—is required. `index.html` must use no-store or equivalent non-persistent caching while hashed JS/CSS may use versioned caching, subject to actual hosting evidence.
+- **Scope boundary:** these are rollout/product decisions, not migration, Test write, Main write, signed-in QA execution, merge, deployment or publication approvals.
