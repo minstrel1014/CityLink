@@ -23,7 +23,7 @@ There is no zero-downtime order that makes both old and new clients fully functi
 2. **Preflight and backup.** Take a verified logical backup/snapshot reference of disposable Test (`wkzclgmhrtecnpexfesr`). Record the migration history and preflight counts. Do not reset or delete Test. Confirm no unapproved data writes are in progress.
 3. **Apply a compatibility migration first, only after the withheld gates are approved.** Add the new capacity column, helper functions, four-argument creation RPC, capacity-aware read contracts and legacy wrappers. Keep the old three-argument RPC as the approved fail-closed stub that raises `group_capacity_upgrade_required` with SQLSTATE `45000`. This prevents old clients from bypassing the maximum while giving the client a machine-readable recovery signal instead of a generic missing-function error.
 4. **Publish the new client immediately after the migration passes verification.** Use a versioned static build, clear the host/CDN cache for `index.html`, and verify the public bundle hash. The new client must be the only client allowed to create or admit members.
-5. **Keep the stub for the agreed cache window.** During that window, an old cached tab shows “CityLink has been updated. Refresh the page before creating or joining a group.” Do not remove the stub until QA and the lead agree the cache window is over.
+5. **Keep the stub for the agreed cache window.** During that window, an old cached tab that calls the legacy three-argument create path shows “CityLink needs an update. Refresh before creating a group.” Only the create path is stubbed; invitations, acceptance, join requests, review and removal keep their released signatures and capacity checks. Do not remove the stub until QA and the lead agree the cache window is over.
 6. **Cleanup migration.** After the cache window, drop the old three-argument overload and the stub. Record the cleanup migration, verification output, and remaining risks.
 7. **Rollback decision.** If the new client or schema fails verification, stop and report. Do not improvise a reverse migration. Restore the verified Test snapshot only with explicit lead approval, then redeploy the previously reviewed client. The old RPC stub is not a capacity bypass and must not be re-enabled as an emergency workaround.
 
@@ -32,7 +32,7 @@ There is no zero-downtime order that makes both old and new clients fully functi
 - Serve `index.html` with no-store/no-cache headers and a build-version marker; never let a browser keep an old shell indefinitely.
 - Add a visible version check in the app that detects a build/schema mismatch and offers **Refresh CityLink** rather than silently retrying a missing RPC.
 - Map the stub’s `group_capacity_upgrade_required` error to the approved message; do not show raw PostgREST text.
-- Preserve unsaved drafts only when safe. A schema-mismatch reload should warn before discarding a recruitment draft or profile form.
+- An unsaved group-creation draft may be lost on manual refresh; there is no storage-based preservation, warning, or automatic reload. (Adam's decision, 2026-11-21 20:45.)
 - Add a static-host fallback page/script only if it can be reviewed and does not expose environment configuration or secrets.
 - Record the deployed client bundle hash, deployment time, and Test migration versions in the release receipt.
 
