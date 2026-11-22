@@ -206,6 +206,39 @@ evidence. The defensible successor strategy is:
 This keeps the capacity migration minimal and makes the helper dependency visible
 in the ordering requirement instead of hidden inside a compatibility redefinition.
 
+### 7.1 The same error exists elsewhere, and how it arose
+
+The wrong claim is not only in PR #48. It is also in the capacity documentation on
+PR #41's current docs head `2bb659d6e565ba74c49c124f0f17a326877e66ae`, and it was
+introduced by Role 6 rather than inherited from the preflight:
+
+- `docs/team/CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md` §7 item 1
+  (lines 228–241) and §9 (about lines 325–331) say the helpers are "defined in no
+  checked-in migration" and "appear only in
+  `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql`". Both are wrong: the
+  helpers are defined at `20261118050000_stage6_chat_recruitment.sql:133` and
+  `:160`, and that proposal file is the draft of the same migration —
+  `docs/stage6/STAGE6_TEST_MIGRATION.md:8` records the proposal as merged with
+  PR #5 and applied to Test as `20261118043211`.
+- `docs/team/GROUP_CAPACITY_MIGRATION_DRAFT.md` lines 176–182 say they are "not
+  defined in any checked-in migration; that repository statement remains
+  accurate". The repository statement is not accurate; the migration defines both
+  helpers and revokes browser grants at `:931`–`:932`.
+
+Root cause, recorded so it is not repeated: a text search that stopped at the
+`docs/stage6/` proposal artifact concluded the helpers were never checked in, even
+though that proposal had already been promoted into a migration. The pre-F4 head
+`2bc2959` carried the claim, and the F4 amendment preserved and expanded it while
+adding the live-observation half. F4's other two corrections — the
+`can_create_post` safety contract and the 2026-11-22 authorization boundary — are
+unaffected.
+
+This branch does **not** amend PR #41: the assignment forbids merging into PR #41,
+names this docs branch as the only push target, and requires proof that the
+reviewed capacity blob stays untouched. The correction therefore needs a
+separately dispatched, bounded docs-only amendment on the capacity branch, which
+must restate the reviewed blob proof afterwards.
+
 ## 8. Is PR #41 safe to replay against live Test (or Main)?
 
 No — for either target — under a blind ledger-driven replay.
@@ -363,21 +396,22 @@ Proposed remediation, deliberately split and **not authorized by this document**
 
 ## 11. Confirmed matches, confirmed mismatches, open unknowns
 
-| Item                                                                                                                                                                | Status                                                                                    | Basis                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Capacity blob unchanged by F4                                                                                                                                       | **Confirmed** by re-running the diff at `2bb659d`                                         | `git diff 2bc2959... 2bb659d -- supabase` = 0 bytes          |
-| Helpers defined in checked-in SQL                                                                                                                                   | **Confirmed mismatch** with PR #48 §11 item 6; corrected in this branch                   | `20261118050000:133`, `:160`                                 |
-| Main lacks row 8, hence 2-argument create                                                                                                                           | **Confirmed** (static) + reported-live arity                                              | `20261118083000:85/:87`; preflight §10                       |
-| `main` client expects 3-argument create                                                                                                                             | **Confirmed**                                                                             | `client/src/lib/supabaseGroups.ts:467-469`                   |
-| Blind replay unsafe on both targets                                                                                                                                 | **Confirmed** by static reasoning over §4/§8                                              | checked-in statements                                        |
-| Main has a `stage6_chat_recruitment` row while Stage 6 docs say Main was never touched                                                                              | **Confirmed governance gap** — needs Adam's explanation                                   | `docs/stage6/STAGE6_TEST_MIGRATION.md:10,68` vs preflight §8 |
-| `docs/SUPABASE_SETUP.md:199` says the invite-candidates migration "must never be applied to Main" while `DECISIONS.md` 2026-11-18 authorized exactly that as file 5 | **Confirmed documentation contradiction** — for Eunice/Adam to reconcile, not edited here | both checked-in texts                                        |
-| Test term-model object presence                                                                                                                                     | **Indirect only** — metadata check owed                                                   | preflight has no row; live functions depend on it            |
-| Whether live helper bodies match committed text (both targets)                                                                                                      | **Unknown** — `pg_get_functiondef` comparison owed                                        | no connector here                                            |
-| Main presence of `update_own_display_name`, `list_course_ungrouped_classmates`, `get_current_term_coursemate_profile`, renamed `subject` shape                      | **Unknown** — reported evidence covers only create arity                                  | preflight §10                                                |
-| Supabase CLI pending-selection and remote-only-row behavior                                                                                                         | **Unknown** — CLI verification owed                                                       | no toolchain proof available                                 |
-| Whether any live surface points at Main                                                                                                                             | **Unknown** — deployment fact, outside this sandbox                                       | not observable here                                          |
-| Origin mechanism of Main's `anon` grants                                                                                                                            | **Unknown** — default vs existing ACL vs dashboard apply                                  | §10                                                          |
+| Item                                                                                                                                                                | Status                                                                                    | Basis                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Capacity blob unchanged by F4                                                                                                                                       | **Confirmed** by re-running the diff at `2bb659d`                                         | `git diff 2bc2959... 2bb659d -- supabase` = 0 bytes                                                |
+| Helpers defined in checked-in SQL                                                                                                                                   | **Confirmed mismatch** with PR #48 §11 item 6; corrected in this branch                   | `20261118050000:133`, `:160`                                                                       |
+| Same wrong helper claim inside PR #41 docs head `2bb659d`                                                                                                           | **Confirmed Role 6 error**, correction owed; see §7.1                                     | `20261118050000:133`/`:160` versus `CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md:228`–`:241` |
+| Main lacks row 8, hence 2-argument create                                                                                                                           | **Confirmed** (static) + reported-live arity                                              | `20261118083000:85/:87`; preflight §10                                                             |
+| `main` client expects 3-argument create                                                                                                                             | **Confirmed**                                                                             | `client/src/lib/supabaseGroups.ts:467-469`                                                         |
+| Blind replay unsafe on both targets                                                                                                                                 | **Confirmed** by static reasoning over §4/§8                                              | checked-in statements                                                                              |
+| Main has a `stage6_chat_recruitment` row while Stage 6 docs say Main was never touched                                                                              | **Confirmed governance gap** — needs Adam's explanation                                   | `docs/stage6/STAGE6_TEST_MIGRATION.md:10,68` vs preflight §8                                       |
+| `docs/SUPABASE_SETUP.md:199` says the invite-candidates migration "must never be applied to Main" while `DECISIONS.md` 2026-11-18 authorized exactly that as file 5 | **Confirmed documentation contradiction** — for Eunice/Adam to reconcile, not edited here | both checked-in texts                                                                              |
+| Test term-model object presence                                                                                                                                     | **Indirect only** — metadata check owed                                                   | preflight has no row; live functions depend on it                                                  |
+| Whether live helper bodies match committed text (both targets)                                                                                                      | **Unknown** — `pg_get_functiondef` comparison owed                                        | no connector here                                                                                  |
+| Main presence of `update_own_display_name`, `list_course_ungrouped_classmates`, `get_current_term_coursemate_profile`, renamed `subject` shape                      | **Unknown** — reported evidence covers only create arity                                  | preflight §10                                                                                      |
+| Supabase CLI pending-selection and remote-only-row behavior                                                                                                         | **Unknown** — CLI verification owed                                                       | no toolchain proof available                                                                       |
+| Whether any live surface points at Main                                                                                                                             | **Unknown** — deployment fact, outside this sandbox                                       | not observable here                                                                                |
+| Origin mechanism of Main's `anon` grants                                                                                                                            | **Unknown** — default vs existing ACL vs dashboard apply                                  | §10                                                                                                |
 
 ## 12. Recommended successor contract, for later Adam approval
 
@@ -464,21 +498,27 @@ PR #41's head were not modified by this task.
    is the checked-in `20261118050000_stage6_chat_recruitment.sql` and that no
    re-definition migration is wanted. Unblocks: successor-migration drafting and
    the preflight assertion list.
-2. **Answer the Main governance question.** Explain, or direct that it be
+2. **Dispatch the PR #41 docs correction described in §7.1.** Decide who edits
+   `docs/team/CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md:228`–`:241`/§9 and
+   `docs/team/GROUP_CAPACITY_MIGRATION_DRAFT.md:176`–`:182` on the capacity branch
+   and whether Role 6 may push that docs-only amendment (this assignment named a
+   single branch, so it did not). Unblocks: an accurate dependency statement in
+   the reviewed capacity documentation, without touching the SQL blob.
+3. **Answer the Main governance question.** Explain, or direct that it be
    recorded in `docs/team/DECISIONS.md`, how live Main obtained
    `20261118080722 stage6_chat_recruitment` when the Stage 6 records say Main was
    never touched. Unblocks: whether Main's baseline can be trusted at all.
-3. **Authorize the metadata-only parity checks** (per target, exact fields listed
+4. **Authorize the metadata-only parity checks** (per target, exact fields listed
    in §11) — or state that another task performs them. Role 6 has no Supabase
    connector in this session, so this authorization alone does not enable it here.
-4. **Confirm the two documentation contradictions** belong to Eunice's F1b scope:
+5. **Confirm the two documentation contradictions** belong to Eunice's F1b scope:
    `docs/SUPABASE_SETUP.md:199` versus `DECISIONS.md` 2026-11-18 file 5, and the
    §11 items. Unblocks: a single accurate migration history.
-5. **Restate the still-unauthorized list** (no action needed to keep them stopped,
+6. **Restate the still-unauthorized list** (no action needed to keep them stopped,
    but a decision is needed to change any): capacity migration application on Test
    or Main, any Test/Main write or grant change, ledger repair, signed-in capacity
    QA, merge, ready-for-review, deployment, publication, repository visibility or
    permission changes. Main stays read-only until official launch.
-6. **Confirm the group-creation-on-Main question** in §6: if any live surface
+7. **Confirm the group-creation-on-Main question** in §6: if any live surface
    points at Main, a row-8 promotion decision is required before capacity
    planning; if none does, record that so Main's arity drift is treated as latent.

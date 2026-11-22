@@ -312,7 +312,7 @@ F4 wording now states explicitly that:
 - it is never security authority;
 - real server authority is `private.can_manage_recruitment_post` plus the relevant membership check;
 - browse-row `false` must not be interpreted as an actual authorization denial;
-- the private helpers are absent from checked-in migrations but present in live Test/Main, so their origin remains unreconciled;
+- the private helpers are **defined by checked-in** `20261118050000_stage6_chat_recruitment.sql` (`:133`, `:160`) and are present in live Test/Main, so their origin is explained; only whether the live bodies equal the committed text remains open (Role 6 correction, 2026-11-22; the earlier wording of this bullet was factually wrong);
 - Adam's 2026-11-22 QA/security authorization does not authorize applying PR #41.
 
 ## 14. Coordinator reconciliation snapshot — 2026-11-22 17:09 HKT
