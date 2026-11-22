@@ -2,6 +2,20 @@
 
 Status: **DRAFT — revised for Option A (Adam's 2026-11-21 decision); static preparation only; no runtime verification; not applied.** This document accompanies the SQL draft at `supabase/migrations/20261119090000_group_hard_max.sql`.
 
+## F4 documentation-only amendment (2026-11-22)
+
+Branch `docs/role6-capacity-f4-wording-20261122`, starting exactly from SQL head
+`2bc29595f5c66b0f379a4a46f544a2364fc88be2`. **Documentation only**: the
+`can_create_post` safety wording, the private-helper reconciliation against the
+authorized 2026-11-22 live read-only results, and the exact authorization
+boundary are recorded below. No SQL grammar, grant, function signature, return
+shape, error token or migration behaviour was altered, and no `supabase/`,
+client, server, Vite, route or dependency file was changed. Proof required by
+the assignment: `git diff 2bc2959… HEAD -- supabase` is empty; the migration
+blob stays `sha256 5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887`.
+`docs/team/DECISIONS.md` and `docs/team/CAPACITY_CLIENT_SCHEMA_CUTOVER_PROPOSAL.md`
+are deliberately **not** edited here: Eunice's separate F1b assignment owns them.
+
 ## Superseded by Adam's 2026-11-21 approval
 
 The earlier revisions of this draft (recorded below at `252e292`, `80a829b` and
@@ -86,7 +100,7 @@ Role 6’s fresh review then found that the profile-availability branch was chec
 
 Adam-repair’s report also flagged these items for owner review; none is changed silently here:
 
-- `can_create_post` is calculated from active membership but the browseable query excludes the viewer’s own group; verify the pre-existing recruitment-create flag/list-filter contradiction independently.
+- `can_create_post` is calculated from active membership but the browseable query excludes the viewer’s own group; verify the pre-existing recruitment-create flag/list-filter contradiction independently. Under Adam’s safety contract this field is retained **only** for legacy client allowlist compatibility and is **never** security authority — see “Remaining integration issue” below.
 - The `max_members` column/constraint reuse does not fail closed if an existing same-named object has a different definition; add an exact-definition preflight or document the accepted risk.
 - Effective ACLs, default privileges, and direct `study_groups.max_members` visibility need live-catalog verification.
 - The private removal helper relies on its public caller for some authority checks; verify all callers and the live invitation-trigger state.
@@ -125,14 +139,101 @@ These observations reduce uncertainty but do not replace the exact-head re-revie
 
 ## Remaining integration issue
 
-`list_current_term_course_groups` still computes `can_create_post` from active membership while excluding the viewer’s own active group from the browse rows. The field is therefore always false for returned rows, and the checked-in client consumes it for post-creation UI. This is pre-existing and is not silently changed in this capacity migration. Under Option A the legacy wrapper keeps the column so old allowlists still parse it, and the comment above the wrapper states explicitly that the value is structural, never authorization; real posting authority stays with `private.can_manage_recruitment_post` plus membership checks. The coordinated client/API work must still decide whether to remove the flag from the browse contract and source create capability from My Groups, or explicitly change the RPC audience.
+`list_current_term_course_groups` still computes `can_create_post` from active membership
+while excluding the viewer’s own active group from the browse rows, so the value is
+structurally `false` for every row that contract can return. Under Adam’s safety
+contract this field is a **legacy client allowlist compatibility field only**; it is
+**never security authority**. Real server-side authority for creating a recruitment
+post is `private.can_manage_recruitment_post` together with the relevant membership
+check, and a write attempt is decided by those server checks alone.
+
+A `can_create_post = false` value on the browse contract must therefore **not** be
+interpreted as an actual server denial. Browse rows intentionally exclude the
+viewer’s own active group, and the field’s historical computation is structurally
+misleading for exactly those rows, so the value carries no denial meaning for them.
+This documentation correction does **not** alter the SQL and does **not** resolve any
+future API redesign choice: whether to drop the flag from the browse contract and
+source create capability from My Groups, or to change the RPC audience deliberately,
+remains coordinated client/API work.
+
+Distinguishing the historical contract from the current integrated client: an earlier
+revision of this file stated that the checked-in client consumes `can_create_post` for
+post-creation UI. That described the historical contract. As a reviewed evidence
+statement at client head `d4558a73dccfa0878dc43ed78271c44865574d5b`, the
+coordinator/Role 6 review found the field mapped and parsed for legacy allowlist
+compatibility but did **not** identify it as a production UI authority consumer. That
+is a statement about reviewed evidence at one exact client SHA, not a universal product
+claim. Under Option A the legacy wrapper keeps the column so old allowlists still parse
+it, and the comment above the wrapper states explicitly that the value is structural,
+never authorization; real posting authority stays with `private.can_manage_recruitment_post`
+plus membership checks.
 
 ## Open questions
 
 - Role 6’s guard finding is resolved by removing the replacement; a complete guard/trigger change remains deferred.
 - Role 6’s exact-head static review of the pre-Option-A SQL is recorded; the Option A SQL now needs a fresh exact-head review of the changed file, and no formal database-application approval has been given for either version.
 - Live Test catalog ownership, RLS, grants, and transaction-ID behavior still need verification before execution. Function ownership and any non-`public`/`anon` grantees (for example `service_role`) on the replaced objects were **not** rewritten here and must be read during the authorized Test preflight.
-- `private.can_browse_current_term_group` and `private.can_manage_recruitment_post` are referenced by this SQL but are not defined in any checked-in migration; their live origin must be confirmed before any Test application.
+- `private.can_browse_current_term_group` and `private.can_manage_recruitment_post` are
+  referenced by this SQL and are **not defined in any checked-in migration**; that
+  repository statement remains accurate. Adam authorized live read-only catalog
+  inspection on 2026-11-22, and the metadata-only observation found **both helpers
+  already present in live Test and in live Main** (`postgres` owner, `SECURITY
+  DEFINER`, `EXECUTE` granted to `postgres` only). Their live origin and their
+  relationship to repository migration history are therefore **unreconciled**, which
+  **reinforces rather than resolves** the migration-stop baseline mismatch recorded
+  below: before any application this dependency must either become its own
+  checked-in migration or be formally documented as an out-of-band live object.
 - The compatibility wrappers and the fail-closed stub are temporary contracts. Their removal requires a later lead-approved cleanup migration; they are not dropped by this file.
 - The client release order and mapper/UI PR must be agreed before Test application.
-- Adam’s separate Test authorization is still required after the final SQL review.
+- Adam’s 2026-11-22 authorization is recorded in “Authorization boundary recorded
+  2026-11-22” below. It authorizes signed-in and multi-account Test QA and necessary
+  Test security work; it does **not** authorize applying this file, merging,
+  deploying or publishing.
+
+## Authorization boundary recorded 2026-11-22
+
+Adam’s scope as received on 2026-11-22. It is a scope decision, not a release approval:
+
+- **Signed-in Test QA and multi-account Test QA: authorized**, within the approved
+  CityLink scope.
+- **Necessary Test schema, RLS, grant, ownership and security-policy work:
+  authorized**, within the approved CityLink scope, with each exact change and result
+  recorded.
+- **Main `pijslbchvstkoweslymr`: read-only inspection and verification only** until
+  official launch. No Main write, migration, deletion or schema change. Any future
+  Main change still requires Adam’s separate written decision in
+  `docs/team/DECISIONS.md`.
+- **Deployment and publication: not authorized.** GitHub repository visibility and
+  permission changes: not authorized.
+- **QA and security authorization is not merge or release approval.** Commit, push,
+  merge, migration application, deployment and publication remain separate decisions
+  with separate recorded evidence.
+- **This PR #41 SQL remains unapplied, and the application is stopped.** The
+  authorized read-only preflight on 2026-11-22 found **three different baseline
+  identities** for the same schema history — the checked-in repository migration
+  filenames, the actual Test ledger and the actual Main ledger — plus a Main
+  `create_group_and_invite` taking two arguments where Test and the repository
+  baseline take three, and a different grant posture between Test and Main. Under
+  Adam’s existing release gate a material mismatch is a preflight **stop**, so
+  application is halted until the baselines and migration history are reconciled.
+
+## Evidence classes for this document
+
+- **Static/source evidence:** this file,
+  `CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md`, the SQL at
+  `2bc29595f5c66b0f379a4a46f544a2364fc88be2`, main `1a583e30c019733d1880d2614ca853481509fdad`
+  and client head `d4558a73dccfa0878dc43ed78271c44865574d5b`.
+- **Repository absence (static):** the two `private` helpers are defined in no
+  checked-in migration; they appear only in
+  `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql`.
+- **Live read-only evidence, performed by the coordinator under Adam’s separate
+  2026-11-22 authorization and not by this task:** both helpers exist in the Test and
+  Main catalogs; Test has only the three-argument `create_group_and_invite`, no
+  `*_capacity` functions and no `study_groups.max_members` column; Main has only a
+  two-argument `create_group_and_invite`, no `max_members` and no `*_capacity`
+  functions; `private` schema USAGE excludes `service_role` on both; Main grants are
+  broader than Test for several public group functions.
+- **Not verified here:** SQL execution, migration application, application-row
+  access or writes, signed-in behaviour, concurrency/locking, capacity behaviour at
+  scale, deployment or publication. This F4 amendment made no database contact and
+  invoked no Supabase tool.
