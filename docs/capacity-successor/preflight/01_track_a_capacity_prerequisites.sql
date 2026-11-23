@@ -345,12 +345,57 @@ select '01', r.id, 'signature the reviewed file replaces is present: ' || r.sig,
   from replaced r
 
 union all
-select '01', 'A-RPL-06', 'two-argument create_group_and_invite is gone',
-       'absent — the reviewed file drops it at blob :245',
+-- F16 fix (Adam, 2026-11-23 02:25): the two-argument create_group_and_invite is
+-- TARGET-RELATIVE, not universally absent. Recorded live parity (coordinator
+-- metadata snapshot §5) says CityLink Launch still ships (uuid,uuid) — the
+-- reviewed file drops it at blob :245 — while the frozen Prototype already moved
+-- to (uuid,uuid,text) in Stage 5 and therefore has no (uuid,uuid) to drop.
+-- Judging both targets against "absent" failed the release target for being
+-- correct: F13's defect in the opposite direction.
+--
+-- The expectation therefore comes from the DECLARED ref, not from the project
+-- this package was first designed against. `current_setting(..., true)` is a
+-- read, not a SET, so the page stays SELECT-only and writes nothing. An
+-- undeclared or unrecognised ref yields UNPINNED, never PASS: an unknown target
+-- state must not be green by omission. A genuinely unexpected state still FAILs
+-- — Launch without (uuid,uuid), or Prototype with it.
+select '01', 'A-RPL-06',
+       'two-argument create_group_and_invite matches the declared target',
+       case coalesce(nullif(btrim(current_setting('citylink.capacity_target_ref', true)), ''), '')
+         when 'pijslbchvstkoweslymr' then
+           'present — CityLink Launch still ships (uuid,uuid); the reviewed file drops it at blob :245'
+         when 'wkzclgmhrtecnpexfesr' then
+           'absent — the frozen Prototype replaced it with (uuid,uuid,text) in Stage 5'
+         else
+           'unknown — no recognised target ref declared, so no expectation can be judged'
+       end,
        coalesce(to_regprocedure('public.create_group_and_invite(uuid,uuid)')::text,
                 '<absent>'),
-       case when to_regprocedure('public.create_group_and_invite(uuid,uuid)') is null
-            then 'PASS' else 'FAIL' end
+       case coalesce(nullif(btrim(current_setting('citylink.capacity_target_ref', true)), ''), '')
+         when 'pijslbchvstkoweslymr' then
+           case when to_regprocedure('public.create_group_and_invite(uuid,uuid)') is not null
+                then 'PASS' else 'FAIL' end
+         when 'wkzclgmhrtecnpexfesr' then
+           case when to_regprocedure('public.create_group_and_invite(uuid,uuid)') is null
+                then 'PASS' else 'FAIL' end
+         else 'UNPINNED'
+       end
+union all
+-- A-RPL-07 (capture): the whole create_group_and_invite overload set for the
+-- declared target. A verdict alone cannot show that a *different* overload
+-- appeared or vanished, so the set is recorded for cross-run comparison — the
+-- same capture-and-compare discipline as A-TRG-03.
+select '01', 'A-RPL-07',
+       'create_group_and_invite overload inventory for the declared target',
+       'recorded for cross-run comparison; carries no gate value',
+       coalesce((select string_agg(pg_get_function_identity_arguments(p.oid),
+                                   ' ;; ' order by 1)
+                   from pg_proc p
+                   join pg_namespace n on n.oid = p.pronamespace
+                  where n.nspname = 'public'
+                    and p.proname = 'create_group_and_invite'),
+                '<none>'),
+       'CAPTURE'
 
 union all
 select '01', 'A-LGC-' || lpad((l.ord * 2 - 1)::text, 2, '0'),
@@ -431,4 +476,17 @@ select '01', 'A-TRG-03',
        'CAPTURE'
 
  order by check_id
- limit 62;
+ limit 63;
+-- F16 (Adam, 2026-11-23 02:25). A-RPL-06 used to assert that the two-argument
+--   create_group_and_invite was absent everywhere, because that is what the
+--   frozen Prototype looks like after Stage 5. CityLink Launch still ships it —
+--   the reviewed file drops it at blob :245 — so the row failed the release
+--   target for being correct. The expectation is now read from the DECLARED
+--   target ref: Launch expects it present, the frozen Prototype expects it
+--   absent, and any other or undeclared ref yields UNPINNED rather than passing
+--   by omission. This is the only place a page reads a marker, it is a read of
+--   current_setting (never a SET), and nothing is written. A-RPL-07 captures the
+--   whole overload set so a change in a *different* overload is visible across
+--   runs instead of being inferred from one verdict.
+--
+-- SAFE TO RUN TWICE; identical rows are the expected outcome.
