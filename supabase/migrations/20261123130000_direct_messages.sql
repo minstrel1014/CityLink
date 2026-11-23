@@ -302,8 +302,40 @@ grant execute on function public.mark_direct_thread_read(uuid) to authenticated;
 
 -- 5. Instant delivery (Adam: "yes, instant message") --------------------------------------
 -- Clients never get SELECT on the tables, so postgres_changes subscriptions are impossible.
--- Delivery therefore uses Realtime BROADCAST from a trigger on a per-thread private topic,
--- authorised by a policy on realtime.messages that checks thread participation.
+-- Delivery uses Realtime BROADCAST from a trigger on a per-thread private topic, authorised by
+-- a policy on realtime.messages. Two Role 6 blocking findings (2026-11-23) are fixed here:
+--   B1 the broadcast call passed a text literal where the `new record` argument belongs, so the
+--      function could not be resolved (42883) and every insert rolled back. The call below uses
+--      the real signature on this project:
+--      realtime.broadcast_changes(topic_name text, event_name text, operation text,
+--                                 table_name text, table_schema text, new record,
+--                                 old record, level text default 'ROW')
+--      (verified read-only on pijslbchvstkoweslymr on 2026-11-23: eight arguments, the eighth
+--      defaulted; Role 6 described seven, the substance of the defect is unchanged.)
+--   B2 the policy subquery read public.direct_threads as the subscriber, but this migration
+--      revokes table access from authenticated, so the subscription failed with permission
+--      denied. The check now lives in a SECURITY DEFINER helper that the policy calls.
+
+create or replace function private.is_direct_thread_participant(p_topic text)
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select exists (
+    select 1
+    from public.direct_threads as t
+    where p_topic = 'thread:' || t.id::text
+      and (select auth.uid()) in (t.user_a, t.user_b)
+  );
+$function$;
+
+revoke all on function private.is_direct_thread_participant(text) from public, anon, authenticated;
+-- The policy runs as the subscriber, so this grant is required; without it the policy fails
+-- with permission denied exactly like the table-level revoke did.
+grant execute on function private.is_direct_thread_participant(text) to authenticated;
+
 create or replace function private.broadcast_direct_message()
 returns trigger
 language plpgsql
@@ -312,14 +344,13 @@ set search_path to ''
 as $function$
 begin
   perform realtime.broadcast_changes(
-    'thread:' || new.thread_id::text,
-    'INSERT',
-    'INSERT',
-    'direct_messages',
-    'public',
-    'direct_messages',
-    new,
-    null
+    'thread:' || new.thread_id::text,  -- topic_name
+    'INSERT',                          -- event_name
+    'INSERT',                          -- operation
+    tg_table_name,                     -- table_name
+    tg_table_schema,                   -- table_schema
+    new,                               -- new record
+    null                               -- old record
   );
   return new;
 end;
@@ -330,19 +361,23 @@ after insert on public.direct_messages
 for each row execute function private.broadcast_direct_message();
 
 -- Realtime authorisation: only the two participants may subscribe to a thread topic.
+-- KNOWN RISK (recorded, not yet resolvable by SQL): realtime.messages is owned by
+-- supabase_realtime_admin, and the migration role `postgres` is neither that role nor a
+-- superuser on pijslbchvstkoweslymr (verified read-only 2026-11-23). CREATE POLICY requires
+-- table ownership, so this statement may fail with 42501 "must be owner of table messages".
+-- If it does, private channels cannot be authorised from a migration and the delivery layer
+-- must fall back to short-interval polling of list_direct_messages until Adam decides.
 create policy "direct thread participants can read topic"
 on realtime.messages
 for select
 to authenticated
-using (
-  realtime.topic() like 'thread:%'
-  and exists (
-    select 1
-    from public.direct_threads t
-    where 'thread:' || t.id::text = realtime.topic()
-      and ((select auth.uid()) = t.user_a or (select auth.uid()) = t.user_b)
-  )
-);
+using (private.is_direct_thread_participant((select realtime.topic())));
+
+-- Operational preconditions that SQL cannot set (Role 6 P-a / P-b):
+--   P-a the project's Realtime setting "Allow public access" must be disabled, otherwise anyone
+--       can subscribe to the public topic `thread:<uuid>` and bypass this policy entirely;
+--   P-b the client must subscribe with `{ config: { private: true } }` and await
+--       supabase.realtime.setAuth() first, otherwise private broadcasts are silently dropped.
 
 -- D5 (Adam, 2026-11-23): no retention limit in v1; messages are kept indefinitely.
 -- The rate limit for D3 lives inside send_direct_message above (30 per sender per thread
