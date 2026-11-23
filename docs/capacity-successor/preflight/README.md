@@ -116,11 +116,45 @@ from reading documentation, and each one is a fail-open risk if it is forgotten:
   unchanged-across-apply comparison. Before writing any expectation about a live
   target, read it off a database in that state; package doc §14 is the erratum.
 - **Re-scoping the target invalidates expectations that were read off the old
-  one.** Finding F16: the gate now authorises CityLink Launch (package doc §11.5),
-  but page 01's replaced-signature rows were derived from the frozen Prototype's
-  state, and `A-RPL-06` asserts that the two-argument `create_group_and_invite` is
-  _absent_ — which the reported Launch state contradicts. Expect that row to FAIL
-  on the authorised target until its expectation is re-derived from Launch's own
-  captured rows. Do not relax it in place: an expectation that fails on the
-  correct target is a question for review, and one edited to match a guess is a
-  defect.
+  one.** Finding F16, **closed 2026-11-23**: the gate now authorises CityLink
+  Launch (package doc §11.5), but page 01's replaced-signature rows had been
+  derived from the frozen Prototype's state, and `A-RPL-06` asserted that the
+  two-argument `create_group_and_invite` is _absent_ — which the reported Launch
+  state contradicts, since there it is the only create overload. The row is now
+  target-relative: it reads the operator-declared ref and judges against that
+  target's own expected state, returning `UNPINNED` when no ref is declared and
+  `FAIL` on a state that matches neither expectation. Six declarations were
+  measured and each produced the intended verdict. The lesson stands as a rule:
+  an expectation that fails on the correct target is a question for review, and
+  one edited to match a guess is a defect — the fix is to derive it from the
+  target's own rows, which is what the new `A-RPL-07` capture exists for.
+- **A reviewed DDL file can still be unable to apply, and a passing review does
+  not make it applicable.** Finding F17: the reviewed blob re-declares
+  `list_group_recruitment_posts` with fourteen output columns, so on a target
+  still holding the thirteen-column Stage 6 shape it aborts with `42P13` and the
+  single transaction rolls everything back. That target is CityLink Launch, which
+  never received row 8. The fix is a separate, earlier migration that drops only
+  that identity and only in that shape; it is never folded into the reviewed file,
+  whose SHA-256 is the reviewed artefact. Failure reproduced first, then the
+  ordered apply proven at exit 0 — matrix doc §3-§4.
+- **Applying successfully is not the same as working.** Finding F19: on a
+  Launch-shaped target the blob now applies at exit 0 and the post list fails on
+  its first call with `column p.subject does not exist`, because
+  `group_recruitment_posts.subject` is row 8's object. plpgsql bodies are not
+  column-resolved at creation, so a successful apply proves nothing about the
+  reads. Add the column alone and the call returns rows — that is the control that
+  separates "broken DDL" from "missing prerequisite".
+- **A snapshot that records absence is not a snapshot that records shape.**
+  Finding F18: the Launch record enumerates helper posture, row-8 objects and the
+  absence of capacity objects, but no `pg_get_function_result`, so ten of the
+  seventeen create-or-replace statements cannot be checked for a return-type
+  collision. One `pg_proc` query closes it; until it runs, those rows are "not
+  enumerated", which is not the same as "clean".
+- **A digest that "matches on both targets" can still be the wrong family.** Finding
+  F20: the parity report's canonical helper digests were reproduced on neither
+  target under the published recipe, and nine plausible variants were tested against
+  the live bodies without producing them — while the raw body digests matched the
+  report exactly, proving the input text was the same. A value is only a pin when
+  the recipe that produced it is published alongside it. Before declaring
+  `citylink.capacity_pinned_digests`, confirm the value reproduces under the recipe
+  page 05 implements, not the recipe a report happens to have used.
