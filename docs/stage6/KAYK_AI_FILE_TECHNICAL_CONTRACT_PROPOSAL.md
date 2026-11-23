@@ -13,7 +13,7 @@
 
 | #   | 決策         | 決定值                                                                                                                                          | 影響章節 |
 | --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| 1   | 儲存後端     | **外部雲端硬碟（Google Drive），由 CityLink 集中管理**（1C）。詳見 `KAYK_DRIVE_ADAPTER_DESIGN.md`                                               | 5、6     |
+| 1   | 儲存後端     | **Cloudflare R2 私有 bucket**（`citylink-group-files`）。詳見 `KAYK_R2_ADAPTER_DESIGN.md`                                                       | 5、6     |
 | 2   | 簽名連結 TTL | **300 秒**，每次請求重簽；因 Drive 無簽名 URL，改由 CityLink 自行以 HMAC 簽發                                                                   | 5        |
 | 3   | 保留期定義   | **日曆月**：`starts_on + interval '5 months'`，到期時刻 23:59:59（Asia/Hong_Kong）；`starts_on` 未填時以 term code 推導並記錄 `retention_basis` | 8        |
 | 4   | AI provider  | **OpenRouter + DeepSeek**（預設 `deepseek/deepseek-v3.2`）；只傳抽取後文字，使用者觸發並顯示第三方揭露                                          | 9        |
@@ -22,7 +22,7 @@
 
 六項已定稿。Adam 同時授權 Kayk 在此功能範圍內決定同類技術與產品細節；涉及新增付費、建立帳戶或憑證、部署、發布、GitHub 合併或 Main 寫入者，仍須回到 Adam。
 
-**因第 1 項改為外部硬碟，第 5 章原 Supabase Storage bucket 與 `storage.objects` policy 設計作廢**，改以 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 5、6 節為準。第 2 至 4 章（授權模型、資料模型、RPC 契約）仍然有效，僅 `storage_path` 改為 `drive_file_id`。
+**因第 1 項改為 Cloudflare R2，第 5 章原 Supabase Storage bucket 與 `storage.objects` policy 設計作廢**，改以 `KAYK_R2_ADAPTER_DESIGN.md` 第 4、5 節為準。第 2 至 4 章（授權模型、資料模型、RPC 契約）仍然有效，僅 `storage_path` 改為 `drive_file_id`。
 
 ## 2. 授權模型
 
@@ -61,7 +61,7 @@
 
 ## 5. 儲存與連結
 
-> **本節已由 Adam 的 1C 決定取代。** 不再使用 Supabase Storage bucket 與 `storage.objects` policy；改為 Google Drive 加 Edge Function 代理，下載連結由 CityLink 以 HMAC 簽發 300 秒有效。實作細節見 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 5、6 節。以下原文保留作為歷史記錄。
+> **本節已由 Adam 的儲存決定取代。** 不再使用 Supabase Storage bucket 與 `storage.objects` policy；改為 Cloudflare R2 私有 bucket，下載以原生 presigned URL 簽發 300 秒有效，無需代理。實作細節見 `KAYK_R2_ADAPTER_DESIGN.md` 第 4、5 節。以下原文保留作為歷史記錄。
 
 單一私有 bucket；`storage.objects` 的 select／insert policy 使用同一個 predicate 並綁定路徑前綴，物件路徑必須以該 `group_id` 開頭，確保繞過前端直呼 Storage API 也取不到他組物件。不使用 public bucket，不使用 `getPublicUrl`。下載一律「先驗證、再換短效簽名 URL」，清單回應不夾帶 URL。
 
@@ -71,7 +71,7 @@
 
 ## 6. 大小與格式
 
-大小上限定為 `104857600` bytes（100 MB）。在 1C 的 Drive 方案下，單檔上限（5 TB）不是限制，真正的限制是專用帳號的 **15 GB 總量**，因此必須實作 `about.get` 配額檢查與每群組軟上限；100 MB 上傳必須走 resumable session，不可整包經過我們的伺服器。
+大小上限定為 `104857600` bytes（100 MB）。在 R2 方案下，單檔大小不是限制，真正的限制是免費額度的 **10 GB 總量**，因此必須以資料庫統計實作配額檢查與每群組軟上限；100 MB 以單次 presigned `PUT` 直傳，不經過我們的伺服器。
 
 伺服器端以 Storage 物件的實際大小與 content type 為準，不信任用戶端宣告；以 magic byte 嗅探真實類型，保留宣告值供稽核比對。不一致時不阻擋上傳（產品要求接受所有類型），但不得以宣告類型決定呈現方式。
 
@@ -85,7 +85,7 @@
 
 `retention_expires_at` 於建立檔案時依學期計算並寫入，不在查詢時動態計算，否則學期資料變動會追溯改變歷史紀錄。
 
-到期先以 **lazy expiry** 實作：清單與下載都加 `retention_expires_at > now()` 條件，Drive 物件的實際刪除延後處理（Adam 2026-11-23 決定）。這代表過期檔案會停止可見，但**不會自動釋放 Drive 空間**，配額檢查因此不可省略。到期刪除是保留政策，**成員移除不觸發刪除**，兩者不可混為一談。`academic_terms.starts_on` 目前 nullable 且現行資料未填，處理方式見 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 8 節。
+到期先以 **lazy expiry** 實作：清單與下載都加 `retention_expires_at > now()` 條件，Drive 物件的實際刪除延後處理（Adam 2026-11-23 決定）。這代表過期檔案會停止可見，但**不會自動釋放 Drive 空間**，配額檢查因此不可省略。到期刪除是保留政策，**成員移除不觸發刪除**，兩者不可混為一談。`academic_terms.starts_on` 目前 nullable 且現行資料未填，處理方式見 `KAYK_R2_ADAPTER_DESIGN.md` 第 7 節。
 
 ## 9. AI 資料流
 

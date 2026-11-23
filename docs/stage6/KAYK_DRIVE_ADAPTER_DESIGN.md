@@ -1,5 +1,8 @@
 # CityLink 群組聊天室檔案：外部雲端硬碟 adapter 設計（1C）
 
+> **已被取代（2026-11-24）。** Adam 改選 Cloudflare R2，本文件僅保留為歷史記錄；
+> 現行設計見 `KAYK_R2_ADAPTER_DESIGN.md`。以下內容不再代表採用的架構。
+
 - **日期：** 2026-11-23
 - **Human owner：** Kayk
 - **分支：** `feature/kayk-ai-project-room-files`
