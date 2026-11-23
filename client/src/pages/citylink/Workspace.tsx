@@ -279,7 +279,7 @@ export function DemoMyProfile() {
             </span>
           </div>
           <Link href="/" className="exit-demo">
-            <LogOut size={16} /> Back to demo entry
+            <LogOut size={16} /> Go to CityLink entry
           </Link>
         </section>
         <section className="profile-form-panel">

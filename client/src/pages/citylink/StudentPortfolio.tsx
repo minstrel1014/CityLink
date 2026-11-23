@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, RefreshCw, UserRound } from "lucide-react";
+import { BookOpen, RefreshCw, UserRound } from "lucide-react";
 import { Link } from "wouter";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
@@ -139,7 +139,7 @@ export default function StudentPortfolio({
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
         <Link href={`/courses/${courseId}/classmates`} className="back-link">
-          <ArrowLeft size={17} /> Back to coursemates
+          View coursemates
         </Link>
         {loading && (
           <div className="course-directory-state" role="status">

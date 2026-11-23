@@ -121,6 +121,9 @@ describe("course detail group data mapping", () => {
           group_name: "Research team",
           group_status: "active",
           group_size: 3,
+          max_members: 5,
+          capacity_count: 3,
+          capacity_state: "available",
         },
       ])
     ).toEqual([
@@ -130,6 +133,9 @@ describe("course detail group data mapping", () => {
         group_name: "Research team",
         group_status: "active",
         group_size: 3,
+        max_members: 5,
+        capacity_count: 3,
+        capacity_state: "available",
       },
     ]);
     expect(() =>
@@ -140,6 +146,9 @@ describe("course detail group data mapping", () => {
           group_name: "Research team",
           group_status: "active",
           group_size: 3,
+          max_members: 5,
+          capacity_count: 3,
+          capacity_state: "available",
           member_names: ["Private Name"],
         },
       ])
@@ -152,7 +161,10 @@ describe("course detail group data mapping", () => {
       group_id: "22222222-2222-4222-8222-222222222222",
       group_name: "Research team",
       group_status: "forming",
-      group_size: 1,
+      group_size: 2,
+      max_members: 5,
+      capacity_count: 2,
+      capacity_state: "available",
     };
     expect(() => mapCourseGroupSummaries([{ ...row, group_size: 0 }])).toThrow(
       /invalid data/i

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   BookOpen,
@@ -8,8 +8,12 @@ import {
   Users,
 } from "lucide-react";
 import { Link } from "wouter";
+import { CoursePeerList } from "@/components/citylink/CoursePeerList";
 import { CourseIcon, EmptyState, Status } from "@/components/citylink/Shared";
-import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import {
+  useSupabaseSession,
+  type SupabaseSessionState,
+} from "@/contexts/SupabaseSessionContext";
 import {
   getCourseDirectoryErrorMessage,
   loadCourseDirectory,
@@ -18,6 +22,7 @@ import {
 import {
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
+  listActiveGroupMembers,
   listCourseGroupInviteCandidates,
   listCourseGroupPeers,
   listCourseGroupSummaries,
@@ -26,24 +31,50 @@ import {
   sendGroupInvitation,
   type CourseGroupSummary,
   type GroupCoursePeer,
+  type GroupMembershipRow,
   type GroupWorkflowSnapshot,
   type OwnCourseProfile,
 } from "@/lib/supabaseGroups";
 import {
+  filterCoursePeers,
   getCourseInviteGroups,
   getPeerInvitationState,
+  getViewerGroupRelationship,
   isCoursePeerInviteable,
   splitCoursePeersByGroup,
 } from "@/lib/courseDetailActions";
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  createActionOwner,
+  createRequestGeneration,
+  isCurrentCourseSnapshot,
+  matchesCourseScope,
+  subscribeCourseRequestInvalidation,
+} from "@/lib/courseRequestRefresh";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
+import {
+  CreatePeopleGroupInviteDialog,
+  getPeopleInviteErrorMessage,
+  PeopleGroupCapacity,
+} from "./PeopleCapacity";
+import { getGroupCapacityState } from "./groupCapacity";
 import "./CourseDetail.css";
 
 type DetailData = {
   userId: string;
+  courseId: string;
+  generation: number;
   directory: CourseDirectorySnapshot;
   groups: GroupWorkflowSnapshot;
   ownProfile: OwnCourseProfile;
+};
+type RosterData = {
+  userId: string;
+  courseId: string;
+  generation: number;
+  peers: GroupCoursePeer[];
+  summaries: CourseGroupSummary[];
+  inviteCandidateIds: string[];
 };
 type Feedback = { tone: "success" | "error"; message: string };
 type RosterFilter = "all" | "open" | "considering" | "full";
@@ -100,60 +131,214 @@ function groupStatusLabel(status: CourseGroupSummary["group_status"]) {
     : "Active";
 }
 
+export function inviteCapacityMessage(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return "Group is full";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "Group maximum is not set";
+  }
+  if (capacityState === "over_limit") {
+    return "This group has more than 19 active members. The leader must remove members before anyone can be added.";
+  }
+  if (capacityState === "checking") {
+    return "Checking group capacity…";
+  }
+  if (capacityState === "unknown") {
+    return "Group capacity could not be verified. Refresh the page before inviting.";
+  }
+  return null;
+}
+export function inviteCapacityGuidance(
+  capacityState: string,
+  visibleCount: number | null,
+  maximum: number | null
+): string | null {
+  if (capacityState === "full") {
+    return maximum !== null && visibleCount !== null
+      ? `This group has ${visibleCount}/${maximum} active members. The leader must open a place before you can invite.`
+      : "The leader must open a place before you can invite.";
+  }
+  if (capacityState === "maximum_not_set") {
+    return "The leader must set a maximum from 2 to 19 before anyone can be invited.";
+  }
+  return null;
+}
+
+export function getInviteGroupCapacity(
+  group: GroupWorkflowSnapshot["groups"][number],
+  roster: GroupMembershipRow[] | null,
+  userId: string
+): { count: number | null; maximum: number | null } {
+  if (roster === null) {
+    // A failed or incomplete roster read must remain server-checked.
+    return { count: null, maximum: group.max_members };
+  }
+  const creatorIncluded = roster.some(
+    member => member.profile_id === group.creator_id
+  );
+  const formingCreator =
+    group.status === "forming" &&
+    group.creator_id === userId &&
+    !creatorIncluded;
+  return {
+    count: roster.length + (formingCreator ? 1 : 0),
+    maximum: group.max_members,
+  };
+}
+
 export default function AuthenticatedCoursePeers({
   courseId,
   embedded = false,
+  refreshToken = 0,
 }: {
   courseId: string;
   embedded?: boolean;
+  refreshToken?: number;
 }) {
   const session = useSupabaseSession();
+  const authGeneration = session.authGeneration ?? 0;
+  // Remount the whole view when its account or course changes. This prevents
+  // feedback, drafts, and pending actions from crossing into another view.
+  const key = JSON.stringify([
+    session.status,
+    session.user?.id ?? null,
+    courseId,
+    authGeneration,
+  ]);
+  return (
+    <CoursePeersView
+      key={key}
+      courseId={courseId}
+      embedded={embedded}
+      refreshToken={refreshToken}
+      session={session}
+    />
+  );
+}
+
+function CoursePeersView({
+  courseId,
+  embedded,
+  refreshToken,
+  session,
+}: {
+  courseId: string;
+  embedded: boolean;
+  refreshToken: number;
+  session: SupabaseSessionState;
+}) {
   const userId = session.user?.id ?? null;
-  const userIdRef = useRef(userId);
-  userIdRef.current = userId;
+  const authGeneration = session.authGeneration ?? 0;
+  const scope = { userId, courseId };
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const mountedRef = useRef(true);
+  const actionContext = useRef({ userId, courseId, authGeneration });
+  const pendingInvite = useRef<symbol | null>(null);
+  if (
+    actionContext.current.userId !== userId ||
+    actionContext.current.courseId !== courseId ||
+    actionContext.current.authGeneration !== authGeneration
+  ) {
+    actionContext.current = { userId, courseId, authGeneration };
+    pendingInvite.current = null;
+  }
+  const createDialogTrigger = useRef<HTMLButtonElement | null>(null);
 
   const [data, setData] = useState<DetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [peers, setPeers] = useState<GroupCoursePeer[]>([]);
-  const [summaries, setSummaries] = useState<CourseGroupSummary[]>([]);
-  const [inviteCandidateIds, setInviteCandidateIds] = useState<string[]>([]);
+  const [roster, setRoster] = useState<RosterData | null>(null);
   const [peerLoading, setPeerLoading] = useState(false);
   const [peerError, setPeerError] = useState("");
   const [groupSummaryError, setGroupSummaryError] = useState("");
   const [inviteEligibilityError, setInviteEligibilityError] = useState("");
+  const [inviteRosters, setInviteRosters] = useState<
+    Record<string, GroupMembershipRow[] | null>
+  >({});
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<RosterFilter>("all");
   const [busyPeerId, setBusyPeerId] = useState("");
   const [choosingPeerId, setChoosingPeerId] = useState("");
   const [chosenGroupId, setChosenGroupId] = useState("");
+  const [creatingPeer, setCreatingPeer] = useState<GroupCoursePeer | null>(
+    null
+  );
+  const [creationError, setCreationError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
-  const requestGeneration = useRef(0);
+  const requestGeneration = useRef(createRequestGeneration()).current;
+  const rosterGeneration = useRef(createRequestGeneration()).current;
+  const actions = useRef(createActionOwner()).current;
+  useLayoutEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      pendingInvite.current = null;
+      actionContext.current = {
+        userId: null,
+        courseId: "",
+        authGeneration: -1,
+      };
+    };
+  }, []);
   useEffect(() => {
     setFeedback(null);
     setSearch("");
     setFilter("all");
     setChoosingPeerId("");
     setChosenGroupId("");
+    setCreatingPeer(null);
+    setCreationError("");
     setBusyPeerId("");
-  }, [courseId, userId]);
+  }, [authGeneration, courseId, userId]);
 
   useEffect(() => {
-    const generation = ++requestGeneration.current;
+    actions.mount();
+    return () => {
+      actions.unmount();
+    };
+  }, [actions]);
+
+  // Listen before starting the reads, so a request settling after a remount
+  // invalidates any read that may have started before the server committed it.
+  useEffect(
+    () =>
+      subscribeCourseRequestInvalidation(
+        () => currentScope.current,
+        () => {
+          requestGeneration.invalidate();
+          rosterGeneration.invalidate();
+          setData(null);
+          setRoster(null);
+          setLoading(true);
+          setPeerLoading(true);
+          setRetryToken(value => value + 1);
+        }
+      ),
+    [requestGeneration, rosterGeneration]
+  );
+
+  useEffect(() => {
+    const generation = requestGeneration.invalidate();
     let active = true;
     const isCurrent = () =>
       active &&
-      requestGeneration.current === generation &&
-      userIdRef.current === userId;
+      requestGeneration.isCurrent(generation) &&
+      matchesCourseScope(currentScope.current, scope);
     if (session.status !== "ready" || !userId || !supabaseClient) {
       setData(null);
       setLoading(false);
       setLoadError("");
       return () => {
         active = false;
-        if (requestGeneration.current === generation)
-          requestGeneration.current += 1;
+        if (requestGeneration.isCurrent(generation))
+          requestGeneration.invalidate();
       };
     }
     setLoading(true);
@@ -165,7 +350,14 @@ export default function AuthenticatedCoursePeers({
     ])
       .then(([directory, groups, ownProfile]) => {
         if (!isCurrent()) return;
-        setData({ userId, directory, groups, ownProfile });
+        setData({
+          userId,
+          courseId,
+          generation,
+          directory,
+          groups,
+          ownProfile,
+        });
         setLoading(false);
       })
       .catch(error => {
@@ -182,28 +374,39 @@ export default function AuthenticatedCoursePeers({
       });
     return () => {
       active = false;
-      if (requestGeneration.current === generation)
-        requestGeneration.current += 1;
+      if (requestGeneration.isCurrent(generation))
+        requestGeneration.invalidate();
     };
-  }, [retryToken, session.status, userId]);
+  }, [
+    authGeneration,
+    courseId,
+    requestGeneration,
+    retryToken,
+    session.status,
+    userId,
+  ]);
 
-  const ownData = data?.userId === userId ? data : null;
+  const ownData = isCurrentCourseSnapshot(
+    data,
+    scope,
+    requestGeneration.current()
+  )
+    ? data
+    : null;
   const course = ownData?.directory.courses.find(item => item.id === courseId);
   const enrolled = Boolean(
     ownData?.directory.enrolledCourseIds.includes(courseId)
   );
 
   useEffect(() => {
+    const generation = rosterGeneration.invalidate();
     let active = true;
-    if (
-      session.status !== "ready" ||
-      !userId ||
-      ownData?.userId !== userId ||
-      !enrolled
-    ) {
-      setPeers([]);
-      setSummaries([]);
-      setInviteCandidateIds([]);
+    const isCurrent = () =>
+      active &&
+      rosterGeneration.isCurrent(generation) &&
+      matchesCourseScope(currentScope.current, scope);
+    if (session.status !== "ready" || !userId || !ownData || !enrolled) {
+      setRoster(null);
       setPeerError("");
       setGroupSummaryError("");
       setInviteEligibilityError("");
@@ -213,45 +416,71 @@ export default function AuthenticatedCoursePeers({
       };
     }
     setPeerLoading(true);
+    setRoster(null);
     setPeerError("");
     setGroupSummaryError("");
     setInviteEligibilityError("");
-    setSummaries([]);
-    setInviteCandidateIds([]);
     void Promise.allSettled([
       listCourseGroupPeers(userId, courseId),
       listCourseGroupSummaries(userId, courseId),
       listCourseGroupInviteCandidates(userId, courseId),
     ]).then(([rosterResult, summaryResult, eligibilityResult]) => {
-      if (!active || userIdRef.current !== userId) return;
-      if (rosterResult.status === "fulfilled") {
-        setPeers(rosterResult.value.filter(peer => peer.profile_id !== userId));
-      } else {
-        setPeers([]);
+      if (!isCurrent()) return;
+      setRoster({
+        userId,
+        courseId,
+        generation,
+        peers:
+          rosterResult.status === "fulfilled"
+            ? rosterResult.value.filter(peer => peer.profile_id !== userId)
+            : [],
+        summaries:
+          summaryResult.status === "fulfilled" ? summaryResult.value : [],
+        inviteCandidateIds:
+          eligibilityResult.status === "fulfilled"
+            ? eligibilityResult.value
+            : [],
+      });
+      if (rosterResult.status === "rejected")
         setPeerError(getGroupWorkflowErrorMessage(rosterResult.reason));
-      }
-      if (summaryResult.status === "fulfilled") {
-        setSummaries(summaryResult.value);
-      } else {
-        setSummaries([]);
+      if (summaryResult.status === "rejected")
         setGroupSummaryError(
-          "Group membership could not be verified. Student categories and group actions are hidden until the Test group-summary service is available."
+          "Group membership could not be verified. The coursemate list and group actions are hidden until the group-summary service is available."
         );
-      }
-      if (eligibilityResult.status === "fulfilled") {
-        setInviteCandidateIds(eligibilityResult.value);
-      } else {
-        setInviteCandidateIds([]);
+      if (eligibilityResult.status === "rejected")
         setInviteEligibilityError(
           "Invitation eligibility could not be verified. Invite actions are hidden until the Test eligibility service is available."
         );
-      }
       setPeerLoading(false);
     });
     return () => {
       active = false;
+      if (rosterGeneration.isCurrent(generation)) rosterGeneration.invalidate();
     };
-  }, [courseId, enrolled, ownData?.userId, retryToken, session.status, userId]);
+  }, [
+    authGeneration,
+    courseId,
+    enrolled,
+    ownData,
+    refreshToken,
+    retryToken,
+    rosterGeneration,
+    session.status,
+    userId,
+  ]);
+
+  const ownRoster = isCurrentCourseSnapshot(
+    roster,
+    scope,
+    rosterGeneration.current()
+  )
+    ? roster
+    : null;
+  const peers = ownRoster?.peers ?? [];
+  const summaries = ownRoster?.summaries ?? [];
+  const inviteCandidateIds = ownRoster?.inviteCandidateIds ?? [];
+  const isPeerLoading =
+    peerLoading || (!ownRoster && !peerError && !groupSummaryError);
 
   const inviteGroups = useMemo(
     () =>
@@ -265,6 +494,83 @@ export default function AuthenticatedCoursePeers({
         : [],
     [courseId, ownData, userId]
   );
+  useEffect(() => {
+    let active = true;
+    if (!userId || inviteGroups.length === 0) {
+      setInviteRosters({});
+      return () => {
+        active = false;
+      };
+    }
+    void Promise.all(
+      inviteGroups.map(async group => {
+        try {
+          return [
+            group.id,
+            await listActiveGroupMembers(userId, group.id),
+          ] as const;
+        } catch {
+          return [group.id, null] as const;
+        }
+      })
+    ).then(entries => {
+      if (!active) return;
+      setInviteRosters(Object.fromEntries(entries));
+    });
+    return () => {
+      active = false;
+    };
+  }, [authGeneration, inviteGroups, refreshToken, userId]);
+  const inviteGroupOptions = useMemo(() => {
+    if (!ownData || !userId) return [];
+    return inviteGroups.map(group => {
+      // The workflow snapshot contains only the viewer's own membership row.
+      // Use the separately loaded full roster. Pending and failed reads both
+      // block the local action; the server remains authoritative only after
+      // the client has a usable roster.
+      const rosterEntry = inviteRosters[group.id];
+      const rosterLoaded = Object.prototype.hasOwnProperty.call(
+        inviteRosters,
+        group.id
+      );
+      const capacity = getInviteGroupCapacity(
+        group,
+        rosterEntry ?? null,
+        userId
+      );
+      const visibleCount = capacity.count;
+      const maximum = capacity.maximum;
+      const capacityState =
+        visibleCount === null
+          ? maximum === null
+            ? "maximum_not_set"
+            : rosterLoaded
+              ? "unknown"
+              : "checking"
+          : getGroupCapacityState(visibleCount, maximum);
+      return { group, visibleCount, maximum, capacityState };
+    });
+  }, [inviteGroups, inviteRosters, ownData, userId]);
+  const selectedInviteOption = inviteGroupOptions.find(
+    option => option.group.id === chosenGroupId
+  );
+  const activeInviteOption =
+    selectedInviteOption ??
+    (inviteGroupOptions.length === 1 ? inviteGroupOptions[0] : undefined);
+  const activeInviteBlockedMessage = activeInviteOption
+    ? inviteCapacityMessage(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.maximum
+      )
+    : null;
+  const activeInviteGuidance = activeInviteOption
+    ? inviteCapacityGuidance(
+        activeInviteOption.capacityState,
+        activeInviteOption.visibleCount,
+        activeInviteOption.maximum
+      )
+    : null;
   const splitPeers = useMemo(
     () => splitCoursePeersByGroup(peers, summaries),
     [peers, summaries]
@@ -291,53 +597,107 @@ export default function AuthenticatedCoursePeers({
       ) ?? null
     );
   }, [courseId, ownData, userId]);
-  const searchQuery = search.trim().toLocaleLowerCase();
-  const matchesFilter = (peer: GroupCoursePeer) => {
-    if (filter !== "all" && peer.status !== filter) return false;
-    if (!searchQuery) return true;
-    return [peer.display_name, peer.student_id ?? "", peer.major ?? ""]
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(searchQuery);
-  };
-  const visibleInGroup = splitPeers.inGroup.filter(matchesFilter);
-  const visibleLooking = splitPeers.lookingForGroup.filter(matchesFilter);
-  const visibleCount = visibleInGroup.length + visibleLooking.length;
+  const visiblePeers = filterCoursePeers(
+    peers,
+    search,
+    filter,
+    summaryByProfile
+  );
+  const visibleCount = visiblePeers.length;
 
-  async function sendInvite(peer: GroupCoursePeer) {
+  async function sendInvite(
+    peer: GroupCoursePeer,
+    creation?: { name: string; maxMembers: number }
+  ) {
     if (
       !userId ||
       !ownData ||
+      !ownRoster ||
+      !requestGeneration.isCurrent(ownData.generation) ||
+      !rosterGeneration.isCurrent(ownRoster.generation) ||
       busyPeerId ||
+      pendingInvite.current ||
       groupSummaryError ||
+      inviteEligibilityError ||
+      !isCoursePeerInviteable(peer.status) ||
       !inviteCandidateIds.includes(peer.profile_id) ||
       summaryByProfile.has(peer.profile_id)
-    )
+    ) {
+      if (creation && !pendingInvite.current) {
+        setCreationError(
+          "Invitation eligibility could not be confirmed. Close this dialog and refresh the page."
+        );
+      }
       return;
+    }
+    if (inviteGroups.length === 0 && !creation) {
+      setCreationError("");
+      setCreatingPeer(peer);
+      return;
+    }
+    if (creation && inviteGroups.length !== 0) {
+      setCreationError(
+        "Your group status has changed. Close this dialog and refresh the page before inviting."
+      );
+      return;
+    }
+    const selectedGroupId =
+      inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
+    if (!creation && !selectedGroupId) return;
+    if (!creation) {
+      const selectedOption = inviteGroupOptions.find(
+        option => option.group.id === selectedGroupId
+      );
+      const blockedMessage = selectedOption
+        ? inviteCapacityMessage(
+            selectedOption.capacityState,
+            selectedOption.visibleCount,
+            selectedOption.maximum
+          )
+        : null;
+      if (blockedMessage) {
+        setFeedback({ tone: "error", message: blockedMessage });
+        return;
+      }
+    }
+    const action = actions.begin();
+    if (!action) return;
+    const context = actionContext.current;
+    const attempt = Symbol("people-invitation");
+    const isCurrent = () =>
+      mountedRef.current &&
+      actionContext.current === context &&
+      pendingInvite.current === attempt &&
+      actions.isCurrent(action);
+    pendingInvite.current = attempt;
     setBusyPeerId(peer.profile_id);
     setFeedback(null);
+    setCreationError("");
     try {
-      if (inviteGroups.length === 0) {
-        const groupName = window
-          .prompt("Name your new group (1-50 characters):", "Study group")
-          ?.trim();
-        if (!groupName || groupName.length > 50) return;
+      if (creation) {
         await createGroupAndInvite(
           userId,
           courseId,
           peer.profile_id,
-          groupName
+          creation.name,
+          creation.maxMembers,
+          isCurrent
         );
+        if (!isCurrent()) return;
+        setCreatingPeer(null);
         setFeedback({
           tone: "success",
           message:
             "Your first invitation was sent. A forming group has been created with you as its leader; it becomes active when the invitee accepts.",
         });
       } else {
-        const selectedGroupId =
-          inviteGroups.length === 1 ? inviteGroups[0].id : chosenGroupId;
-        if (!selectedGroupId) return;
-        await sendGroupInvitation(userId, selectedGroupId, peer.profile_id);
+        await sendGroupInvitation(
+          userId,
+          selectedGroupId,
+          peer.profile_id,
+          isCurrent
+        );
+        if (!isCurrent()) return;
         setFeedback({
           tone: "success",
           message: "Your group invitation was sent.",
@@ -347,23 +707,46 @@ export default function AuthenticatedCoursePeers({
       setChosenGroupId("");
       setRetryToken(value => value + 1);
     } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: getGroupWorkflowErrorMessage(error),
-      });
+      if (!isCurrent()) return;
+      const message = getPeopleInviteErrorMessage(error);
+      if (creation) setCreationError(message);
+      else setFeedback({ tone: "error", message });
     } finally {
-      setBusyPeerId("");
+      if (isCurrent()) {
+        pendingInvite.current = null;
+        setBusyPeerId("");
+      }
+      actions.finish(action);
     }
   }
 
   function renderPeerCard(peer: GroupCoursePeer) {
     const summary = summaryByProfile.get(peer.profile_id);
+    const relationship =
+      summary && ownData && userId
+        ? getViewerGroupRelationship({
+            userId,
+            courseId,
+            groupId: summary.group_id,
+            memberships: ownData.groups.memberships,
+            joinRequests: ownData.groups.joinRequests,
+          })
+        : null;
     const invitationState =
       ownData && userId
-        ? getPeerInvitationState(userId, peer.profile_id, courseId, [
-            ...ownData.groups.incomingInvitations,
-            ...ownData.groups.outgoingInvitations,
-          ])
+        ? getPeerInvitationState(
+            userId,
+            peer.profile_id,
+            courseId,
+            [
+              ...ownData.groups.incomingInvitations,
+              ...ownData.groups.outgoingInvitations,
+            ],
+            !inviteEligibilityError &&
+              !groupSummaryError &&
+              inviteCandidateIds.includes(peer.profile_id) &&
+              !summary
+          )
         : null;
     const isChoosing = choosingPeerId === peer.profile_id;
     const inviteable = Boolean(
@@ -391,11 +774,7 @@ export default function AuthenticatedCoursePeers({
             )}
             <Link
               className="classmate-portfolio-link"
-              href={
-                embedded
-                  ? `/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`
-                  : `/courses/${courseId}/students/${peer.profile_id}`
-              }
+              href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`}
             >
               View portfolio
             </Link>
@@ -406,22 +785,26 @@ export default function AuthenticatedCoursePeers({
             <span className="status full">
               <span /> In a group
             </span>
+          ) : peer.status === "full" ? (
+            <span className="status full">
+              <span /> Not accepting invitations
+            </span>
           ) : (
             <Status status={peer.status} />
           )}
           {summary ? (
             <div className="classmate-group-meta">
               <strong>{summary.group_name || "Study group"}</strong>
-              <span>
-                {summary.group_size}{" "}
-                {summary.group_size === 1 ? "person" : "people"} ·{" "}
-                {groupStatusLabel(summary.group_status)}
-              </span>
+              <span>{groupStatusLabel(summary.group_status)}</span>
+              <PeopleGroupCapacity
+                count={summary.capacity_count}
+                maximum={summary.max_members}
+                state={summary.capacity_state}
+              />
             </div>
           ) : (
             <div className="classmate-group-meta looking">
               <strong>No current group</strong>
-              <span>Looking for a group</span>
             </div>
           )}
           <div className="skill-tags">
@@ -432,14 +815,26 @@ export default function AuthenticatedCoursePeers({
         </div>
         <div className="classmate-actions course-detail-actions">
           {summary ? (
-            summary.group_id === myCourseGroup?.id ? (
+            relationship === "member" ? (
+              <button
+                type="button"
+                className="invite-disabled course-detail-member-label"
+                disabled
+                title="This is already your group"
+              >
+                You are in this group already
+              </button>
+            ) : relationship === "requested" ? (
+              <Link href="/my-groups" className="invite-status compact">
+                Requested
+              </Link>
+            ) : summary.group_id === myCourseGroup?.id ? (
               <button
                 type="button"
                 className="invite-disabled compact"
                 disabled
-                title="This is already your group"
               >
-                Your group
+                Your forming group
               </button>
             ) : (
               <Link
@@ -473,16 +868,43 @@ export default function AuthenticatedCoursePeers({
                   onChange={event => setChosenGroupId(event.target.value)}
                 >
                   <option value="">Select a group</option>
-                  {inviteGroups.map(group => (
-                    <option value={group.id} key={group.id}>
-                      {group.name || "Study group"} · {group.status}
-                    </option>
-                  ))}
+                  {inviteGroupOptions.map(option => {
+                    const blockedMessage = inviteCapacityMessage(
+                      option.capacityState,
+                      option.visibleCount,
+                      option.maximum
+                    );
+                    return (
+                      <option
+                        value={option.group.id}
+                        key={option.group.id}
+                        disabled={Boolean(blockedMessage)}
+                      >
+                        {option.group.name || "Study group"} ·{" "}
+                        {option.group.status}
+                        {blockedMessage ? ` · ${blockedMessage}` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
+                {activeInviteBlockedMessage && (
+                  <p className="course-detail-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
+                {activeInviteGuidance && (
+                  <p className="course-detail-capacity-hint" role="note">
+                    {activeInviteGuidance}
+                  </p>
+                )}
                 <button
                   type="button"
                   className="primary invite-compact"
-                  disabled={!chosenGroupId || Boolean(busyPeerId)}
+                  disabled={
+                    !chosenGroupId ||
+                    Boolean(busyPeerId) ||
+                    Boolean(activeInviteBlockedMessage)
+                  }
                   onClick={() => void sendInvite(peer)}
                 >
                   {busyPeerId === peer.profile_id ? "Sending…" : "Send invite"}
@@ -499,23 +921,40 @@ export default function AuthenticatedCoursePeers({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                className="primary invite-compact"
-                disabled={Boolean(busyPeerId)}
-                aria-label={`Invite ${peer.display_name}`}
-                onClick={() => {
-                  if (inviteGroups.length > 1) {
-                    setChoosingPeerId(peer.profile_id);
-                    setChosenGroupId("");
-                  } else {
-                    void sendInvite(peer);
+              <>
+                <button
+                  type="button"
+                  className="primary invite-compact"
+                  disabled={
+                    Boolean(busyPeerId) || Boolean(activeInviteBlockedMessage)
                   }
-                }}
-              >
-                <Send size={15} />{" "}
-                {busyPeerId === peer.profile_id ? "Sending…" : "Invite"}
-              </button>
+                  aria-label={`Invite ${peer.display_name}`}
+                  onClick={event => {
+                    if (inviteGroups.length > 1) {
+                      setChoosingPeerId(peer.profile_id);
+                      setChosenGroupId("");
+                    } else {
+                      if (inviteGroups.length === 0) {
+                        createDialogTrigger.current = event.currentTarget;
+                      }
+                      void sendInvite(peer);
+                    }
+                  }}
+                >
+                  <Send size={15} />{" "}
+                  {busyPeerId === peer.profile_id ? "Sending…" : "Invite"}
+                </button>
+                {activeInviteBlockedMessage && (
+                  <p className="course-detail-capacity-hint" role="status">
+                    {activeInviteBlockedMessage}
+                  </p>
+                )}
+                {activeInviteGuidance && (
+                  <p className="course-detail-capacity-hint" role="note">
+                    {activeInviteGuidance}
+                  </p>
+                )}
+              </>
             )
           ) : (
             <button
@@ -591,7 +1030,7 @@ export default function AuthenticatedCoursePeers({
     <>
       {!embedded && (
         <Link href={`/courses/${courseId}`} className="back-link">
-          <ArrowLeft size={17} /> Back to My Group
+          <ArrowLeft size={17} /> My Group
         </Link>
       )}
       {loading && (
@@ -664,9 +1103,10 @@ export default function AuthenticatedCoursePeers({
               <div className="course-detail-invite-rule" role="note">
                 Invite actions follow the existing server eligibility rules. Any
                 active member may invite to a group; the creator may also send
-                the first invitation while a group is forming. Join requests are
-                available only from recruitment posts for active groups. Groups
-                have no maximum size.
+                the first invitation while a group is forming. Group leaders set
+                a maximum, and pending invitations do not reserve a place. To
+                find groups seeking members, browse the course’s recruitment
+                posts.
               </div>
               {feedback && (
                 <p
@@ -680,7 +1120,7 @@ export default function AuthenticatedCoursePeers({
                 <h2>
                   Coursemates <span className="count-pill">{peers.length}</span>
                 </h2>
-                {!peerLoading &&
+                {!isPeerLoading &&
                   !groupSummaryError &&
                   !inviteEligibilityError && (
                     <span>
@@ -721,7 +1161,7 @@ export default function AuthenticatedCoursePeers({
                     <option value="all">All availability</option>
                     <option value="open">Looking for a group</option>
                     <option value="considering">Open to invitations</option>
-                    <option value="full">Group formed</option>
+                    <option value="full">Not accepting invitations</option>
                   </select>
                 </label>
                 <span className="results-label">
@@ -765,18 +1205,18 @@ export default function AuthenticatedCoursePeers({
                   </button>
                 </div>
               )}
-              {peerLoading && (
+              {isPeerLoading && (
                 <div className="course-directory-state" role="status">
                   <span className="spinner" /> Loading current coursemates…
                 </div>
               )}
-              {!peerLoading && !peerError && peers.length === 0 && (
+              {!isPeerLoading && !peerError && peers.length === 0 && (
                 <EmptyState
                   title="No other coursemates are enrolled yet"
                   description="This list is based on current Test enrolment records. No sample names are added by the page."
                 />
               )}
-              {!peerLoading &&
+              {!isPeerLoading &&
                 !peerError &&
                 peers.length > 0 &&
                 !groupSummaryError &&
@@ -797,63 +1237,41 @@ export default function AuthenticatedCoursePeers({
                     </button>
                   </EmptyState>
                 )}
-              {!peerLoading &&
+              {!isPeerLoading &&
                 !peerError &&
                 peers.length > 0 &&
                 !groupSummaryError &&
                 visibleCount > 0 && (
-                  <>
-                    <section
-                      className="classmate-group-section"
-                      aria-labelledby="classmates-in-group"
-                    >
-                      <div className="classmates-section-title">
-                        <h2 id="classmates-in-group">
-                          In a group{" "}
-                          <span className="count-pill">
-                            {visibleInGroup.length}
-                          </span>
-                        </h2>
-                      </div>
-                      {visibleInGroup.length ? (
-                        <div className="classmate-list">
-                          {visibleInGroup.map(renderPeerCard)}
-                        </div>
-                      ) : (
-                        <div className="group-workflow-empty">
-                          No coursemates in a group match this search.
-                        </div>
-                      )}
-                    </section>
-                    <section
-                      className="classmate-group-section"
-                      aria-labelledby="classmates-looking"
-                    >
-                      <div className="classmates-section-title">
-                        <h2 id="classmates-looking">
-                          Looking for a group{" "}
-                          <span className="count-pill">
-                            {visibleLooking.length}
-                          </span>
-                        </h2>
-                      </div>
-                      {visibleLooking.length ? (
-                        <div className="classmate-list">
-                          {visibleLooking.map(renderPeerCard)}
-                        </div>
-                      ) : (
-                        <div className="group-workflow-empty">
-                          No ungrouped coursemates match this search.
-                        </div>
-                      )}
-                    </section>
-                  </>
+                  <CoursePeerList
+                    peers={visiblePeers}
+                    renderPeer={renderPeerCard}
+                  />
                 )}
               <p className="data-footnote">
                 Group summaries return only each coursemate’s group association,
-                name, size and status. The Test server remains authoritative for
-                invite, request and cancellation eligibility.
+                name, capacity and status. The Test server remains authoritative
+                for invite, request and cancellation eligibility.
               </p>
+              {creatingPeer && (
+                <CreatePeopleGroupInviteDialog
+                  peerName={creatingPeer.display_name}
+                  busy={busyPeerId === creatingPeer.profile_id}
+                  serverError={creationError}
+                  onCancel={() => {
+                    setCreatingPeer(null);
+                    setCreationError("");
+                  }}
+                  onSubmit={(name, maxMembers) =>
+                    void sendInvite(creatingPeer, { name, maxMembers })
+                  }
+                  onCloseAutoFocus={event => {
+                    if (createDialogTrigger.current?.isConnected) {
+                      event.preventDefault();
+                      createDialogTrigger.current.focus();
+                    }
+                  }}
+                />
+              )}
             </>
           )}
         </>

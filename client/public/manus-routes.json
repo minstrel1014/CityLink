@@ -62,7 +62,7 @@
     },
     {
       "path": "/invitations",
-      "title": "Fictional invitations when signed out; read-only Test list when signed in"
+      "title": "Fictional invitations when signed out; signed-in Test invitations with acceptance"
     },
     {
       "path": "/me",

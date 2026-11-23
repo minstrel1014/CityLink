@@ -1,5 +1,10 @@
 import type { Course } from "@/data/sampleData";
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  assertDispatchAllowed,
+  bindRequestToken,
+  verifyRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export type CourseDirectoryScope = "catalogue" | "mine";
 
@@ -239,22 +244,148 @@ export async function loadCurrentTermCourseEnrollmentCounts(
   return mapCurrentTermCourseEnrollmentCounts(data ?? []);
 }
 
-async function verifyCurrentOwner(userId: string) {
-  if (!supabaseClient) {
+/**
+ * Check only the selected course, without depending on catalogue-wide results.
+ * The two reads are not transactional; inconsistent evidence fails closed.
+ */
+export async function hasCurrentTermCourseEnrollment(
+  userId: string,
+  courseId: string
+): Promise<boolean> {
+  const client = supabaseClient;
+  if (!client) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const { data, error } = await supabaseClient.auth.getUser();
-  if (error || data.user?.id !== userId) {
+  if (typeof userId !== "string" || !userId.trim()) {
+    throw new Error("A signed-in CityLink account is required.");
+  }
+  if (typeof courseId !== "string" || !courseId.trim()) {
+    throw new Error("A selected course is required.");
+  }
+
+  // PostgreSQL emits canonical UUIDs in lowercase, including for uppercase
+  // input. Check the selected ID as a UUID without imposing a version policy.
+  const uuidPattern =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const isSelectedCourseId = (value: unknown) =>
+    typeof value === "string" &&
+    uuidPattern.test(value) &&
+    value.toLowerCase() === courseId.toLowerCase();
+
+  const verifyUser = async () => {
+    const { data, error } = await client.auth.getUser();
+    if (error || data?.user?.id !== userId) {
+      throw new Error(
+        "Your sign-in could not be verified. Sign in again before checking course enrolment."
+      );
+    }
+  };
+
+  await verifyUser();
+  let readResults;
+  try {
+    readResults = await Promise.allSettled([
+      client
+        .from("enrolments")
+        .select("student_id, course_id")
+        .eq("student_id", userId)
+        .eq("course_id", courseId)
+        .limit(2),
+      client
+        .rpc("list_current_course_enrolment_counts")
+        .eq("course_id", courseId)
+        .limit(2),
+    ]);
+  } finally {
+    // Also verify on read failure; never return evidence from a changed session.
+    await verifyUser();
+  }
+
+  const [enrolmentRead, countRead] = readResults;
+  if (enrolmentRead.status === "rejected") throw enrolmentRead.reason;
+  if (countRead.status === "rejected") throw countRead.reason;
+  const enrolmentResult = enrolmentRead.value;
+  const countResult = countRead.value;
+  if (enrolmentResult.error) throw enrolmentResult.error;
+  if (countResult.error) throw countResult.error;
+  if (!Array.isArray(enrolmentResult.data) || enrolmentResult.data.length > 1) {
+    throw new Error("The course enrolment response is invalid or duplicated.");
+  }
+  if (!Array.isArray(countResult.data) || countResult.data.length > 1) {
     throw new Error(
-      "Your sign-in could not be verified. Sign in again before changing courses."
+      "The course enrolment-count response is invalid or duplicated."
     );
   }
-  return data.user.id;
+
+  const hasEnrolment = enrolmentResult.data.length === 1;
+  const enrolment = enrolmentResult.data[0];
+  if (
+    hasEnrolment &&
+    (!isRecord(enrolment) ||
+      Object.keys(enrolment).some(
+        key => key !== "student_id" && key !== "course_id"
+      ) ||
+      typeof enrolment.student_id !== "string" ||
+      !uuidPattern.test(enrolment.student_id) ||
+      enrolment.student_id !== userId ||
+      !isSelectedCourseId(enrolment.course_id))
+  ) {
+    throw new Error(
+      "The course enrolment response contains an invalid record."
+    );
+  }
+
+  const hasCount = countResult.data.length === 1;
+  const countRow = countResult.data[0];
+  let count: number | undefined;
+  if (hasCount) {
+    if (
+      !isRecord(countRow) ||
+      Object.keys(countRow).some(
+        key => key !== "course_id" && key !== "enrolled_count"
+      ) ||
+      !isSelectedCourseId(countRow.course_id)
+    ) {
+      throw new Error(
+        "The course enrolment-count response contains an invalid record."
+      );
+    }
+    const rawCount = countRow.enrolled_count;
+    count =
+      typeof rawCount === "number"
+        ? rawCount
+        : typeof rawCount === "string" && /^\d+$/.test(rawCount)
+          ? Number(rawCount)
+          : Number.NaN;
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(
+        "The course enrolment-count response contains an invalid count."
+      );
+    }
+  }
+
+  if (hasEnrolment && count === 0) {
+    throw new Error("The course enrolment evidence is inconsistent.");
+  }
+  return hasEnrolment && count !== undefined && count >= 1;
+}
+
+async function verifyCurrentOwner(
+  userId: string,
+  shouldDispatch?: () => boolean
+) {
+  const session = await verifyRequestSession(
+    userId,
+    "Your sign-in could not be verified. Sign in again before changing courses."
+  );
+  assertDispatchAllowed(shouldDispatch, session.authGeneration);
+  return session;
 }
 
 export async function addOwnCourseEnrolment(
   userId: string,
-  courseId: string
+  courseId: string,
+  shouldDispatch?: () => boolean
 ): Promise<void> {
   if (!COURSE_ENROLMENT_WRITES_ENABLED) {
     throw new Error(COURSE_ENROLMENT_WRITE_GATE_MESSAGE);
@@ -262,17 +393,25 @@ export async function addOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const ownerId = await verifyCurrentOwner(userId);
-  const { error } = await supabaseClient.from("enrolments").insert({
-    student_id: ownerId,
-    course_id: courseId,
-  });
+  const { client, accessToken, authGeneration } = await verifyCurrentOwner(
+    userId,
+    shouldDispatch
+  );
+  assertDispatchAllowed(shouldDispatch, authGeneration);
+  const { error } = await bindRequestToken(
+    client.from("enrolments").insert({
+      student_id: userId,
+      course_id: courseId,
+    }),
+    accessToken
+  );
   if (error) throw error;
 }
 
 export async function removeOwnCourseEnrolment(
   userId: string,
-  courseId: string
+  courseId: string,
+  shouldDispatch?: () => boolean
 ): Promise<void> {
   if (!COURSE_ENROLMENT_WRITES_ENABLED) {
     throw new Error(COURSE_ENROLMENT_WRITE_GATE_MESSAGE);
@@ -280,14 +419,21 @@ export async function removeOwnCourseEnrolment(
   if (!supabaseClient) {
     throw new Error("Supabase is not configured in this environment.");
   }
-  const ownerId = await verifyCurrentOwner(userId);
-  const { data, error } = await supabaseClient
-    .from("enrolments")
-    .delete()
-    .eq("student_id", ownerId)
-    .eq("course_id", courseId)
-    .select("student_id, course_id")
-    .maybeSingle();
+  const { client, accessToken, authGeneration } = await verifyCurrentOwner(
+    userId,
+    shouldDispatch
+  );
+  assertDispatchAllowed(shouldDispatch, authGeneration);
+  const { data, error } = await bindRequestToken(
+    client
+      .from("enrolments")
+      .delete()
+      .eq("student_id", userId)
+      .eq("course_id", courseId)
+      .select("student_id, course_id")
+      .maybeSingle(),
+    accessToken
+  );
   if (error) throw error;
   if (!data) throw new Error("No matching course enrolment was found.");
 }

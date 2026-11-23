@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterCoursePeers,
   getCourseInviteGroups,
   getInvitationHistoryLabel,
   getJoinActionState,
   getOwnCourseGroup,
   getPeerInvitationState,
+  getViewerGroupRelationship,
   isCoursePeerInviteable,
   splitCoursePeersByGroup,
 } from "@/lib/courseDetailActions";
@@ -129,6 +131,21 @@ describe("authenticated course detail invitation actions", () => {
       getPeerInvitationState("user-1", "unknown", "course-1", invitations)
     ).toBeNull();
   });
+
+  it("allows a currently eligible person to be invited again after an accepted invitation", () => {
+    expect(
+      getPeerInvitationState("user-1", "peer-3", "course-1", invitations, true)
+    ).toBeNull();
+    expect(
+      getPeerInvitationState("user-1", "peer-3", "course-1", invitations, false)
+    ).toBe("connected");
+    expect(
+      getPeerInvitationState("user-1", "peer-1", "course-1", invitations, true)
+    ).toBe("sent");
+    expect(
+      getPeerInvitationState("user-1", "peer-2", "course-1", invitations, true)
+    ).toBe("received");
+  });
 });
 
 describe("two-view course detail helpers", () => {
@@ -190,6 +207,184 @@ describe("two-view course detail helpers", () => {
     expect(result.lookingForGroup.map(peer => peer.profile_id)).toEqual([
       "peer-1",
     ]);
+  });
+
+  it("filters one mixed list in service order without grouping students", () => {
+    const peers: GroupCoursePeer[] = [
+      {
+        profile_id: "one",
+        student_id: "ST01",
+        display_name: "Avery",
+        major: "Business",
+        year: 1,
+        bio: "",
+        skills: [],
+        status: "considering",
+      },
+      {
+        profile_id: "two",
+        student_id: "ST02",
+        display_name: "Blair",
+        major: "Computing",
+        year: 2,
+        bio: "",
+        skills: [],
+        status: "open",
+      },
+      {
+        profile_id: "three",
+        student_id: null,
+        display_name: "Casey",
+        major: null,
+        year: 3,
+        bio: "",
+        skills: [],
+        status: "full",
+      },
+    ];
+    const noGroups = new Map<string, CourseGroupSummary>();
+    expect(
+      filterCoursePeers(peers, "", "all", noGroups).map(p => p.profile_id)
+    ).toEqual(["one", "two", "three"]);
+    expect(
+      filterCoursePeers(peers, "st02", "all", noGroups).map(p => p.profile_id)
+    ).toEqual(["two"]);
+    expect(
+      filterCoursePeers(peers, "business", "considering", noGroups).map(
+        p => p.profile_id
+      )
+    ).toEqual(["one"]);
+    expect(
+      filterCoursePeers(peers, "", "full", noGroups).map(p => p.profile_id)
+    ).toEqual(["three"]);
+    expect(filterCoursePeers(peers, "business", "open", noGroups)).toEqual([]);
+  });
+
+  it("filters by card status, not a grouped student's stale profile availability", () => {
+    const peers: GroupCoursePeer[] = (
+      ["open", "considering", "full"] as const
+    ).flatMap(status =>
+      [true, false].map(grouped => ({
+        profile_id: `${status}-${grouped ? "grouped" : "ungrouped"}`,
+        student_id: null,
+        display_name: status,
+        major: null,
+        year: 1,
+        bio: "",
+        skills: [],
+        status,
+      }))
+    );
+    const summaries = new Map<string, CourseGroupSummary>(
+      peers
+        .filter(peer => peer.profile_id.endsWith("-grouped"))
+        .map(peer => [
+          peer.profile_id,
+          {
+            profile_id: peer.profile_id,
+            group_id: "g",
+            group_name: "G",
+            group_status: "active",
+            group_size: 2,
+          },
+        ])
+    );
+    expect(
+      filterCoursePeers(peers, "", "all", summaries).map(p => p.profile_id)
+    ).toEqual(peers.map(p => p.profile_id));
+    for (const status of ["open", "considering", "full"] as const) {
+      expect(
+        filterCoursePeers(peers, "", status, summaries).map(p => p.profile_id)
+      ).toEqual([`${status}-ungrouped`]);
+      expect(
+        filterCoursePeers(peers, status, status, summaries).map(
+          p => p.profile_id
+        )
+      ).toEqual([`${status}-ungrouped`]);
+    }
+  });
+
+  it("labels only the viewer's active membership or pending request for the same group and course", () => {
+    const request: GroupJoinRequestRow = {
+      id: "request-1",
+      group_id: "group-1",
+      course_id: "course-1",
+      requester_id: "user-1",
+      requester_name_snapshot: "Student One",
+      status: "pending",
+      created_at: "2026-11-04T00:00:00Z",
+    };
+    const membership: GroupMembershipRow = {
+      id: "membership-1",
+      group_id: "group-1",
+      course_id: "course-1",
+      profile_id: "user-1",
+      display_name_snapshot: "Student One",
+      membership_status: "active",
+      joined_at: "2026-11-04T00:00:00Z",
+    };
+    const base = {
+      userId: "user-1",
+      courseId: "course-1",
+      groupId: "group-1",
+      memberships: [] as GroupMembershipRow[],
+      joinRequests: [request],
+    };
+    expect(getViewerGroupRelationship(base)).toBe("requested");
+    expect(
+      getViewerGroupRelationship({ ...base, memberships: [membership] })
+    ).toBe("member");
+    const memberOnly = { ...base, memberships: [membership], joinRequests: [] };
+    expect(
+      getViewerGroupRelationship({ ...memberOnly, userId: "other-user" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({ ...memberOnly, courseId: "other-course" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({ ...memberOnly, groupId: "other-group" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({ ...base, userId: "other-user" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({ ...base, courseId: "other-course" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({ ...base, groupId: "other-group" })
+    ).toBeNull();
+    expect(
+      getViewerGroupRelationship({
+        ...base,
+        joinRequests: [{ ...request, requester_id: "other-user" }],
+      })
+    ).toBeNull();
+    for (const status of [
+      "approved",
+      "rejected",
+      "cancelled",
+      "expired",
+    ] as const) {
+      expect(
+        getViewerGroupRelationship({
+          ...base,
+          joinRequests: [{ ...request, status }],
+        })
+      ).toBeNull();
+    }
+    for (const membership_status of [
+      "left",
+      "removed",
+      "account_deleted",
+    ] as const) {
+      expect(
+        getViewerGroupRelationship({
+          ...base,
+          joinRequests: [],
+          memberships: [{ ...membership, membership_status }],
+        })
+      ).toBeNull();
+    }
   });
 
   it("preserves first-pending-action rules and only permits requests to active groups", () => {

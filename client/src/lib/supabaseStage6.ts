@@ -1,4 +1,9 @@
 import { supabaseClient } from "@/lib/supabaseClient";
+import {
+  assertDispatchAllowed,
+  bindRequestToken,
+  verifyRequestSession,
+} from "@/lib/supabaseRequestAuth";
 
 export const CHAT_PAGE_SIZE = 50;
 export const COURSE_GROUPS_PAGE_SIZE = 25;
@@ -13,11 +18,32 @@ export interface PageResult<T, C> {
   nextCursor: C | null;
 }
 
+export type CapacityState =
+  | "available"
+  | "full"
+  | "maximum_not_set"
+  | "over_limit";
+
+export type ApplyBlockReason =
+  | "group_full"
+  | "maximum_not_set"
+  | "group_over_limit"
+  | "post_closed"
+  | "group_inactive"
+  | "already_member"
+  | "pending_invitation"
+  | "pending_request"
+  | "profile_unavailable"
+  | "not_eligible";
+
 export interface CourseGroupSummary {
   groupId: string;
   groupName: string;
   status: "forming" | "active";
   activeMemberCount: number;
+  maxMembers: number | null;
+  capacityCount: number;
+  capacityState: CapacityState;
   canCreatePost: boolean;
 }
 
@@ -86,6 +112,9 @@ export interface GroupRecruitmentPost {
   groupId: string | null;
   groupName: string | null;
   activeMemberCount: number | null;
+  maxMembers: number | null;
+  capacityCount: number | null;
+  capacityState: CapacityState | null;
   authorName: string;
   subject: string;
   body: string;
@@ -94,6 +123,7 @@ export interface GroupRecruitmentPost {
   updatedAt: string;
   closedAt: string | null;
   applyEnabled: boolean;
+  applyBlockReason: ApplyBlockReason | null;
   canManage: boolean;
 }
 
@@ -103,13 +133,13 @@ export interface RecruitmentPostCursor {
 }
 
 type RpcName =
-  | "list_current_term_course_groups"
+  | "list_current_term_course_groups_capacity"
   | "list_current_term_group_members"
   | "get_current_term_group_member_profile"
   | "get_group_chat_access"
   | "list_group_chat_messages"
   | "send_group_chat_message"
-  | "list_group_recruitment_posts"
+  | "list_group_recruitment_posts_capacity"
   | "create_group_recruitment_post"
   | "edit_group_recruitment_post"
   | "close_group_recruitment_post"
@@ -156,11 +186,75 @@ function requiredBoolean(row: Record<string, unknown>, key: string) {
 
 function requiredCount(row: Record<string, unknown>, key: string) {
   const raw = row[key];
-  const count = typeof raw === "number" ? raw : Number(raw);
+  const count =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && /^\d+$/.test(raw)
+        ? Number(raw)
+        : NaN;
   if (!Number.isSafeInteger(count) || count < 0) {
     throw new Error(`The Stage 6 service returned an invalid ${key} value.`);
   }
   return count;
+}
+
+function mapVisibleCapacity(row: Record<string, unknown>) {
+  const activeMemberCount = requiredCount(row, "active_member_count");
+  const capacityCount = requiredCount(row, "capacity_count");
+  const maxMembers =
+    row.max_members === null ? null : requiredCount(row, "max_members");
+  if (maxMembers !== null && (maxMembers < 2 || maxMembers > 19)) {
+    throw new Error(
+      "The Stage 6 service returned an invalid max_members value."
+    );
+  }
+  const capacityState = row.capacity_state;
+  const expectedState: CapacityState =
+    capacityCount > 19
+      ? "over_limit"
+      : maxMembers === null
+        ? "maximum_not_set"
+        : capacityCount >= maxMembers
+          ? "full"
+          : "available";
+  if (activeMemberCount !== capacityCount || capacityState !== expectedState) {
+    throw new Error("The Stage 6 service returned inconsistent capacity data.");
+  }
+  return {
+    activeMemberCount,
+    capacityCount,
+    maxMembers,
+    capacityState: expectedState,
+  };
+}
+
+const applyBlockReasons: readonly ApplyBlockReason[] = [
+  "group_full",
+  "maximum_not_set",
+  "group_over_limit",
+  "post_closed",
+  "group_inactive",
+  "already_member",
+  "pending_invitation",
+  "pending_request",
+  "profile_unavailable",
+  "not_eligible",
+];
+
+function mapApplyBlockReason(
+  row: Record<string, unknown>
+): ApplyBlockReason | null {
+  const reason = row.apply_block_reason;
+  if (reason === null) return null;
+  if (
+    typeof reason !== "string" ||
+    !applyBlockReasons.includes(reason as ApplyBlockReason)
+  ) {
+    throw new Error(
+      "The recruitment list contains an invalid application block reason."
+    );
+  }
+  return reason as ApplyBlockReason;
 }
 
 function allowOnlyKeys(row: Record<string, unknown>, keys: string[]) {
@@ -209,6 +303,25 @@ async function callRpc<T>(userId: string, name: RpcName, args: object) {
   return data as T;
 }
 
+async function callMutationRpc<T>(
+  userId: string,
+  name: RpcName,
+  args: object,
+  shouldDispatch?: () => boolean
+) {
+  const { client, accessToken, authGeneration } = await verifyRequestSession(
+    userId,
+    "Your sign-in could not be verified. Sign in again."
+  );
+  assertDispatchAllowed(shouldDispatch, authGeneration);
+  const { data, error } = await bindRequestToken(
+    client.rpc(name, args as never),
+    accessToken
+  );
+  if (error) throw error;
+  return data as T;
+}
+
 export function mapCourseGroupSummaries(
   value: unknown
 ): PageResult<CourseGroupSummary, CourseGroupCursor> {
@@ -220,6 +333,9 @@ export function mapCourseGroupSummaries(
       "group_name",
       "group_status",
       "active_member_count",
+      "max_members",
+      "capacity_count",
+      "capacity_state",
       "can_create_post",
       "has_more",
     ]);
@@ -231,7 +347,7 @@ export function mapCourseGroupSummaries(
       groupId: requiredString(row, "group_id"),
       groupName: optionalGroupName(row, "group_name"),
       status: status as CourseGroupSummary["status"],
-      activeMemberCount: requiredCount(row, "active_member_count"),
+      ...mapVisibleCapacity(row),
       canCreatePost: requiredBoolean(row, "can_create_post"),
     };
   });
@@ -374,6 +490,9 @@ export function mapGroupRecruitmentPosts(
       "group_id",
       "group_name",
       "active_member_count",
+      "max_members",
+      "capacity_count",
+      "capacity_state",
       "author_name",
       "subject",
       "body",
@@ -382,6 +501,7 @@ export function mapGroupRecruitmentPosts(
       "updated_at",
       "closed_at",
       "apply_enabled",
+      "apply_block_reason",
       "can_manage",
       "has_more",
     ]);
@@ -389,25 +509,75 @@ export function mapGroupRecruitmentPosts(
     if (status !== "open" && status !== "closed") {
       throw new Error("The recruitment list contains an invalid post status.");
     }
-    const activeMemberCount = row.active_member_count;
-    const parsedCount =
-      activeMemberCount === null ? null : Number(activeMemberCount);
-    if (
-      parsedCount !== null &&
-      (!Number.isSafeInteger(parsedCount) || parsedCount < 0)
-    ) {
-      throw new Error("The recruitment list contains an invalid member count.");
-    }
     const groupId = nullableString(row, "group_id");
     const rawGroupName = nullableString(row, "group_name");
     const groupName =
       rawGroupName === null || rawGroupName.trim()
         ? rawGroupName
         : "Study group";
-    if ((groupId === null) !== (groupName === null)) {
+    if (
+      (groupId === null) !== (groupName === null) ||
+      (groupId !== null && !groupId.trim())
+    ) {
       throw new Error(
         "The recruitment list contains incomplete group details."
       );
+    }
+    const applyEnabled = requiredBoolean(row, "apply_enabled");
+    const applyBlockReason = mapApplyBlockReason(row);
+    if (applyEnabled !== (applyBlockReason === null)) {
+      throw new Error(
+        "The recruitment list contains inconsistent application data."
+      );
+    }
+    let capacity: {
+      activeMemberCount: number | null;
+      maxMembers: number | null;
+      capacityCount: number | null;
+      capacityState: CapacityState | null;
+    };
+    if (groupId === null) {
+      if (
+        row.active_member_count !== null ||
+        row.max_members !== null ||
+        row.capacity_count !== null ||
+        row.capacity_state !== null ||
+        applyBlockReason !== "group_inactive"
+      ) {
+        throw new Error(
+          "The recruitment list contains incomplete group redaction."
+        );
+      }
+      capacity = {
+        activeMemberCount: null,
+        maxMembers: null,
+        capacityCount: null,
+        capacityState: null,
+      };
+    } else {
+      capacity = mapVisibleCapacity(row);
+      const capacityReason: Partial<Record<CapacityState, ApplyBlockReason>> = {
+        full: "group_full",
+        maximum_not_set: "maximum_not_set",
+        over_limit: "group_over_limit",
+      };
+      const expectedReason =
+        status === "closed"
+          ? "post_closed"
+          : capacityReason[capacity.capacityState!];
+      if (
+        (expectedReason && applyBlockReason !== expectedReason) ||
+        (!expectedReason &&
+          (applyBlockReason === "post_closed" ||
+            applyBlockReason === "group_inactive" ||
+            applyBlockReason === "group_full" ||
+            applyBlockReason === "maximum_not_set" ||
+            applyBlockReason === "group_over_limit"))
+      ) {
+        throw new Error(
+          "The recruitment list contains inconsistent application data."
+        );
+      }
     }
     const createdAt = requiredString(row, "created_at");
     const updatedAt = requiredString(row, "updated_at");
@@ -424,7 +594,7 @@ export function mapGroupRecruitmentPosts(
       id: requiredString(row, "post_id"),
       groupId,
       groupName,
-      activeMemberCount: parsedCount,
+      ...capacity,
       authorName: requiredString(row, "author_name"),
       subject: requiredString(row, "subject"),
       body: requiredString(row, "body"),
@@ -432,7 +602,8 @@ export function mapGroupRecruitmentPosts(
       createdAt,
       updatedAt,
       closedAt,
-      applyEnabled: requiredBoolean(row, "apply_enabled"),
+      applyEnabled,
+      applyBlockReason,
       canManage: requiredBoolean(row, "can_manage"),
     };
   });
@@ -450,7 +621,7 @@ export async function listCurrentTermCourseGroups(
   after?: CourseGroupCursor
 ) {
   return mapCourseGroupSummaries(
-    await callRpc(userId, "list_current_term_course_groups", {
+    await callRpc(userId, "list_current_term_course_groups_capacity", {
       p_course_id: courseId,
       p_after_group_name: after?.groupName ?? null,
       p_after_group_id: after?.groupId ?? null,
@@ -515,7 +686,8 @@ export async function listGroupChatMessages(
 export async function sendGroupChatMessage(
   userId: string,
   groupId: string,
-  body: string
+  body: string,
+  shouldDispatch?: () => boolean
 ) {
   const text = body.trim();
   if (!text || text.length > MAX_CHAT_MESSAGE_LENGTH) {
@@ -523,10 +695,12 @@ export async function sendGroupChatMessage(
       `Messages must be 1–${MAX_CHAT_MESSAGE_LENGTH} characters.`
     );
   }
-  const id = await callRpc<unknown>(userId, "send_group_chat_message", {
-    p_group_id: groupId,
-    p_body: text,
-  });
+  const id = await callMutationRpc<unknown>(
+    userId,
+    "send_group_chat_message",
+    { p_group_id: groupId, p_body: text },
+    shouldDispatch
+  );
   if (typeof id !== "string" || !id.trim()) {
     throw new Error("The message was not confirmed. Refresh before retrying.");
   }
@@ -539,7 +713,7 @@ export async function listGroupRecruitmentPosts(
   after?: RecruitmentPostCursor
 ) {
   return mapGroupRecruitmentPosts(
-    await callRpc(userId, "list_group_recruitment_posts", {
+    await callRpc(userId, "list_group_recruitment_posts_capacity", {
       p_course_id: courseId,
       p_after_created_at: after?.createdAt ?? null,
       p_after_id: after?.id ?? null,
@@ -552,7 +726,8 @@ export async function createGroupRecruitmentPost(
   userId: string,
   groupId: string,
   subject: string,
-  body: string
+  body: string,
+  shouldDispatch: () => boolean = () => true
 ) {
   const title = subject.trim();
   const text = body.trim();
@@ -564,11 +739,42 @@ export async function createGroupRecruitmentPost(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
     );
   }
-  const id = await callRpc<unknown>(userId, "create_group_recruitment_post", {
-    p_group_id: groupId,
-    p_subject: title,
-    p_body: text,
-  });
+  if (!supabaseClient) {
+    throw new Error("Supabase is not configured in this environment.");
+  }
+  if (!userId) {
+    throw new Error("Sign in with your CityLink account to use this feature.");
+  }
+
+  // Verify the captured token, not the shared client's potentially newer session.
+  let accessToken: string;
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    const token = data.session?.access_token;
+    if (error || typeof token !== "string" || !token.trim()) throw new Error();
+    accessToken = token;
+    const verified = await supabaseClient.auth.getUser(accessToken);
+    if (verified.error || verified.data.user?.id !== userId) throw new Error();
+  } catch {
+    // Do not surface authentication errors that might contain sensitive data.
+    throw new Error("Your sign-in could not be verified. Sign in again.");
+  }
+
+  if (!shouldDispatch()) {
+    throw new Error(
+      "The workspace changed before the post could be published."
+    );
+  }
+  // This per-request header prevents a later account switch from changing the
+  // authorized user. Once dispatched, the request cannot be undone by a switch.
+  const { data: id, error } = await supabaseClient
+    .rpc("create_group_recruitment_post", {
+      p_group_id: groupId,
+      p_subject: title,
+      p_body: text,
+    })
+    .setHeader("Authorization", `Bearer ${accessToken}`);
+  if (error) throw error;
   if (typeof id !== "string" || !id.trim()) {
     throw new Error("The post was not confirmed. Refresh before retrying.");
   }
@@ -579,7 +785,8 @@ export async function editGroupRecruitmentPost(
   userId: string,
   postId: string,
   subject: string,
-  body: string
+  body: string,
+  shouldDispatch?: () => boolean
 ) {
   const title = subject.trim();
   const text = body.trim();
@@ -591,18 +798,25 @@ export async function editGroupRecruitmentPost(
       `Posts must be 1–${MAX_RECRUITMENT_POST_LENGTH} characters.`
     );
   }
-  await callRpc(userId, "edit_group_recruitment_post", {
-    p_post_id: postId,
-    p_subject: title,
-    p_body: text,
-  });
+  await callMutationRpc(
+    userId,
+    "edit_group_recruitment_post",
+    { p_post_id: postId, p_subject: title, p_body: text },
+    shouldDispatch
+  );
 }
 
 export async function closeGroupRecruitmentPost(
   userId: string,
-  postId: string
+  postId: string,
+  shouldDispatch?: () => boolean
 ) {
-  await callRpc(userId, "close_group_recruitment_post", { p_post_id: postId });
+  await callMutationRpc(
+    userId,
+    "close_group_recruitment_post",
+    { p_post_id: postId },
+    shouldDispatch
+  );
 }
 
 export function getStage6ErrorMessage(error: unknown) {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, MessageCircle } from "lucide-react";
+import { ArrowRight, MessageCircle } from "lucide-react";
 import { Link } from "wouter";
 import { AccountHeader } from "@/pages/citylink/MyCourses";
 import { EmptyState } from "@/components/citylink/Shared";
@@ -64,7 +64,7 @@ export default function GroupChatPicker() {
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
         <Link href="/my-courses" className="back-link">
-          <ArrowLeft size={17} /> Back to My Courses
+          View My Courses
         </Link>
         {state === "loading" && (
           <p className="authenticated-courses-state">

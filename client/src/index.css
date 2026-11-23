@@ -2065,6 +2065,70 @@ h4 {
   color: #8da571;
   font-weight: 550;
 }
+.portfolio-course-note {
+  margin-top: 10px;
+}
+.portfolio-privacy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 28px 28px;
+  padding-top: 16px;
+  border-top: 1px solid #ecefe5;
+  color: #9aa68c;
+  font-size: 9px;
+  line-height: 1.7;
+}
+.portfolio-privacy-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #b0bd9e;
+}
+.portfolio-invite-feedback {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.portfolio-invite-feedback.success {
+  background: #eaf1e0;
+  color: #6f8754;
+}
+.portfolio-invite-feedback.error {
+  background: #f8e9e5;
+  color: #9c5549;
+}
+
+.portfolio-capacity-hint {
+  margin: 2px 0 0;
+  color: #8c5a2d;
+  font-size: 10px;
+  line-height: 1.5;
+}
+.portfolio-invite-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.portfolio-invite-choice label {
+  color: #8b9b78;
+  font-size: 9px;
+  letter-spacing: 0.4px;
+}
+.portfolio-invite-choice select {
+  width: 100%;
+  padding: 10px 11px;
+  border: 1px solid #dfe8d3;
+  border-radius: 7px;
+  background: #f8faf4;
+  color: #5d7049;
+  font: inherit;
+  font-size: 11px;
+}
+.portfolio-invite-choice .primary {
+  width: 100%;
+}
 /* Invitations and personal profile */
 .invitation-tabs {
   margin: 2px 0 24px;
