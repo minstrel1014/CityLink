@@ -193,6 +193,7 @@ the RPC audience deliberately.
    stays read-only until official launch; deployment, publication and repository
    visibility/permission changes remain unauthorized. QA/security authorization
    is not merge or release approval.
+   **Superseded 2026-11-23.** The 2026-11-22 finding was correct when it was taken, but the framing above no longer describes the current position: Launch has since been reconciled to the repository filenames and migrated, so the three-way baseline is now a two-way one (Launch reconciled, Prototype frozen), and the PR #41 SQL **has** been applied to Launch. This paragraph is kept as the dated pre-application record; the applied set is recorded in `docs/team/DECISIONS.md` (2026-11-23, Launch capacity application).
 
 7. **Compatibility objects are removed only later.** Once the capacity client is
    the only supported bundle, a separate lead-approved cleanup migration drops
