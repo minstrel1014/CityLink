@@ -314,3 +314,51 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Authorization:** apply `20261118050000_stage6_chat_recruitment.sql` to the disposable Test project (ref `wkzclgmhrtecnpexfesr`) only, after Role 6 re-checks the exact file. Conditions: forward-only, one migration, no reset/TRUNCATE, no Main access, stop on error, verification queries after apply; Test data writes or accounts need separate approval.
 - **Role 6 items:** 2 (group-row locks and open-status guards) and 3 (clear creator_id on abandonment) applied; 4 verified (private schema not exposed by PostgREST).
 - **Files:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`, `docs/stage6/STAGE6_TEST_MIGRATION.md`.
+
+## 2026-11-18 — Course people page, private chat, group naming and display names
+
+**Approver:** Adam. **Roles affected:** Roy (groups, naming, management panel), lead (course page, chat entry, display-name gate), Jeffery (recruitment subject and member lists), Eunice (QA).
+
+- Non-members never see an "Open chat" link. Chat remains private: active members read and send, former members read history only.
+- The course page lists existing groups, recruitment posts and coursemates with no group. It never shows the viewer's own group.
+- My Groups hosts the viewer's group, its management panel and the private chat button. Chat stays a separate chat-room page.
+- One active group per student per course (already enforced in the database).
+- Group names are required at creation and at most 50 characters; only the current group leader may rename. Existing unnamed groups prompt their leader to name them.
+- Display names are required before using CityLink, at most 50 characters, editable again without limit for now. Existing accounts on "New CityLink member" are prompted once.
+- Joining a group happens only through recruitment posts. Posts require a subject and body, and show the group's members with links to their profiles.
+- Database changes needed for these rules are drafted in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`; they need Role 6 review and a separate Test authorization before application. No database change has been made.
+
+## 2026-11-18 — Authorization: Stage 6 chat/recruitment migration on Main
+
+**Status:** Authorized by Adam; execution pending at the time of this record.
+
+**Authorization text (verbatim):** "I, Adam, authorize the CityLink integration lead task to take a fresh backup of Supabase Main ref pijslbchvstkoweslymr and then apply only 20261118050000_stage6_chat_recruitment.sql to Main, one migration, forward-only. No reset, TRUNCATE, drop of existing objects, Auth/secret changes, or Test access. Stop and report on any error. Report the version, times, result and verification output; the authorization ends when the report is delivered."
+
+**Scope:** fresh Main backup, then the single Stage 6 migration already applied to Test and approved by Role 6. No other Main change. The authorization ends when the execution report is delivered.
+
+## 2026-11-18 — Stage 6 chat/recruitment migration applied to Main (report)
+
+**Authorization:** Adam, recorded above. **Execution:** integration lead task, 2026-11-18.
+
+**Backup first:** fresh Main backup written to `/home/ubuntu/backups/main_20261118_stage6/` (profiles 2, courses 10, enrolments 4, academic_terms 1, citylink_settings 1; invitations and all group tables empty; README with file hashes).
+
+**Migration:** `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` from GitHub main commit d667b6f, SHA-256 `861f0042392a8142b8cfe19f9d9f768a2d1ef91ce4f2e359e26b816c1db6d87f`. Applied as the recorded migration version `20261118080722` (`stage6_chat_recruitment`); start 16:07 +08:00, success, no errors. The tool records the application time as the version; the file content is the approved migration.
+
+**Verified after apply:** `group_chat_messages` and `group_recruitment_posts` exist with RLS enabled; no direct table grants for `anon`/`authenticated`; all ten Stage 6 RPCs exist with the approved signatures and `authenticated`-only EXECUTE; three recruitment-post close triggers exist; no browser-role EXECUTE on the private helpers; direct REST reads of both tables return HTTP 401.
+
+**Remaining risks:** runtime RPC behavior on Main was not exercised (no Main test accounts or data writes authorized); the Stage 5 profile-history trigger gap noted earlier is still open; Main contains a pre-existing `rename_study_group(uuid, text)` function not created by the six Stage 5 migrations, which the people-page proposal must account for before approval.
+
+This authorization is complete and ends with this report.
+
+## 2026-11-18 — People-page proposal follow-ups confirmed
+
+**Approver:** Adam.
+
+1. Legacy recruitment posts are backfilled with the subject `'Recruitment post'`.
+2. Existing unnamed study groups stay unvalidated until their leader renames them; `study_groups_name_length_chk` is `NOT VALID`, while new inserts and updates are enforced.
+
+These confirmations resolve the two open items in `docs/team/PEOPLE_PAGE_MIGRATION_PROPOSAL.md`. Role 6 re-review of the revised proposal is still required before the migration file is written or any Test change is made.
+
+### 2026-11-18 — Clarification: empty group-name legacy marker
+
+Role 6 found that a `NOT VALID` 1–50 group-name check would still block lifecycle updates to existing unnamed groups. The revised rule is: the check allows the empty string as a documented legacy marker, so abandoning, transferring or otherwise updating an unnamed group keeps working. `create_group_and_invite` and `rename_study_group` reject empty names, so no new unnamed group can be created through the API. The constraint can then be validated once the preflight shows no long names.
