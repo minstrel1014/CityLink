@@ -105,3 +105,42 @@ This is the expected pre-schema state, not a defect in the site.
 No PR was merged, no draft PR was marked ready, no migration was applied to Launch, the Prototype
 project was not modified, and nothing was published. The checkpoint commit above is in the site's own
 Manus-managed repository, not in `minstrel1014/CityLink`.
+
+## 9. Correction 2026-11-23 15:02 — the stored publishable key belonged to the Prototype
+
+The value entered on the first card was **not** CityLink Launch's publishable key. This was reported by
+Adam and independently reproduced here with the stored value only, printing status codes and never the
+key:
+
+| Probe (`apikey` header only)     | `pijslbchvstkoweslymr` (Launch) | `wkzclgmhrtecnpexfesr` (Prototype) |
+| -------------------------------- | ------------------------------- | ---------------------------------- |
+| `GET /auth/v1/settings` (before) | **401**                         | **200**                            |
+
+A replacement was applied through the platform input card with `replace_existing: true`, stored scope
+`all`, secret revision 2. Re-test after replacement, same method:
+
+| Probe                           | Launch  | Prototype |
+| ------------------------------- | ------- | --------- |
+| `GET /auth/v1/settings` (after) | **200** | **401**   |
+
+The dev server was restarted (generation 3) and the production artifact rebuilt with the corrected
+value:
+
+- artifact `dist/public/assets/index-DtJYmQaY.js`, 958,577 bytes,
+  SHA-256 `bbeb4d9fc4db2b851d0ff2f4079d99a94cc74cdc799a9b9c979c44228883f9a8`;
+- bundle checks unchanged: Launch ref 1, Prototype ref 0, `p_max_members` 1,
+  `list_group_recruitment_posts_capacity` 1, publishable-key prefix 1;
+- `version.json` `buildId` still `344c1058e78df2cccfde89574e226f3e65a1457c`.
+
+Auth-layer proof that the configuration is now correct: a password grant for the not-yet-created QA
+account returns `400 invalid_credentials` ("Invalid login credentials") instead of `401 Invalid API key`.
+The remaining failure is a missing account, not a configuration error.
+
+Read-only SQL on Launch (single `LIMIT 20` aggregate over `information_schema.role_table_grants`)
+explains the earlier `42501` seen from an unauthenticated REST probe: `anon` holds **no** table grants
+on `public`, while `authenticated` holds `SELECT` on 10 public tables plus `INSERT`/`UPDATE`/`DELETE`
+on 1. The unauthenticated 401 is therefore expected, not a defect; reads are reachable only after
+sign-in, subject to RLS.
+
+Consequence for the release: no account exists on Launch, and creating one is an Auth write to Launch.
+That is outside the current read-only-until-release boundary and needs an explicit go-ahead.
