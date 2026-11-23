@@ -62,6 +62,8 @@ create index direct_threads_user_a_recent_idx on public.direct_threads (user_a, 
 create index direct_threads_user_b_recent_idx on public.direct_threads (user_b, last_message_at desc);
 create index direct_messages_thread_page_idx on public.direct_messages (thread_id, created_at desc, id desc);
 create index direct_messages_unread_idx on public.direct_messages (thread_id, sender_id, read_at);
+-- supports the global per-sender rate limit (Adam 2026-11-23: 30 per minute across all threads)
+create index direct_messages_sender_recent_idx on public.direct_messages (sender_id, created_at desc);
 
 alter table public.direct_threads enable row level security;
 alter table public.direct_messages enable row level security;
@@ -147,15 +149,16 @@ begin
   end if;
   -- D1 (Adam, 2026-11-23): an existing thread stays usable after the course or term ends,
   -- so sending requires participation only, never a current enrolment.
-  -- D3 (Adam, 2026-11-23): 30 messages per sender per thread per rolling minute.
+  -- D3 (Adam, 2026-11-23 20:32): 30 messages per sender per rolling minute ACROSS ALL
+  -- conversations, not per thread. The earlier per-thread limit let one sender flood many
+  -- threads, which does not address the harassment case the limit exists for.
   if (
     select count(*)
     from public.direct_messages m
-    where m.thread_id = p_thread_id
-      and m.sender_id = v_me
+    where m.sender_id = v_me
       and m.created_at > now() - interval '1 minute'
   ) >= 30 then
-    raise exception 'rate limit reached: at most 30 messages per minute in this conversation';
+    raise exception 'rate limit reached: at most 30 messages per minute across all conversations';
   end if;
   select coalesce(display_name, 'Student') into v_name from public.profiles where id = v_me;
   insert into public.direct_messages (thread_id, sender_id, sender_name_snapshot, body)
@@ -165,14 +168,21 @@ begin
 end;
 $function$;
 
-create or replace function public.list_direct_threads(p_limit integer default 50)
+drop function if exists public.list_direct_threads(integer);
+
+create or replace function public.list_direct_threads(
+  p_after_last_message_at timestamptz default null,
+  p_after_thread_id uuid default null,
+  p_limit integer default 50
+)
 returns table(
   thread_id uuid,
   other_profile_id uuid,
   other_display_name text,
   last_message_body text,
   last_message_at timestamptz,
-  unread_count bigint
+  unread_count bigint,
+  has_more boolean
 )
 language plpgsql
 stable
@@ -185,6 +195,9 @@ begin
   if v_me is null then
     raise exception 'authentication required';
   end if;
+  if (p_after_last_message_at is null) <> (p_after_thread_id is null) then
+    raise exception 'both conversation pagination cursor fields must be supplied together';
+  end if;
   if p_limit is null or p_limit < 1 or p_limit > 100 then
     raise exception 'page size must be between 1 and 100';
   end if;
@@ -196,7 +209,8 @@ begin
       lm.body,
       t.last_message_at,
       (select count(*) from public.direct_messages m
-        where m.thread_id = t.id and m.sender_id <> v_me and m.read_at is null)
+        where m.thread_id = t.id and m.sender_id <> v_me and m.read_at is null),
+      (count(*) over () > p_limit)
     from public.direct_threads t
     join public.profiles p
       on p.id = case when t.user_a = v_me then t.user_b else t.user_a end
@@ -206,7 +220,9 @@ begin
        order by m.created_at desc, m.id desc
        limit 1
     ) lm on true
-    where t.user_a = v_me or t.user_b = v_me
+    where (t.user_a = v_me or t.user_b = v_me)
+      and (p_after_last_message_at is null
+           or (t.last_message_at, t.id) < (p_after_last_message_at, p_after_thread_id))
     order by t.last_message_at desc, t.id desc
     limit p_limit;
 end;
@@ -292,12 +308,12 @@ $function$;
 
 revoke all on function public.start_direct_thread(uuid) from public, anon, authenticated;
 revoke all on function public.send_direct_message(uuid, text) from public, anon, authenticated;
-revoke all on function public.list_direct_threads(integer) from public, anon, authenticated;
+revoke all on function public.list_direct_threads(timestamptz, uuid, integer) from public, anon, authenticated;
 revoke all on function public.list_direct_messages(uuid, timestamptz, uuid, integer) from public, anon, authenticated;
 revoke all on function public.mark_direct_thread_read(uuid) from public, anon, authenticated;
 grant execute on function public.start_direct_thread(uuid) to authenticated;
 grant execute on function public.send_direct_message(uuid, text) to authenticated;
-grant execute on function public.list_direct_threads(integer) to authenticated;
+grant execute on function public.list_direct_threads(timestamptz, uuid, integer) to authenticated;
 grant execute on function public.list_direct_messages(uuid, timestamptz, uuid, integer) to authenticated;
 grant execute on function public.mark_direct_thread_read(uuid) to authenticated;
 
