@@ -105,3 +105,40 @@ Notes that must survive into execution:
   evidence that this is Launch, on engine 17, with the pinned helpers still comes from pages 00/01/05.
 - S2 is **not** in this sequence. It lives on PR #52 head and is a measured no-op once S1 has run; it is
   needed only if S3 were ever applied to a target that had not had S1.
+
+## Addendum 2 — 2026-11-23 16:11, gate now precedes S3 (supersedes the order in Addendum 1)
+
+Adam chose option A at 16:09. The gate migration is merged into `feature/group-capacity-migration`
+(PR #54, merge commit `ba2754f08cd5bcf02be583446f949f3aa363f28c`) as
+`supabase/migrations/20261119085000_capacity_apply_gate.sql`, which sorts between the reconciliation
+slot `20261119080000` and S3 `20261119090000`. The operative order is therefore:
+
+| #   | Step                                   | Exact artefact                                                                                    | Stop condition                                                                 |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| 0   | Session preflight                      | page 00 identity + engine                                                                         | target is not `pijslbchvstkoweslymr` or engine is not 17                       |
+| 1   | Data preflight (F23)                   | the two SELECTs in Role 6 §8, same session                                                        | either count non-zero                                                          |
+| 2   | S1                                     | blob `70cb7871…`, 747 lines                                                                       | non-zero exit; S1 carries its own `BEGIN;`/`COMMIT;`                           |
+| 3   | Pin capture (F9)                       | pages 01/05, declared `f150f880…db57`, `7d50da9e…b4d9`                                            | any declared value empty                                                       |
+| 4   | Gate install                           | `20261119085000_capacity_apply_gate.sql`                                                          | absent from the ledger afterwards                                              |
+| 5   | **Gate call — must satisfy before S3** | `private.citylink_capacity_apply_gate()` with declarations set in the same session                | anything but `group_capacity_gate_satisfied run=… target=pijslbchvstkoweslymr` |
+| 6   | S3                                     | blob `a04048e9…` / SHA-256 `5cf0a66a…4887`, verbatim, no `--single-transaction`, no outer `BEGIN` | any error                                                                      |
+| 7   | Client                                 | Launch frontend built from `344c1058e78fd2cccfde89574e226f3e65a1457c`                             | build id mismatch                                                              |
+| 8   | Signed-in QA                           | `citylink.qa.20261123@example.com`                                                                | —                                                                              |
+
+### Transaction semantics measured 16:11 (PostgreSQL 17.12, throwaway cluster, socket-only)
+
+An outer transaction does **not** protect a file that carries its own `BEGIN;`/`COMMIT;`:
+
+| Case                                                         | Measured result                                                                                                              |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `BEGIN … COMMIT` file under `psql -1`                        | applies, exit 0, but `WARNING: there is no transaction in progress` — the file's own `COMMIT` ends the wrapper's transaction |
+| failure **after** the file's `COMMIT`, still under `psql -1` | the object created before the failure **survives** (`t3_exists_after_failure = 1`)                                           |
+
+Consequences: wrapping S1 buys no atomicity beyond what S1 already provides for its own statements, and it
+does not roll back what S1 committed. For S3 — which has no `BEGIN;` — a runner-supplied wrapper _would_
+add atomicity, which is exactly what F10's operating rule forbids.
+
+**Open decision before execution:** either S1/S3 are applied verbatim (F10 respected, but the ledger will
+not show rows for them) and only the gate migration goes through the ledger-recording runner, or all three
+go through the runner (every step ledger-visible, but S3 acquires a transaction wrapper F10 did not
+authorise).
