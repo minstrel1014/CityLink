@@ -9,18 +9,20 @@
 
 本文件把 Role 6 的審查意見轉成可逐項審查的合約條目。凡屬產品或成本取捨的項目，一律保留為「待 Adam 決定」，不以技術預設值代替。
 
-## 1. 必須先由 Adam 決定、否則無法定稿的六項
+## 1. 六項決定（Adam 已於 2026-11-23 決定）
 
-| #   | 決策                                                            | 為什麼卡住合約                                                             | 影響章節 |
-| --- | --------------------------------------------------------------- | -------------------------------------------------------------------------- | -------- |
-| 1   | 儲存後端與方案等級（Supabase Storage Pro 以上，或外部雲端硬碟） | Free 方案單檔上限 50 MB，100 MB 不可行；外部硬碟是完全不同的憑證與權限模型 | 5、6、8  |
-| 2   | 簽名連結有效期（建議 60–300 秒）                                | 簽名 URL 無法個別撤銷，成員移除後的風險窗口等於 TTL                        | 6        |
-| 3   | 保留期精確定義（日曆月或 150 天、到期時刻、時區）               | `academic_terms.starts_on` 目前 nullable 且未填，日期算不出來              | 8        |
-| 4   | AI provider 與第三方資料揭露／同意方式                          | 決定 AI 資料流是否可外傳，以及要揭露什麼                                   | 9        |
-| 5   | 到期清理的執行機制（`pg_cron` 或外部排程）與維運歸屬            | 保留政策要變成會實際執行的機制                                             | 8        |
-| 6   | 是否加做惡意檔案掃描（AV／雲端掃描）                            | 額外成本與延遲；不影響上傳授權模型                                         | 7        |
+| #   | 決策         | 決定值                                                                                                                                          | 影響章節 |
+| --- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1   | 儲存後端     | **外部雲端硬碟（Google Drive），由 CityLink 集中管理**（1C）。詳見 `KAYK_DRIVE_ADAPTER_DESIGN.md`                                               | 5、6     |
+| 2   | 簽名連結 TTL | **300 秒**，每次請求重簽；因 Drive 無簽名 URL，改由 CityLink 自行以 HMAC 簽發                                                                   | 5        |
+| 3   | 保留期定義   | **日曆月**：`starts_on + interval '5 months'`，到期時刻 23:59:59（Asia/Hong_Kong）；`starts_on` 未填時以 term code 推導並記錄 `retention_basis` | 8        |
+| 4   | AI provider  | **OpenRouter + DeepSeek**（預設 `deepseek/deepseek-v3.2`）；只傳抽取後文字，使用者觸發並顯示第三方揭露                                          | 9        |
+| 5   | 到期清理機制 | **先做 lazy expiry**；`pg_cron` 或外部排程列為後續選項                                                                                          | 8        |
+| 6   | 惡意檔案掃描 | **初期不做**；保留 attachment 下載與 `nosniff`                                                                                                  | 7        |
 
-在以上六項確定前，第 5 至 9 章只能以「選項」形式存在，不得寫成定稿數值。
+六項已定稿。Adam 同時授權 Kayk 在此功能範圍內決定同類技術與產品細節；涉及新增付費、建立帳戶或憑證、部署、發布、GitHub 合併或 Main 寫入者，仍須回到 Adam。
+
+**因第 1 項改為外部硬碟，第 5 章原 Supabase Storage bucket 與 `storage.objects` policy 設計作廢**，改以 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 5、6 節為準。第 2 至 4 章（授權模型、資料模型、RPC 契約）仍然有效，僅 `storage_path` 改為 `drive_file_id`。
 
 ## 2. 授權模型
 
@@ -59,15 +61,17 @@
 
 ## 5. 儲存與連結
 
+> **本節已由 Adam 的 1C 決定取代。** 不再使用 Supabase Storage bucket 與 `storage.objects` policy；改為 Google Drive 加 Edge Function 代理，下載連結由 CityLink 以 HMAC 簽發 300 秒有效。實作細節見 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 5、6 節。以下原文保留作為歷史記錄。
+
 單一私有 bucket；`storage.objects` 的 select／insert policy 使用同一個 predicate 並綁定路徑前綴，物件路徑必須以該 `group_id` 開頭，確保繞過前端直呼 Storage API 也取不到他組物件。不使用 public bucket，不使用 `getPublicUrl`。下載一律「先驗證、再換短效簽名 URL」，清單回應不夾帶 URL。
 
-**TTL 待決（第 1 章第 2 項）。** 建議 60–300 秒，每次請求重簽。
+**TTL 已定為 300 秒**，每次請求重簽。
 
 **兩種例外必須嚴格分開。** 成員被移除時物件仍在、已發出連結在原 TTL 內可用，這是 Adam 的決定，機制上就是 TTL，不是撤銷。檔案被替換或刪除時物件必須消失，任何連結都不得再取到內容，此處不套用成員移除的例外。若要求更嚴格的即時性，`request_group_file_download` 需再檢查列的 `status` 並拒絕簽發已刪除或已替換的列。
 
 ## 6. 大小與格式
 
-大小上限目前定為 `104857600` bytes（100 MB），但**在 Free 方案不可能實作**，需 Pro 以上並同時設定全域與 bucket 限制；100 MB 上傳必須走 resumable／TUS，不可使用一般 `storage.from().upload()`。
+大小上限定為 `104857600` bytes（100 MB）。在 1C 的 Drive 方案下，單檔上限（5 TB）不是限制，真正的限制是專用帳號的 **15 GB 總量**，因此必須實作 `about.get` 配額檢查與每群組軟上限；100 MB 上傳必須走 resumable session，不可整包經過我們的伺服器。
 
 伺服器端以 Storage 物件的實際大小與 content type 為準，不信任用戶端宣告；以 magic byte 嗅探真實類型，保留宣告值供稽核比對。不一致時不阻擋上傳（產品要求接受所有類型），但不得以宣告類型決定呈現方式。
 
@@ -75,13 +79,13 @@
 
 ## 7. 惡意檔案處理
 
-私有 bucket；下載一律 `Content-Disposition: attachment` 與 `X-Content-Type-Options: nosniff`；絕不在本站 origin inline 呈現 HTML、SVG 或 PDF。是否加做掃描服務屬第 1 章第 6 項，待 Adam 決定。
+下載一律 `Content-Disposition: attachment` 與 `X-Content-Type-Options: nosniff`；絕不在本站 origin inline 呈現 HTML、SVG 或 PDF。**掃描服務初期不做**（Adam 2026-11-23 決定），此為已接受的殘餘風險。
 
 ## 8. 保留與到期
 
 `retention_expires_at` 於建立檔案時依學期計算並寫入，不在查詢時動態計算，否則學期資料變動會追溯改變歷史紀錄。
 
-到期刪除需要定期 job，屬部署層決定且目前未授權；到期刪除是保留政策，**成員移除不觸發刪除**，兩者不可混為一談。`academic_terms.starts_on` 目前 nullable 且現行資料未填，需 Adam 決定是要求必填並 backfill，或定義 fallback 規則。
+到期先以 **lazy expiry** 實作：清單與下載都加 `retention_expires_at > now()` 條件，Drive 物件的實際刪除延後處理（Adam 2026-11-23 決定）。這代表過期檔案會停止可見，但**不會自動釋放 Drive 空間**，配額檢查因此不可省略。到期刪除是保留政策，**成員移除不觸發刪除**，兩者不可混為一談。`academic_terms.starts_on` 目前 nullable 且現行資料未填，處理方式見 `KAYK_DRIVE_ADAPTER_DESIGN.md` 第 8 節。
 
 ## 9. AI 資料流
 
