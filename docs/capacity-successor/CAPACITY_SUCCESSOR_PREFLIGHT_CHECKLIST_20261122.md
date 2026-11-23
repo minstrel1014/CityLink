@@ -103,7 +103,7 @@ output rather than summarising it.
 | Page | File                                     | Required?           | Rows                        | FAIL | UNPINNED | Raw output at |
 | ---- | ---------------------------------------- | ------------------- | --------------------------- | ---- | -------- | ------------- | --- |
 | 00   | `00_target_identity_and_engine.sql`      | yes                 | 18                          |      |          |               |
-| 01   | `01_track_a_capacity_prerequisites.sql`  | yes                 | 56                          |      |          |               |
+| 01   | `01_track_a_capacity_prerequisites.sql`  | yes                 | 57                          |      |          |               |
 | 02   | `02_track_b_row8_promotion.sql`          | if Track B in scope | 17                          | n/a  |          |               |
 | 03   | `03_track_c_grant_posture_survey.sql`    | if Track C in scope | 33                          | n/a  |          |               |
 | 04   | `04_track_d_ledger_identity_capture.sql` | if Track D in scope | 4 (+1 per recorded version) |      |          |               |     |
@@ -111,6 +111,14 @@ output rather than summarising it.
 
 Page 04 note: run statement 2 **only** if statement 1 reports the ledger table
 present; statement 2 is parse-time dependent on that table existing.
+
+Pre-blob reconciliation (F17, decided 2026-11-23): on any target that still holds
+the 13-column `list_group_recruitment_posts`, the reviewed blob aborts with
+`42P13`. `supabase/migrations/20261119080000_preblob_reconcile_list_group_recruitment_posts.sql`
+must be applied **before** the blob, in the same window. Between the two the RPC
+does not exist. Confirm on page 01 (`A-LGC-*`) that the pre-apply shape is the
+13-column one before relying on that file; if the target is already 14-column the
+file is a no-op.
 
 Page 01 stop conditions (any one stops the run):
 
@@ -122,15 +130,18 @@ Page 01 stop conditions (any one stops the run):
       empty `search_path` or browser/service-role `EXECUTE` posture differs from
       the reviewed state.
 - [ ] `A-CAP-*` any `FAIL` — a capacity object already exists; do not re-apply.
-- [ ] `A-RPL-01..05` any `FAIL`, or `A-RPL-06` `FAIL` — the replaced-signature set
-- [ ] `A-RPL-01..05` any `FAIL`, or `A-RPL-06` `FAIL` — the replaced-signature set
-      is not what the blob expects. **Caveat for the re-scoped target (F16):**
-      these expectations were derived from the frozen Prototype's state. Per the
-      reported project state the two-argument create is _absent_ on the Prototype
-      and _present_ on CityLink Launch, while `A-RPL-06` asserts absence — so on
-      the authorised target that row is expected to FAIL. Treat it as a question
-      to re-derive from the target's own captured rows, never as a row to relax in
-      place, and never as a licence to edit the expectation to match.
+- [ ] `A-RPL-01..05` any `FAIL` — a replaced signature is not present in the shape
+      the blob re-declares.
+- [ ] `A-RPL-06` `FAIL` — the two-argument `create_group_and_invite` is not in the
+      state **its own declared target** requires: present on CityLink Launch
+      (where it is the only create overload, and the blob drops it deliberately),
+      absent on the frozen Prototype (row 8 replaced it with `(uuid,uuid,text)`).
+      The row is target-relative since F16; a `FAIL` means the declared target is
+      in neither expected state, which is a genuine stop. `UNPINNED` means the
+      operator declared no ref — declare one and re-run, do not read it as a pass.
+- [ ] `A-RPL-07` is `CAPTURE`: record the whole overload set verbatim. It is what
+      lets a later reviewer re-derive `A-RPL-06` from this target's own rows
+      instead of borrowing another target's expectation.
 - [ ] `A-LGC-01/03/05` any `FAIL` — a legacy read result shape is not the released
       shape the blob re-declares.
 - [ ] `A-RUN-01/02` any `FAIL` — the executing role cannot legally replace or
@@ -201,19 +212,20 @@ Gate call: `select private.citylink_capacity_apply_gate();`
 
 Re-run pages 00, 01 and 05 in the same session, and record before/after:
 
-| Check                                                    | Expected after application                                                                                                  | Before | After |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
-| `A-COL-03` (`max_members` clean slate)                   | now reports the column present; the FAIL becomes the reviewed state                                                         |        |       |
-| `A-CAP-01..09` (capacity functions absent)               | now present with the reviewed signatures                                                                                    |        |       |
-| `A-CAP-11`/`A-CAP-12` (capacity table/constraint absent) | now present (`group_removal_context`, `study_groups_max_members_chk`)                                                       |        |       |
-| `A-RPL-01..06` (replacement signatures)                  | four-argument `create_group_and_invite(uuid,uuid,text,integer)` exists; three-argument stub still fails closed              |        |       |
-| `A-LGC-01/03/05` (legacy read shapes)                    | five, six and fourteen columns as reviewed                                                                                  |        |       |
-| Three `_capacity` read names                             | `list_course_group_summaries_capacity`, `list_current_term_course_groups_capacity`, `list_group_recruitment_posts_capacity` |        |       |
-| Three-argument create behaviour                          | `group_capacity_upgrade_required`, SQLSTATE `45000` — unchanged                                                             |        |       |
-| `A-TRG-02` (invitation guard identity)                   | still `PASS` against the same pin; identity string unchanged                                                                |        |       |
-| `A-TRG-03` (attachment set capture)                      | **byte-identical** to the pre-apply capture: no addition, no removal                                                        |        |       |
-| `P-H1-DIG` / `P-H2-DIG`                                  | identical to §2                                                                                                             |        |       |
-| `D-LDG-10` (recorded ledger versions)                    | recorded and compared against package doc §13 — **recorded, not repaired** (Track D needs its own Adam authorization)       |        |       |
+| Check                                                    | Expected after application                                                                                                                                                                                             | Before | After |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----- |
+| `A-COL-03` (`max_members` clean slate)                   | now reports the column present; the FAIL becomes the reviewed state                                                                                                                                                    |        |       |
+| `A-CAP-01..09` (capacity functions absent)               | now present with the reviewed signatures                                                                                                                                                                               |        |       |
+| `A-CAP-11`/`A-CAP-12` (capacity table/constraint absent) | now present (`group_removal_context`, `study_groups_max_members_chk`)                                                                                                                                                  |        |       |
+| `A-RPL-01..05` (replacement signatures)                  | four-argument `create_group_and_invite(uuid,uuid,text,integer)` exists; three-argument stub still fails closed                                                                                                         |        |       |
+| `A-RPL-06` on CityLink Launch (post-apply)               | **expected to invert**: the blob drops the two-argument overload at `:245`, so this row now `FAIL`s by design. Read it with `A-RPL-07`'s captured set — four-argument plus stub, no two-argument — not as a regression |        |       |
+| `A-LGC-01/03/05` (legacy read shapes)                    | five, six and fourteen columns as reviewed                                                                                                                                                                             |        |       |
+| Three `_capacity` read names                             | `list_course_group_summaries_capacity`, `list_current_term_course_groups_capacity`, `list_group_recruitment_posts_capacity`                                                                                            |        |       |
+| Three-argument create behaviour                          | `group_capacity_upgrade_required`, SQLSTATE `45000` — unchanged                                                                                                                                                        |        |       |
+| `A-TRG-02` (invitation guard identity)                   | still `PASS` against the same pin; identity string unchanged                                                                                                                                                           |        |       |
+| `A-TRG-03` (attachment set capture)                      | **byte-identical** to the pre-apply capture: no addition, no removal                                                                                                                                                   |        |       |
+| `P-H1-DIG` / `P-H2-DIG`                                  | identical to §2                                                                                                                                                                                                        |        |       |
+| `D-LDG-10` (recorded ledger versions)                    | recorded and compared against package doc §13 — **recorded, not repaired** (Track D needs its own Adam authorization)                                                                                                  |        |       |
 
 - [ ] No new `FAIL` row appeared anywhere.
 - [ ] Raw output of every re-run stored at: `______________________`
