@@ -1,13 +1,13 @@
 # Role 6 審查提案：群組聊天室 AI 作業分析與檔案
 
-**狀態：已收到 Role 6 唯讀技術／安全審查；其建議仍非已批准的 API／Storage／RLS 合約。實作仍待決。**
+**狀態：本文件已提交為 draft PR #59（分支 `feature/kayk-ai-project-room-files`，head `6804fdc8079b2ef04f155178b383b19b2b02cf5a`）。已收到 Role 6 唯讀技術／安全審查，其建議仍非已批准的 API／Storage／RLS 合約；逐題正式書面回覆仍待 Role 6。實作仍待決。**
 
 - **日期：** 2026-11-23
 - **Human owner：** Kayk
 - **Base role：** Role 4 — Group Invitation Feature Owner（保留原角色）
 - **Additional feature：** 群組聊天室 AI 作業分析與檔案分享
 - **目前分支：** `feature/kayk-ai-project-room-files`
-- **GitHub 基線與同步紀錄：** 初次檢查時 `main` 為 `1a583e30c019733d1880d2614ca853481509fdad`。2026-11-23 唯讀 fetch 後，本機 feature branch 以 `--ff-only` 快轉至 `origin/main` 的 `3514630896b96b7f7e0fa2239084071273335ecf`；目前本機分支與該 main 快照相同，並未推送。GitHub 上尚無同名遠端 feature branch。
+- **GitHub 基線與同步紀錄：** 初次檢查時 `main` 為 `1a583e30c019733d1880d2614ca853481509fdad`。2026-11-23 唯讀 fetch 後，本機 feature branch 以 `--ff-only` 快轉至 `origin/main` 的 `3514630896b96b7f7e0fa2239084071273335ecf`；目前本機分支與該 main 快照相同。GitHub 上現已存在同名遠端分支，head `6804fdc8079b2ef04f155178b383b19b2b02cf5a`，並以 draft PR #59 提交審查。
 
 ## 提案用途與界線
 
@@ -38,11 +38,11 @@
 
 ## 程式庫現況與相鄰工作
 
-以下是初次檢查基線 `main` (`1a583e30c019733d1880d2614ca853481509fdad`) 的歷史觀察：`client/src/pages/citylink/GroupChatPage.tsx` 是純文字聊天室頁面；`client/src/lib/supabaseStage6.ts` 封裝現有 chat/recruitment RPC，當時未見檔案或 AI 服務。Stage 6 migration `20261118050000_stage6_chat_recruitment.sql` 是聊天室及招募貼文範圍，不是群組附件或 AI migration。本機分支之後已同步至 `main` `3514630896b96b7f7e0fa2239084071273335ecf`，但本次尚未重新檢視這些程式檔；不可把上述歷史觀察當成最新 main 的已驗證現況，也不代表已查驗 Supabase Test 即時 schema／Storage。
+以下是初次檢查基線 `main` (`1a583e30c019733d1880d2614ca853481509fdad`) 的歷史觀察：`client/src/pages/citylink/GroupChatPage.tsx` 是純文字聊天室頁面；`client/src/lib/supabaseStage6.ts` 封裝現有 chat/recruitment RPC，當時未見檔案或 AI 服務。Stage 6 migration `20261118050000_stage6_chat_recruitment.sql` 是聊天室及招募貼文範圍，不是群組附件或 AI migration。本機分支之後已同步至 `main` `3514630896b96b7f7e0fa2239084071273335ecf`。2026-11-23 於該 main 重新只讀核對：`client/src/pages/citylink/GroupChatPage.tsx` 仍為 335 行純文字聊天頁；`client/src/lib/supabaseStage6.ts`（948 行）只有 chat／recruitment 的 RPC 封裝，未見檔案或 AI 函式；`supabase/migrations/` 沒有任何 storage 相關 migration；`supabase/schema.sql` 沒有附件表；`server/storage.ts` 是 Manus WebDev 樣板的 S3 helper，不屬 CityLink 上傳功能。以上是靜態檔案觀察，不代表已查驗 Supabase Test 即時 schema／Storage 或任何 RLS 行為。
 
 現有聊天室授權允許部分已離開群組的前成員查看歷史訊息；檔案與共用分析計畫則必須遵守「僅現任成員」。因此不可直接重用聊天室的可讀權限作為檔案或計畫存取權限；請說明伺服器如何在每次存取時分別驗證身分與現任 membership。
 
-PR #36 和 PR #33 都涉及聊天室頁或 Stage 6 client，需避免以整檔覆蓋方式整合。PR #37 的最後一次 Adam 核對快照為 OPEN draft：head `344c1058e78fd2cccfde89574e226f3e65a1457c` 對當時的 `main` `1a583e30c019733d1880d2614ca853481509fdad` 顯示 37 commits ahead、0 behind、`MERGEABLE / CLEAN`；這是歷史快照，本次未重新查驗 PR。當時仍有配對 SQL、Role 6 exact-head review、Test preflight、授權 migration 及 signed-in QA 等關卡，故不可因該快照判定可合併；Kayk 不應覆蓋聊天室相關程式。
+PR #36 和 PR #33 都涉及聊天室頁或 Stage 6 client，需避免以整檔覆蓋方式整合。先前引用的 PR #37 OPEN draft 快照（head `344c1058e78fd2cccfde89574e226f3e65a1457c`）已經失效：PR #37、#33、#36 均於 2026-11-23T09:05Z 合併入 `main`，而該 head 就是 #37 的最終 head。合併是事實狀態，不代表本功能已取得任何 API／Storage／RLS 授權，也不改變「Kayk 不應覆蓋聊天室相關程式」這條界線。
 
 ## 請 Role 6 回覆的技術問題
 
@@ -78,11 +78,27 @@ PR #36 和 PR #33 都涉及聊天室頁或 Stage 6 client，需避免以整檔�
 
 **網頁檔案選取限制：** 使用者可以透過瀏覽器／Android 檔案選擇器選取檔案；網頁不應假設可在使用者未選取時掃描整部裝置。是否以一般選檔器符合原產品預期，仍須在 UI 合約中確認。[11]
 
-**實作狀態：** 尚未寫入 API／schema/RLS／Storage／AI 程式，未建立或套用 migration，未連接 Supabase Test 或 Main。Role 6 報告提到曾有較早的 Test 只讀檢查，但本次未重新查驗；任何 migration 提案前仍須按授權重新檢查 disposable Test 的 schema、RLS、Storage 設定與學期日期來源。
+**實作狀態：** 尚未寫入 API／schema/RLS／Storage／AI 程式，未建立或套用 migration，未連接 Supabase Test 或 Main。repository 內仍無此功能的程式碼、migration 或 Storage 設定；本文件與同批研究只提供產品決定、審查提案與供應商研究。Role 6 報告提到曾有較早的 Test 只讀檢查，但本次未重新查驗；任何 migration 提案前仍須按授權重新檢查 disposable Test 的 schema、RLS、Storage 設定與學期日期來源。
+
+## 2026-11-23 — 提交 Role 6 的正式審查請求
+
+**審查標的（唯讀）：** repository `minstrel1014/CityLink`；分支 `feature/kayk-ai-project-room-files`；head `6804fdc8079b2ef04f155178b383b19b2b02cf5a`；draft PR #59；base `main` `3514630896b96b7f7e0fa2239084071273335ecf`。
+
+**本請求涉及的檔案（全部為文件，+297／−0，無程式碼、migration、schema 或 Storage 變更）：** `docs/team/DECISIONS.md`、`docs/stage6/KAYK_AI_FILE_TECHNICAL_REVIEW_PROPOSAL.md`、`docs/stage6/KAYK_CLOUD_DRIVE_API_COMPARISON.md`、`docs/stage6/KAYK_CLOUD_STORAGE_RESEARCH.md`、`docs/stage6/KAYK_FREE_TIER_CAPACITY_AND_RATE_LIMITS.md`。
+
+**請求性質：** 正式書面審查意見，不是批准，也不是 migration、Storage、OAuth 或實作授權。Role 6 只需回覆技術可行性與風險；任何 provider、架構或產品取捨留給 Adam 決定。
+
+**請逐題回覆的七項問題：** 即上文「請 Role 6 回覆的技術問題」第 1–7 項（身分與授權、檔案流程、任意檔案與限制、保留與移除成員、AI 資料流、共同計畫、錯誤與 QA）。
+
+**回覆格式：** 每題標記「可行／需修改／待 Adam 決定」，引用所依據的 repo 檔案或既有 contract，並明確列出任何會阻止實作的項目。若建議改動 API、schema、Storage 或 RLS，請另附一份單獨標示為技術提案的草案；不要套用到 Test 或 Main。
+
+**審查時請不要做的事：** 不要選定 provider 或帳戶類型；不要假設 100 MB 在實際 Storage 方案可行；不要把本文件或先前唯讀審查當成已批准合約；不要執行 SQL、migration 或任何 Test／Main 寫入。
+
+**交付路徑：** 本請求經協調任務轉交 Role 6；回覆帶回本 task，由 Adam 確認產品取捨後才進入技術合約定稿。
 
 ## Git 與範圍記錄
 
-2026-11-23 分支保全紀錄：檢查時本機 feature branch 從 `1a583e30c019733d1880d2614ca853481509fdad` 落後 `origin/main` 79 commits，且沒有本機獨有提交。先將已修改的 `docs/team/DECISIONS.md` 與四份 `KAYK_*.md` 報告複製到 repository 外備份，再以 `git stash --include-untracked` 保存原工作狀態；之後確認本機 HEAD 是 `origin/main` 祖先，以 `git merge --ff-only origin/main` 快轉至 `3514630896b96b7f7e0fa2239084071273335ecf`。原決策檔仍在 stash／外部備份；其內容已另依最新 main 人工整理。四份報告已從備份還原。編寫本提案時沒有程式碼、schema、RLS、Storage 或 AI 實作，沒有 Test／Main 存取。當前文件尚待檢查、提交與推送；Git 是本機版本／分支／提交追蹤，GitHub 是遠端分支與 PR 審查平台；絕不直接推 main、force-push 或未經 lead 批准合併。
+2026-11-23 分支保全紀錄：檢查時本機 feature branch 從 `1a583e30c019733d1880d2614ca853481509fdad` 落後 `origin/main` 79 commits，且沒有本機獨有提交。先將已修改的 `docs/team/DECISIONS.md` 與四份 `KAYK_*.md` 報告複製到 repository 外備份，再以 `git stash --include-untracked` 保存原工作狀態；之後確認本機 HEAD 是 `origin/main` 祖先，以 `git merge --ff-only origin/main` 快轉至 `3514630896b96b7f7e0fa2239084071273335ecf`。原決策檔仍在 stash／外部備份；其內容已另依最新 main 人工整理。四份報告已從備份還原。編寫本提案時沒有程式碼、schema、RLS、Storage 或 AI 實作，沒有 Test／Main 存取。文件已提交為 `6804fdc8079b2ef04f155178b383b19b2b02cf5a` 並推送同名遠端分支，以 draft PR #59 提交審查；Git 是本機版本／分支／提交追蹤，GitHub 是遠端分支與 PR 審查平台；絕不直接推 main、force-push 或未經 lead 批准合併。
 
 ## References
 
