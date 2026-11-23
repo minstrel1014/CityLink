@@ -1,13 +1,13 @@
 # Role 6 審查提案：群組聊天室 AI 作業分析與檔案
 
-**狀態：本文件已提交為 draft PR #59（分支 `feature/kayk-ai-project-room-files`，head `6804fdc8079b2ef04f155178b383b19b2b02cf5a`）。已收到 Role 6 唯讀技術／安全審查，其建議仍非已批准的 API／Storage／RLS 合約；逐題正式書面回覆仍待 Role 6。實作仍待決。**
+**狀態：本文件已提交為 draft PR #59（分支 `feature/kayk-ai-project-room-files`）。Role 6 已於 2026-11-23 對 head `79063cd10139a956fdee85f9c9d35e48ab69ca17` 提交正式書面回覆（存檔見 `KAYK_ROLE6_REVIEW_REPLY_20261123.md`）：功能方向可行，但現階段不可進入實作，並列出 2 項技術修改要求與 6 項須由 Adam 決定的阻擋項。其意見仍非已批准的 API／Storage／RLS 合約。技術合約草案見 `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md`。**
 
 - **日期：** 2026-11-23
 - **Human owner：** Kayk
 - **Base role：** Role 4 — Group Invitation Feature Owner（保留原角色）
 - **Additional feature：** 群組聊天室 AI 作業分析與檔案分享
 - **目前分支：** `feature/kayk-ai-project-room-files`
-- **GitHub 基線與同步紀錄：** 初次檢查時 `main` 為 `1a583e30c019733d1880d2614ca853481509fdad`。2026-11-23 唯讀 fetch 後，本機 feature branch 以 `--ff-only` 快轉至 `origin/main` 的 `3514630896b96b7f7e0fa2239084071273335ecf`；目前本機分支與該 main 快照相同。GitHub 上現已存在同名遠端分支，head `6804fdc8079b2ef04f155178b383b19b2b02cf5a`，並以 draft PR #59 提交審查。
+- **GitHub 基線與同步紀錄：** 初次檢查時 `main` 為 `1a583e30c019733d1880d2614ca853481509fdad`。2026-11-23 唯讀 fetch 後，本機 feature branch 以 `--ff-only` 快轉至 `origin/main` 的 `3514630896b96b7f7e0fa2239084071273335ecf`；目前本機分支與該 main 快照相同。GitHub 上現已存在同名遠端分支，並以 draft PR #59 提交審查；Role 6 審查時的 head 為 `79063cd10139a956fdee85f9c9d35e48ab69ca17`。
 
 ## 提案用途與界線
 
@@ -95,6 +95,23 @@ PR #36 和 PR #33 都涉及聊天室頁或 Stage 6 client，需避免以整檔�
 **審查時請不要做的事：** 不要選定 provider 或帳戶類型；不要假設 100 MB 在實際 Storage 方案可行；不要把本文件或先前唯讀審查當成已批准合約；不要執行 SQL、migration 或任何 Test／Main 寫入。
 
 **交付路徑：** 本請求經協調任務轉交 Role 6；回覆帶回本 task，由 Adam 確認產品取捨後才進入技術合約定稿。
+
+## 2026-11-23 — Role 6 正式回覆已收到
+
+**回覆存檔：** `docs/stage6/KAYK_ROLE6_REVIEW_REPLY_20261123.md`（原文，未改動）。**審查 head：** `79063cd10139a956fdee85f9c9d35e48ab69ca17`。
+
+**總體結論：** 功能方向可行，但現階段不可進入實作。Role 6 給出 2 項技術修改要求與 6 項須由 Adam 決定的阻擋項，並確認本功能的授權原語已存在於 repo：`private.is_active_group_member(group_id, profile_id)`（`supabase/migrations/20261102131343_stage5_groups.sql:281-296`），不需要新發明 membership 判斷。
+
+**2 項技術修改要求（實作必須遵守，不是產品選擇）：**
+
+1. **不可重用 `private.can_read_group_chat`**。該 predicate 允許 `active`、`left`、`removed`，用於檔案與共用計畫等於靜默地對前成員與被移除者開放。應改以 `private.is_active_group_member` 為基礎建立 `private.can_access_group_files`，並排除 `abandoned` 群組。
+2. **替換不得原地覆寫物件**。必須寫入新路徑並刪除舊物件，因為覆寫會因 CDN 傳播延遲讓舊內容在舊連結上短暫存活，與「替換不保留被替換內容」衝突。
+
+**6 項須由 Adam 決定的阻擋項：** 100 MB 在 Free 方案不可能（上限 50 MB），需 Pro 以上並設定全域與 bucket 限制；簽名 URL 無法個別撤銷，需定 TTL 政策（建議 60–300 秒）；儲存後端未決（Supabase Storage 或外部雲端硬碟）；AI provider 與第三方資料揭露／同意未決；`academic_terms.starts_on` 為 nullable 且現行資料未填，導致保留期無法計算；保留到期需要排程執行，屬部署決定且目前未授權。
+
+**Role 6 明確沒有做的事：** 未選定 provider 或帳戶類型、未假設 100 MB 可行（事實相反）、未撰寫或套用 migration、未存取 Test 或 Main、未修改 PR #59、未 merge。
+
+**本文件的後續處理：** 上述內容已整理為 `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md`，逐項標明哪些是已定技術要求、哪些仍待 Adam 決定；本提案文件保留為審查過程紀錄，不再改寫技術結論。
 
 ## Git 與範圍記錄
 
