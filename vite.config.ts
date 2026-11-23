@@ -1,8 +1,10 @@
 import { jsxLocPlugin } from "@builder.io/vite-plugin-jsx-loc";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import type { ServerResponse } from "node:http";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { publicPlatformScript } from "./server/_core/publicConfig";
 
@@ -56,7 +58,7 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
   const logPath = path.join(LOG_DIR, `${source}.log`);
 
   // Format entries with timestamps
-  const lines = entries.map((entry) => {
+  const lines = entries.map(entry => {
     const ts = new Date().toISOString();
     return `[${ts}] ${JSON.stringify(entry)}`;
   });
@@ -131,7 +133,7 @@ function vitePluginManusDebugCollector(): Plugin {
         }
 
         let body = "";
-        req.on("data", (chunk) => {
+        req.on("data", chunk => {
           body += chunk.toString();
         });
 
@@ -163,15 +165,153 @@ function vitePluginPublicPlatformConfig(): Plugin {
       });
     },
     generateBundle() {
-      this.emitFile({ type: "asset", fileName: "api/platform/config.js", source: publicPlatformScript() });
+      this.emitFile({
+        type: "asset",
+        fileName: "api/platform/config.js",
+        source: publicPlatformScript(),
+      });
     },
   };
 }
 
-const plugins = [vitePluginPublicPlatformConfig(), react(), tailwindcss(), jsxLocPlugin(), vitePluginManusDebugCollector()];
+const plugins = [
+  vitePluginPublicPlatformConfig(),
+  react(),
+  tailwindcss(),
+  jsxLocPlugin(),
+  vitePluginManusDebugCollector(),
+];
+
+// =============================================================================
+// F2 cached-client rollout: verifiable build/version marker
+//
+// The bundle that is running in a browser carries an immutable identifier that
+// is baked in at build time, and the same identifier is published next to the
+// deployment as /version.json. Group creation compares those two identifiers;
+// it never infers freshness from browser cache time, Date.now(), tab age or
+// header dates. Nothing in this layer reloads the page, retries a request or
+// stores a group-creation draft.
+//
+// Evidence class: repository-controllable only. A hosting layer in front of
+// the built output may still override response headers, so no deployment-level
+// cache behaviour is claimed from this file.
+// =============================================================================
+
+function resolveAppBuildId(): string {
+  const explicit = process.env.CITYLINK_BUILD_ID?.trim();
+  if (explicit) return explicit;
+  try {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf8",
+    }).trim();
+    if (!head) return "";
+    const dirty =
+      execFileSync("git", ["status", "--porcelain"], {
+        cwd: PROJECT_ROOT,
+        encoding: "utf8",
+      }).trim().length > 0;
+    // A dirty worktree is marked as such so a locally built marker can never
+    // be mistaken for the identifier of an accepted commit.
+    return dirty ? `${head}-dirty` : head;
+  } catch {
+    // No git metadata and no explicit id: the marker stays empty and the
+    // client reports freshness as unverifiable instead of guessing.
+    return "";
+  }
+}
+
+const APP_BUILD_ID =
+  process.env.VITE_APP_BUILD_ID?.trim() || resolveAppBuildId();
+const APP_VERSION = process.env.VITE_APP_VERSION?.trim() || "";
+
+// Vite only forwards VITE_-prefixed values that exist while this config module
+// is evaluated, so the resolved identifiers are published here rather than
+// relying on a caller's shell environment.
+process.env.VITE_APP_BUILD_ID = APP_BUILD_ID;
+process.env.VITE_APP_VERSION = APP_VERSION;
+
+function appBuildMarkerDocument(): string {
+  // null, not a placeholder: an unknown identifier must read as unknown.
+  return `${JSON.stringify({
+    buildId: APP_BUILD_ID || null,
+    version: APP_VERSION || null,
+  })}\n`;
+}
+
+/**
+ * Vite's own HTML middleware assigns `Cache-Control: no-cache` after plugin
+ * middlewares have run, which silently replaces a header set here. For the SPA
+ * document this pins the value to `no-store` so the preview matches the
+ * production policy: the document must never be reused from cache, because the
+ * version marker beside it is what exposes an older cached bundle. Hashed
+ * assets are unaffected. This is a development-server measure only.
+ */
+function forceNoStoreHeader(res: ServerResponse): void {
+  type AnyFn = (...args: unknown[]) => unknown;
+  const originalSetHeader = res.setHeader as unknown as AnyFn;
+  res.setHeader = ((name: unknown, value: unknown) =>
+    String(name).toLowerCase() === "cache-control"
+      ? originalSetHeader.call(res, "Cache-Control", "no-store")
+      : originalSetHeader.call(
+          res,
+          name,
+          value
+        )) as unknown as typeof res.setHeader;
+
+  const originalWriteHead = res.writeHead as unknown as AnyFn;
+  res.writeHead = ((...args: unknown[]) => {
+    const headers = args.find(
+      arg => arg !== null && typeof arg === "object" && !Array.isArray(arg)
+    ) as Record<string, unknown> | undefined;
+    if (headers) {
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase() === "cache-control") delete headers[key];
+      }
+      headers["Cache-Control"] = "no-store";
+    } else {
+      res.setHeader("Cache-Control", "no-store");
+    }
+    return originalWriteHead.apply(res, args);
+  }) as unknown as typeof res.writeHead;
+}
+
+function vitePluginAppBuildMarker(): Plugin {
+  return {
+    name: "citylink-app-build-marker",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? "").split("?")[0];
+        if (url === "/version.json") {
+          res.setHeader("Content-Type", "application/json");
+          res.setHeader("Cache-Control", "no-store");
+          res.end(appBuildMarkerDocument());
+          return;
+        }
+        if (
+          url === "/" ||
+          url === "/index.html" ||
+          url.endsWith(".html") ||
+          // Wouter serves the same SPA document for client-side routes.
+          !url.includes(".")
+        ) {
+          forceNoStoreHeader(res);
+        }
+        next();
+      });
+    },
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: appBuildMarkerDocument(),
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins,
+  plugins: [...plugins, vitePluginAppBuildMarker()],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

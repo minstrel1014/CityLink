@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   rpc: vi.fn(),
   from: vi.fn(),
+  probeAppBuildFreshness: vi.fn(),
 }));
 
 vi.mock("@/lib/supabaseClient", () => ({
@@ -15,7 +16,16 @@ vi.mock("@/lib/supabaseClient", () => ({
   },
 }));
 
+// The F2 rollout marker is replaced wholesale so these tests control the
+// verdict directly and never reach the network: the default answer is
+// "unknown", which must behave exactly like the pre-F2 client.
+vi.mock("@/lib/appBuildMarker", () => ({
+  GROUP_CAPACITY_UPGRADE_REQUIRED_TOKEN: "group_capacity_upgrade_required",
+  probeAppBuildFreshness: mocks.probeAppBuildFreshness,
+}));
+
 import {
+  GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE,
   createGroupAndInvite,
   getGroupWorkflowErrorMessage,
   listActiveGroupMembers,
@@ -67,6 +77,7 @@ beforeEach(() => {
     error: null,
   });
   mocks.rpc.mockReturnValue(rpcResult({ data: null, error: null }));
+  mocks.probeAppBuildFreshness.mockResolvedValue("unknown");
 });
 
 describe("active member roster pagination", () => {
@@ -692,5 +703,55 @@ describe("stale-client capacity upgrade-required signal", () => {
       p_max_members: 5,
     });
     expect(getGroupWorkflowErrorMessage(thrown)).toBe(approved);
+  });
+
+  it("blocks the create dispatch when the loaded bundle proves it is stale", async () => {
+    mocks.probeAppBuildFreshness.mockResolvedValueOnce("stale");
+    let thrown: unknown = null;
+    try {
+      await createGroupAndInvite("actor", "course", "recipient", "  Team  ", 5);
+    } catch (caught) {
+      thrown = caught;
+    }
+    expect(thrown).toBeInstanceOf(Error);
+    // The stable machine token is thrown, not a new user-facing sentence.
+    expect((thrown as Error).message).toBe("group_capacity_upgrade_required");
+    // Fail closed before dispatch: no creation request is sent, so there is
+    // nothing that could have been retried or silently downgraded.
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.probeAppBuildFreshness).toHaveBeenCalledOnce();
+    expect(getGroupWorkflowErrorMessage(thrown)).toBe(
+      GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE
+    );
+  });
+
+  it("dispatches the supported request once when the marker is unknown or fresh", async () => {
+    for (const verdict of ["unknown", "fresh"] as const) {
+      mocks.rpc.mockReset();
+      mocks.rpc.mockReturnValueOnce(
+        rpcResult({
+          data: [{ group_id: groupId, invitation_id: "invitation-1" }],
+          error: null,
+        })
+      );
+      mocks.probeAppBuildFreshness.mockResolvedValueOnce(verdict);
+      await expect(
+        createGroupAndInvite("actor", "course", "recipient", "  Team  ", 5)
+      ).resolves.toEqual({ group_id: groupId, invitation_id: "invitation-1" });
+      expect(mocks.rpc).toHaveBeenCalledWith("create_group_and_invite", {
+        p_course_id: "course",
+        p_recipient_id: "recipient",
+        p_name: "Team",
+        p_max_members: 5,
+      });
+      expect(mocks.rpc).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("exports the approved create-path string byte-for-byte", () => {
+    expect(GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE).toBe(approved);
+    expect(GROUP_CAPACITY_UPGRADE_REQUIRED_MESSAGE).toBe(
+      "CityLink needs an update. Refresh before creating a group."
+    );
   });
 });
