@@ -166,3 +166,29 @@ existing trigger on signup; no manual insert was needed or performed.
 
 Nothing else was done. The client cannot yet exercise group creation, because `*_capacity` reads and the
 four-argument `create_group_and_invite` still do not exist on Launch until S1/S2/S3 are applied.
+
+## 11. buildId correction 2026-11-23 15:18 — a transposed SHA typo
+
+The head SHA circulated in Adam's request text was `344c1058e78d**f2**cccfde…`. The real PR #37 head is
+`344c1058e78f**d2**cccfde…` (character index 11: `f` vs `d`). Confirmed by `git ls-remote`,
+`gh pr view 37 --json headRefOid`, and `git cat-file -t` — the typo string resolves to no object at all.
+
+The site code itself was never affected: it was produced with `git archive FETCH_HEAD` of
+`feature/capacity-integration-20261119-v2`, i.e. the real head, so the bundle is byte-correct and every
+bundle check in §5 still holds. The defect was mine, and it was in the **marker**:
+`scripts/write-version.mjs` hard-coded the typo string, so `version.json` carried a `buildId` that names
+a commit which does not exist. That defeats the purpose of the marker.
+
+Fix and re-verification:
+
+- `SOURCE_SHA` corrected to `344c1058e78fd2cccfde89574e226f3e65a1457c`;
+- rebuild exit 0 (4.72 s); `version.json` now reports
+  `buildId = sourceSha = 344c1058e78fd2cccfde89574e226f3e65a1457c`;
+- bundle unchanged and still correct: `assets/index-DtJYmQaY.js`, SHA-256
+  `bbeb4d9fc4db2b851d0ff2f4079d99a94cc74cdc799a9b9c979c44228883f9a8` (expected to be identical, because
+  only `version.json` changed, not the JS), Launch ref 1, Prototype ref 0, `p_max_members` 1,
+  `list_group_recruitment_posts_capacity` 1;
+- `git cat-file -t` on the corrected value returns `commit`, on the typo value returns an object error.
+
+Lesson recorded for future packets: a hand-typed 40-character head must be resolved against
+`git ls-remote` or `gh pr view … headRefOid` before it is pinned into an artifact or an assignment.
