@@ -423,3 +423,38 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Seed-data defect found and fixed on Launch:** a seeded course carried the non-RFC-4122 UUID `22222222-2222-2222-2222-222222222222`. The client rejects a malformed `course_id` in the enrolment-count read, so the whole catalogue failed closed behind "The current term could not be verified". The course was re-keyed to `0804189d-bb79-4d59-90f9-50a3b0fe3297` by delete-and-recreate (the composite FK on `study_groups(id, course_id, term_id)` makes in-place re-keying impossible). The client behaved as designed; the data was wrong.
 - **Not covered:** no concurrency or simultaneous-last-place test, no chat or recruitment-post write, no cancellation-path test beyond cancelling one invitation, and no acceptance attempt against a full group (only the invitation dispatch and the join request were exercised there).
 - **References:** `APPLY_RESULT_20261123.md`, `PREFLIGHT_RESULT_20261123.md`, `SIGNED_IN_QA_20261123.md`, `UI_QA_20261123.md` under the coordinator's `launch-site/apply` working set; Role 6 integrated review of `main` after Option A (F25–F28).
+
+## 2026-11-23 — Round-2 UI decisions: server-side group search and 1:1 direct messages
+
+Adam made the following decisions in the coordinator task on 2026-11-23. They authorise design
+and drafting only; they are **not** a migration application, a merge, a deployment or a
+publication.
+
+- **Server-side group search (contract amendment).** Adam approved widening
+  `public.list_current_term_course_groups_capacity` from `(uuid, text, uuid, integer)` to
+  `(uuid, text, uuid, integer, text)`, the added argument being `p_search text default null`.
+  The nine returned columns, their order and their meaning are unchanged, and the superseded
+  four-argument overload is dropped in the same transaction, so a four-argument call still
+  resolves through the defaults and behaves as "no search". This amends the contract recorded
+  in `CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md` (see the amendment section appended
+  there) and the identity matrix row 14. Preflight `A-CAP-04` keeps asserting the
+  four-argument form because it runs before the capacity blob is applied; the five-argument
+  post-condition is asserted inside the new migration.
+- **Direct messages are in scope for this release.** Adam approved building 1:1 direct
+  messages, which requires **new tables in `pijslbchvstkoweslymr`** (`direct_threads`,
+  `direct_messages`) plus a participation predicate, RPCs, a trigger and a Realtime
+  authorisation policy. This is a new Adam decision for new schema in that database, recorded
+  here as the project rules require. The capacity apply gate does **not** cover this change
+  and must not be cited as its protection or evidence.
+- **Product answers.** P1 only classmates who share a **current-term** course may start a
+  conversation (the existing `private.shares_course_with` is too wide because it matches any
+  historical enrolment and must not be used). D1 an existing thread stays readable and
+  writable after the course or term ends, so sending requires participation only. D3 at most
+  30 messages per sender per thread per rolling minute. D5 no retention limit in v1. D6 the
+  `/messages` placeholder is replaced on the same day direct messages ship. P2 delivery is
+  instant; P3 no block or report in v1; P4 read receipts are shown and there is no typing
+  indicator.
+- **Drafts, not applied.** `supabase/migrations/20261123120000_group_search_capacity.sql` and
+  `supabase/migrations/20261123130000_direct_messages.sql` are committed as drafts for a Role 6
+  exact-head review. Nothing has been executed against `pijslbchvstkoweslymr`, no PR is merged,
+  and the published site is unchanged.

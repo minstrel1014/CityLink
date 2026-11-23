@@ -70,11 +70,11 @@ source, and the wrapper column name/type lists match them exactly.
 
 ### 2c. Read contracts — new capacity-aware names
 
-| Contract                                          | Arguments                                                                                                                       | Columns, in order                                                                                                                                                                                                                                                                                                                                                                                        |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `public.list_course_group_summaries_capacity`     | `p_course_id uuid`                                                                                                              | `profile_id uuid`, `group_id uuid`, `group_name text`, `group_status text`, `group_size bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`                                                                                                                                                                                                                                  |
-| `public.list_current_term_course_groups_capacity` | `p_course_id uuid`, `p_after_group_name text default null`, `p_after_group_id uuid default null`, `p_limit integer default 25`  | `group_id uuid`, `group_name text`, `group_status text`, `active_member_count bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`, `can_create_post boolean`, `has_more boolean`                                                                                                                                                                                             |
-| `public.list_group_recruitment_posts_capacity`    | `p_course_id uuid`, `p_after_created_at timestamptz default null`, `p_after_id uuid default null`, `p_limit integer default 20` | `post_id uuid`, `group_id uuid`, `group_name text`, `subject text`, `active_member_count bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`, `author_name text`, `body text`, `post_status text`, `created_at timestamptz`, `updated_at timestamptz`, `closed_at timestamptz`, `apply_enabled boolean`, `apply_block_reason text`, `can_manage boolean`, `has_more boolean` |
+| Contract                                          | Arguments                                                                                                                                                    | Columns, in order                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `public.list_course_group_summaries_capacity`     | `p_course_id uuid`                                                                                                                                           | `profile_id uuid`, `group_id uuid`, `group_name text`, `group_status text`, `group_size bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`                                                                                                                                                                                                                                  |
+| `public.list_current_term_course_groups_capacity` | `p_course_id uuid`, `p_after_group_name text default null`, `p_after_group_id uuid default null`, `p_limit integer default 25`, `p_search text default null` | `group_id uuid`, `group_name text`, `group_status text`, `active_member_count bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`, `can_create_post boolean`, `has_more boolean`                                                                                                                                                                                             |
+| `public.list_group_recruitment_posts_capacity`    | `p_course_id uuid`, `p_after_created_at timestamptz default null`, `p_after_id uuid default null`, `p_limit integer default 20`                              | `post_id uuid`, `group_id uuid`, `group_name text`, `subject text`, `active_member_count bigint`, `max_members integer`, `capacity_count integer`, `capacity_state text`, `author_name text`, `body text`, `post_status text`, `created_at timestamptz`, `updated_at timestamptz`, `closed_at timestamptz`, `apply_enabled boolean`, `apply_block_reason text`, `can_manage boolean`, `has_more boolean` |
 
 `capacity_state` and `apply_block_reason` keep the value sets defined by the
 original PR #34 draft; this revision renames and wraps the contracts, it does not
@@ -209,7 +209,7 @@ written decision recorded in `docs/team/DECISIONS.md`.
   `create_group_and_invite(p_course_id, p_recipient_id, p_name, p_max_members)`,
   add the `group_capacity_upgrade_required` handler, and move any capacity
   display to `list_course_group_summaries_capacity(uuid)` /
-  `list_current_term_course_groups_capacity(uuid, text, uuid, integer)`. Keep the
+  `list_current_term_course_groups_capacity(uuid, text, uuid, integer, text)`. Keep the
   existing `Group is full` / `Group maximum is not set` labels and the
   fail-closed roster rules; a compatibility read must never be used to make a
   capacity decision.
@@ -360,3 +360,23 @@ facts above are the coordinator's authorized read-only results.
 **Scope of this amendment.** F4 was a documentation-only correction requested by
 Adam after F1 completed. It changes no SQL, no client behaviour and no
 deployment state, and it is not an application, merge or release approval.
+
+## Amendment 2026-11-23 — `p_search` added to `list_current_term_course_groups_capacity`
+
+Adam approved this contract amendment on 2026-11-23 so the course People page can search
+group names on the server instead of filtering only the pages already loaded in the browser.
+
+- Old signature: `public.list_current_term_course_groups_capacity(p_course_id uuid, p_after_group_name text default null, p_after_group_id uuid default null, p_limit integer default 25)`.
+- New signature: the same arguments plus `p_search text default null`.
+- Return columns, their order and their meaning are **unchanged** (nine columns), so the
+  capacity read contract itself does not move.
+- The superseded four-argument overload is dropped in the same transaction; exactly one
+  overload exists afterwards. A four-argument call still resolves through the defaults and
+  behaves exactly as "no search", which is why the SQL can be applied before the new client.
+- No capacity rule, label, fail-closed behaviour or refusal code changes.
+- Downstream records updated with this amendment: the identity matrix row 14 in
+  `docs/capacity-successor/PREBLOB_RECONCILIATION_AND_LAUNCH_MATRIX_20261123.md` and the
+  migration `supabase/migrations/20261123120000_group_search_capacity.sql`. Preflight check
+  `A-CAP-04` keeps asserting the four-argument form because it runs **before** the capacity
+  blob is applied; the five-argument post-condition is asserted inside the new migration
+  itself, so the two checks cannot contradict each other.
