@@ -454,6 +454,15 @@ publication.
   `/messages` placeholder is replaced on the same day direct messages ship. P2 delivery is
   instant; P3 no block or report in v1; P4 read receipts are shown and there is no typing
   indicator.
+- **Realtime withdrawn; direct messages deliver by polling (Adam, 2026-11-23 20:22).** Role 6's
+  focused review found that `realtime.messages` is owned by `supabase_realtime_admin` while the
+  migration role `postgres` is neither that role nor a superuser, so `create policy` may fail
+  with `42501`; because each migration file is a single transaction, that failure would roll
+  back the direct-message tables and RPCs as well. Adam also confirmed the project's Realtime
+  "Allow public access" setting is currently enabled. Adam therefore chose polling (option a).
+  The migration no longer references `realtime.*` at all and adds
+  `get_direct_thread_state(uuid)` for a ~2 s poll; any future Realtime work must be a separate
+  migration so a failure there cannot take the core schema down with it.
 - **Drafts, not applied.** `supabase/migrations/20261123120000_group_search_capacity.sql` and
   `supabase/migrations/20261123130000_direct_messages.sql` are committed as drafts for a Role 6
   exact-head review. Nothing has been executed against `pijslbchvstkoweslymr`, no PR is merged,
