@@ -202,6 +202,7 @@ Also measured in the same run: the two-argument
 `create_group_and_invite(uuid,uuid)` exists on Launch returning
 `TABLE(group_id uuid, invitation_id uuid)` — the F16 expectation, now evidence
 rather than inference — and none of the three `*_capacity` reads exists.
+**Superseded 2026-11-23.** Both halves of the sentence above were true at the 13:22Z capture and are false now: the two-argument `create_group_and_invite` was dropped by `20261118083000` (S1) and the three `*_capacity` reads were installed by `20261119090000`. The capture is retained as the pre-application record; the current Launch state is recorded in `docs/team/DECISIONS.md` (2026-11-23, Launch capacity application).
 
 **Conclusion: F18 closes with no new mismatch.** Every remaining identity either
 matches or is absent (so the blob creates it). `list_group_recruitment_posts`
