@@ -144,3 +144,25 @@ sign-in, subject to RLS.
 
 Consequence for the release: no account exists on Launch, and creating one is an Auth write to Launch.
 That is outside the current read-only-until-release boundary and needs an explicit go-ahead.
+
+## 10. QA account created on Launch 2026-11-23 15:05 (Adam-authorized, single action)
+
+Adam authorized exactly one action: create the QA account, nothing else. It was created through the
+public Auth endpoints with the browser-safe publishable key only — no service_role, no SQL write, no
+schema change, no migration, no signed-in QA run.
+
+| Step                                      | Result                                                           |
+| ----------------------------------------- | ---------------------------------------------------------------- |
+| `GET /auth/v1/settings`                   | 200, `mailer_autoconfirm=true`, `disable_signup=false`           |
+| `POST /auth/v1/signup`                    | 200, `email_confirmed_at` set (auto-confirmed), session returned |
+| `POST /auth/v1/token?grant_type=password` | 200, token returned, `role=authenticated`                        |
+
+Account: `citylink.qa.20261123@example.com`, `user_id = 9bfc6d04-ec73-41c7-a0a7-6e32dea86de5`.
+The password was supplied by Adam, is not written to any file or commit, and is not recorded here.
+
+Read-only confirmation afterwards (single `LIMIT 1` aggregate): `auth.users` = 3, `public.profiles` = 3,
+and exactly 1 profile row exists for the new user id — so the profile row is created automatically by an
+existing trigger on signup; no manual insert was needed or performed.
+
+Nothing else was done. The client cannot yet exercise group creation, because `*_capacity` reads and the
+four-argument `create_group_and_invite` still do not exist on Launch until S1/S2/S3 are applied.
