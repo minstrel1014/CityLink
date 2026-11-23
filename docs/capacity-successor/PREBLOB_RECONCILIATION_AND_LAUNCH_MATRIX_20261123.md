@@ -166,13 +166,51 @@ whose declared result type collides with a Launch function of the same identity.
 The three `*_capacity` reads are new names. The remaining ten identities are
 unresolved rather than clean — see F18.
 
-## 7. F18 — the snapshot cannot settle ten of the seventeen
+## 7. F18 — closed on 2026-11-23 by an authorised Launch capture
 
 The Launch snapshot records helper posture, the row-8 object set, and the absence
 of capacity objects. It does not record `pg_get_function_result` for any identity,
 so for ten functions the matrix can say "not enumerated", never "matches". A
 `42P13` on any of them would abort the apply exactly as `list_group_recruitment_posts`
 did, and this review would not have seen it coming.
+
+**Closed.** Adam authorised one read-only Launch capture at 2026-11-23 13:22, and
+the query below was run against `pijslbchvstkoweslymr` (run id
+`ROLE6-LAUNCH-CAPTURE-20261123-1323`). It returned eight rows. Target identity is
+corroborated independently: the raw SHA-256 of
+`pg_get_functiondef(can_browse_current_term_group)` measured there is
+`7cec20ec38fe1f77d1b78e9940cd28e0672b6b874a55fb22349bf5bac0b90591`, which is
+exactly the Main raw value recorded in the coordinator's parity report, and its
+length is 748 characters, also as recorded.
+
+| #   | Identity                                                      | Measured on Launch                                                                           | Against the blob | Verdict                         |
+| --- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------- | ------------------------------- |
+| 1   | `group_active_member_count(uuid)`                             | absent                                                                                       | create           | no collision                    |
+| 2   | `assert_group_has_capacity(uuid,integer)`                     | absent                                                                                       | create           | no collision                    |
+| 3   | `set_group_max_members(uuid,integer)`                         | absent                                                                                       | create           | no collision                    |
+| 6   | `send_group_invitation(uuid,uuid)`                            | `uuid`                                                                                       | `uuid`           | matches                         |
+| 7   | `request_to_join_group(uuid)`                                 | `uuid`                                                                                       | `uuid`           | matches                         |
+| 8   | `respond_to_group_invitation(uuid,boolean)`                   | `text`                                                                                       | `text`           | matches                         |
+| 9   | `review_group_join_request(uuid,boolean)`                     | `text`                                                                                       | `text`           | matches                         |
+| 10  | `cancel_pending_invitations_from_removed_member(uuid,uuid)`   | absent                                                                                       | create           | no collision                    |
+| 11  | `remove_group_member(uuid,uuid)`                              | absent                                                                                       | create           | no collision                    |
+| 13  | `list_course_group_summaries(uuid)`                           | 5 cols: `profile_id, group_id, group_name, group_status, group_size`                         | 5 cols           | matches                         |
+| 15  | `list_current_term_course_groups(uuid,text,uuid,integer)`     | 6 cols: `group_id, group_name, group_status, active_member_count, can_create_post, has_more` | 6 cols           | matches                         |
+| 17  | `list_group_recruitment_posts(uuid,timestamptz,uuid,integer)` | **13 cols, no `subject`**                                                                    | 14 cols          | **mismatch — the `42P13`, F17** |
+
+Also measured in the same run: the two-argument
+`create_group_and_invite(uuid,uuid)` exists on Launch returning
+`TABLE(group_id uuid, invitation_id uuid)` — the F16 expectation, now evidence
+rather than inference — and none of the three `*_capacity` reads exists.
+
+**Conclusion: F18 closes with no new mismatch.** Every remaining identity either
+matches or is absent (so the blob creates it). `list_group_recruitment_posts`
+remains the only return-type collision in the file, and Part A fixes it.
+
+One consequence worth stating because it is easy to misread: `remove_group_member`
+is **absent** on Launch. The blob creates it, so there is no collision, but it
+means Launch has no member-removal RPC today — another row-8-era gap rather than a
+capacity problem, and outside capacity DDL.
 
 One capture closes it, and it is the same query shape Part C prepares for the
 pinning run:

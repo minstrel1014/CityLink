@@ -80,6 +80,33 @@ another recipe; a different recipe is a different pin.
 | Coordinator canonical values (`5991901a…` / `5e88d56b…`) still match? | yes / no / recipe-differs                               |          |
 | If "recipe-differs": recorded reconciliation                          |                                                         |          |
 
+### 2.1 Recorded Launch capture — 2026-11-23 (run `ROLE6-LAUNCH-CAPTURE-20261123-1323`)
+
+Measured read-only on CityLink Launch `pijslbchvstkoweslymr` under Adam's 13:22
+authorisation, using the §2 queries verbatim. Target identity corroborated by the
+raw body digest `7cec20ec…b90591` at 748 characters, which matches the Main raw
+value in the coordinator's parity report and not the Prototype's (`a29d523e…`, 666).
+
+| Item                                      | Value                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------ |
+| `P-H1-OID` / `P-H2-OID`                   | `26036` / `26037`                                                              |
+| `P-H1-LEN` / `P-H2-LEN`                   | 748 chars, 748 octets / 1037 chars, 1037 octets                                |
+| `P-H1-DIG`                                | `f150f88041470bbecaa01e90e909343f084ce8e3a12e82d46fe67ea068c6db57`             |
+| `P-H2-DIG`                                | `7d50da9e152baee6cdea2372a2ee5c7a711ee374187b43cc2d37176d7f68b4d9`             |
+| `P-H1-CFG` / `P-H2-CFG`                   | PASS — `proconfig = {"search_path=\"\""}` for both                             |
+| `P-H1-ACL` / `P-H2-ACL`                   | `{postgres=X/postgres}` — owner only, no `anon`/`authenticated`/`service_role` |
+| Two consecutive executions identical?     | yes, both helpers                                                              |
+| Engine                                    | PostgreSQL 17.11 on aarch64-unknown-linux-gnu, gcc 15.2.0                      |
+| Coordinator canonical values still match? | **no — recipe-differs, F20**                                                   |
+
+**F20.** The coordinator's canonical values (`5991901a…`, `5e88d56b…`) do not
+reproduce on Launch under the published recipe, nor under eight further plausible
+variants, while the raw body digests match exactly — so the input text is the same
+and only the recipe or scope differs. Declaring the canonical values would make
+`P-H1-DIG`/`P-H2-DIG` `FAIL` on a correct database and close 45007 for the wrong
+reason. Declare the values above; if the canonical family is to be used instead,
+its recipe must be published and page 05 re-derived to match it first.
+
 Rules for this section:
 
 - A `UNPINNED` digest row is **not** a pass and must never be transcribed as one.

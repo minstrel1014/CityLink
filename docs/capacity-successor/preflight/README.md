@@ -150,3 +150,11 @@ from reading documentation, and each one is a fail-open risk if it is forgotten:
   seventeen create-or-replace statements cannot be checked for a return-type
   collision. One `pg_proc` query closes it; until it runs, those rows are "not
   enumerated", which is not the same as "clean".
+- **A digest that "matches on both targets" can still be the wrong family.** Finding
+  F20: the parity report's canonical helper digests were reproduced on neither
+  target under the published recipe, and nine plausible variants were tested against
+  the live bodies without producing them — while the raw body digests matched the
+  report exactly, proving the input text was the same. A value is only a pin when
+  the recipe that produced it is published alongside it. Before declaring
+  `citylink.capacity_pinned_digests`, confirm the value reproduces under the recipe
+  page 05 implements, not the recipe a report happens to have used.

@@ -1,10 +1,11 @@
 # F9 — what a Launch run must capture to pin `P-H1-DIG` and `P-H2-DIG`
 
-Status: **prepared, not produced.** This document contains no digest value. No
-Supabase project was contacted for it, nothing was executed against Launch or the
-Prototype, and every number that appears anywhere in this package today remains
-unfit to serve as the Launch pin. What follows is the capture specification: what
-to record, how, when a record is still valid, and what makes it stale.
+Status: **prepared, then produced under a later authorisation.** Sections 1-8 are
+the capture specification written on 2026-11-23 before any project contact: what to
+record, how, when a record is still valid, and what makes it stale. Section 9
+records the capture that Adam authorised at 13:22 the same day and that was run
+read-only against CityLink Launch. Read §9 for the values; read §4-§7 before
+declaring them into any instrument.
 
 ## 1. Why the pin is still `UNPINNED`
 
@@ -213,3 +214,66 @@ It is not a pin, not a capture, and not authorisation to run one. It runs nothin
 and contacts nothing. The capture it describes is a read-only Launch run that
 requires its own authorisation, and until that run happens both rows stay
 `UNPINNED` and 45007 keeps the gate closed.
+
+## 9. Recorded Launch capture — 2026-11-23
+
+Authorised by Adam at 13:22 as one read-only capture against CityLink Launch
+`pijslbchvstkoweslymr`, using the queries in §3. Run id
+`ROLE6-LAUNCH-CAPTURE-20261123-1323`. SELECT-only; nothing was written, no DDL, no
+migration, no `SET`. The frozen Prototype was not contacted.
+
+**Target identity.** `current_database()` is `postgres`, which is true on both
+projects, so it is not proof on its own. The independent corroboration is the raw
+digest of the helper body: `7cec20ec38fe1f77d1b78e9940cd28e0672b6b874a55fb22349bf5bac0b90591`
+at 748 characters is exactly the Main raw value and length in the coordinator's
+parity report, and it is not the Prototype's (`a29d523e…`, 666 characters). The
+session user was `postgres`, the engine
+`PostgreSQL 17.11 on aarch64-unknown-linux-gnu`, compiled by gcc 15.2.0, 64-bit.
+
+| Field                       | `P-H1` browse helper                                                               | `P-H2` manage helper                                               |
+| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| identity                    | `private.can_browse_current_term_group(p_group_id uuid)`                           | `private.can_manage_recruitment_post(p_post_id uuid)`              |
+| `OID`                       | `26036`                                                                            | `26037`                                                            |
+| `LEN` (chars / octets)      | `748` / `748`                                                                      | `1037` / `1037`                                                    |
+| normalized chars            | `623`                                                                              | `818`                                                              |
+| `DIG`                       | `f150f88041470bbecaa01e90e909343f084ce8e3a12e82d46fe67ea068c6db57`                 | `7d50da9e152baee6cdea2372a2ee5c7a711ee374187b43cc2d37176d7f68b4d9` |
+| `CFG` (empty `search_path`) | **PASS** — `proconfig = {"search_path=\"\""}`                                      | **PASS** — same                                                    |
+| `ACL`                       | `{postgres=X/postgres}` — owner only, no `anon`, `authenticated` or `service_role` | same                                                               |
+| `security definer` / owner  | true / `postgres`                                                                  | true / `postgres`                                                  |
+| stability                   | identical digest on two consecutive executions                                     | identical digest on two consecutive executions                     |
+
+The ACL posture is consistent with the package's expectation that no browser or
+`service_role` role executes the helpers directly: the RPCs that call them are
+`SECURITY DEFINER` and owned by `postgres`.
+
+**These are the values a Launch pin should carry.** They were produced by the
+published five-rule recipe on the target itself, twice, with the body length
+recorded, which is what §4 requires.
+
+### 9.1 F20 — the coordinator's canonical digests are a different family
+
+The parity report records "canonical" values
+`5991901a35dcf8480e807091a105dde3cd8f88a3881a032f1820bd1d3a61b3fc` and
+`5e88d56bce2d575a5df97a39bd609746499b0fa4981e6632af6ebbfb25d2d1b5` for the same two
+helpers. **Neither reproduces on Launch**, and the difference is not the body: the
+raw digests match the report exactly, so both sides hashed the same text.
+
+Nine plausible recipes were tested against the live bodies in the same authorised
+session — the published recipe; without `lower`; with `g` instead of `gn`; without
+`btrim`; collapse-only; without the punctuation rule; with a trailing newline;
+prefixed with the function name; suffixed with it. **None produced either canonical
+value.** So the canonical numbers come from a recipe or input scope that is not
+documented anywhere this task can read.
+
+The consequence is concrete and it is the F13/F16 failure mode again: if
+`citylink.capacity_pinned_digests` is declared with the canonical values, page 05
+`P-H1-DIG`/`P-H2-DIG` will `FAIL` on a correct Launch database and 45007 will close
+the gate for the wrong reason. Declare the §9 values, or re-derive the canonical
+family and publish its recipe first — but never mix the two.
+
+### 9.2 What this capture does not do
+
+It does not declare the pin into any instrument: `citylink.capacity_pinned_digests`
+is set by the operator in the run's own session, and this task holds no such run.
+It does not authorise an application. It does not verify behaviour — that the
+helpers return what their names claim is live signed-in QA, not a digest.
