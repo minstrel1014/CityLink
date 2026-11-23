@@ -21,6 +21,14 @@
 -- policy, and grants nothing to anon/authenticated. It only defines the refusal
 -- wrapper in schema private and revokes all on it from PUBLIC.
 -- =============================================================================
+--
+-- Ledger position: 20261119085000 sorts AFTER the reconciliation slot
+-- (20261119080000) and BEFORE the capacity migration (20261119090000), so a
+-- migration runner installs the gate before the capacity file rather than after
+-- it. A gate that arrives after an apply cannot refuse that apply; this ordering
+-- is what lets it. The operator must CALL it, and require it to satisfy, between
+-- installing it and applying the capacity migration. Renamed from 20261123120000
+-- on Adam's 2026-11-23 16:09 decision; nothing in the copied block changed.
 -- =============================================================================
 -- CityLink capacity successor — refusal wrapper (the only instrument that raises)
 -- =============================================================================
