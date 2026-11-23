@@ -271,6 +271,9 @@ The consequence is concrete and it is the F13/F16 failure mode again: if
 the gate for the wrong reason. Declare the §9 values, or re-derive the canonical
 family and publish its recipe first — but never mix the two.
 
+**Decided by Adam on 2026-11-23 13:34: the §9 measured values are the pin.**
+The canonical pair is not used. Recorded in `docs/team/DECISIONS.md` (PR #53).
+
 ### 9.2 What this capture does not do
 
 It does not declare the pin into any instrument: `citylink.capacity_pinned_digests`
