@@ -15,11 +15,23 @@
 -- aborts the whole application and nothing is applied — fail-closed, but not
 -- applicable.
 --
--- The capacity file already assumes the 14-column shape exists: repository row 8
--- (`20261118083000_stage6_people_page_naming.sql:636-638`) drops and recreates
--- this same function with `subject`. A target that has row 8 needs no help. A
--- target that does not — CityLink Launch, per the recorded metadata parity
--- snapshot — still holds the 13-column Stage 6 shape and will abort.
+-- The capacity file already assumes the 14-column shape exists: S1
+-- (`20261118083000_stage6_people_page_naming.sql:636-638`, the eighth migration in
+-- the ladder; called "row 8" in older records) drops and recreates this same
+-- function with `subject`. A target that has S1 needs no help. A target that does
+-- not still holds the 13-column Stage 6 shape and will abort.
+--
+-- WHAT THIS FILE DOES NOT DO — it does not substitute for S1. Without S1's
+-- `subject` column the function the capacity file recreates cannot execute at
+-- all: the first call raises `column p.subject does not exist` (F19). Measured on
+-- CityLink Launch on 2026-11-23: with S1 applied this file is a NO-OP
+-- (`NOTICE: preblob reconcile: already the 14-column shape (subject present);
+-- nothing to do`); without S1 it drops the only post-list read, leaving the post
+-- list down until the capacity file runs and then broken on first call.
+--
+-- It is therefore retained only as a no-op safety net for lineages that have not
+-- run S1 (Adam, 2026-11-23 16:47). It is not the step that clears page 01's four
+-- failures; S1 is.
 --
 -- WHAT THIS FILE DOES
 --
