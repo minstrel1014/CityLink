@@ -1,0 +1,152 @@
+
+===== 0. HEAD / SCOPE PROOF (repository, read-only) =====
+## [32mfeature/role6-capacity-successor-draft-20261122[m
+bc6a6d557cba1d4a61c6cabd48ec181b4e3da098
+docs/capacity-successor/20261122180000_stage7_group_capacity_prerequisite_guard_DRAFT.sql
+docs/capacity-successor/CAPACITY_SUCCESSOR_MIGRATION_PACKAGE_ROLE6_20261122.md
+docs/capacity-successor/CAPACITY_SUCCESSOR_PREFLIGHT_CHECKLIST_20261122.md
+supabase files changed vs parent: 0
+a04048e90d6b64c692f03c722b9eea2849058aab
+5cf0a66a6051762492b6a9bb01e249869551b2416779c8d173fed6470e8b4887  -
+39:begin;
+1756:commit;
+
+===== 1. STATIC COUNTS AT THE EXACT HEAD =====
+raise statements: 7
+to_regfunction( sites: 19
+proallargnames sites: 3
+d.roleid sites: 1
+accumulator statements: 44
+array_append/array_cat: 0
+hard ::regclass casts: 5
+SELECT ... INTO variable: 13
+v_sig occurrences: 1
+raise sites:
+  127:    raise exception 'group_capacity_prerequisite_unpinned'
+  136:    raise exception 'group_capacity_main_out_of_scope'
+  153:    raise exception 'group_capacity_prerequisite_mismatch'
+  587:  raise notice 'CityLink capacity prerequisite guard capture for target "%":',
+  590:    raise notice '  %', v_item;
+  594:    raise exception 'group_capacity_prerequisite_mismatch'
+  604:  raise notice 'CityLink capacity prerequisite guard reported no pinned '
+regclass sites:
+  187:        where attrelid = 'public.courses'::regclass
+  324:        where attrelid = 'public.study_groups'::regclass
+  360:        where attrelid = 'public.group_recruitment_posts'::regclass
+  501:     where c.oid = 'public.study_groups'::regclass;
+  512:   where conrelid = 'public.study_groups'::regclass
+
+===== 2. ENGINE START (local, socket only) =====
+engine: PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit
+server socket-only: 
+TCP listeners owned by postgres: 0
+
+===== 3. F1 CONTROL — guard EXACTLY as committed, Test ref pinned =====
+psql:/home/ubuntu/role6-static/wt-succ/docs/capacity-successor/20261122180000_stage7_group_capacity_prerequisite_guard_DRAFT.sql:608: ERROR:  syntax error at or near "||"
+LINE 506:     || 'failure for target "%". G4 pinning and the applicati...
+              ^
+
+===== 4. F2/F3/F4/F5 CATALOG REALITY =====
+ to_regclass_ok 
+----------------
+ t
+(1 row)
+
+ERROR:  function to_regfunction(unknown) does not exist
+LINE 1: select to_regfunction('now()');
+               ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+ to_regprocedure_ok | absent_returns_null | bare_name_is_null 
+--------------------+---------------------+-------------------
+ t                  | t                   | t
+(1 row)
+
+ proallargnames_columns 
+------------------------
+                      0
+(1 row)
+
+         pg_proc_argument_columns         
+------------------------------------------
+ proallargtypes, proargmodes, proargnames
+(1 row)
+
+                   pg_default_acl_columns                   
+------------------------------------------------------------
+ oid, defaclrole, defaclnamespace, defaclobjtype, defaclacl
+(1 row)
+
+NOTICE:  F5a text[] || literal: 22P02 / malformed array literal: "G2 public.academic_terms missing"
+NOTICE:  F5b chain with text variable: 22P02 / malformed array literal: "G3 "
+NOTICE:  F5c working forms now hold: {"G2 public.academic_terms missing","G3 ITEM missing","G9 wrapped literal as array"}
+
+===== 5. MECHANICAL REPAIR (R1-R6), applied OUTSIDE the repository =====
+R4 accumulator -> array_append:     44
+R5 RAISE format-expression fixed:   1
+lines: src 606 out 606
+post-repair counts: {'residual to_regfunction(': 0, 'residual proallargnames': 0, 'residual d.roleid': 0, "residual 'var := var ||'": 0, 'array_append uses': 44}
+DDL/DML tokens outside comments/strings (expect 0): 0 []
+remaining RAISE with concatenated format: 0 []
+R6 attrelid hard regclass casts -> to_regclass(): 5
+residual '::regclass' in repaired copy: 0
+
+===== 6. F7 — proconfig rendering and the G3 predicate =====
+pin_blob_style|{"search_path=\"\""}|search_path=""|t|t
+pin_unpinned||<none>|t|f
+
+===== 7. REPAIRED GUARD — the three reachable outcomes =====
+--- Test ref on an empty database ---
+NOTICE:    G1 target ref pinned to the disposable Test project; connector/target identity was
+NOTICE:    G7 recruitment write-path overloads captured: <none>
+NOTICE:    G9 study_groups owner "<unreadable>", RLS currently unreadable; the reviewed file 
+NOTICE:    G11 supabase_migrations.schema_migrations not reachable in this session; capture le
+NOTICE:    G11 default privilege posture captured (no assertion, no change): <none>
+NOTICE:    G11 functions carrying an explicit ACL in public or private: 0 (capture only; grant
+ERROR:  group_capacity_prerequisite_mismatch
+DETAIL:  26 check(s) failed for target "wkzclgmhrtecnpexfesr"
+--- Main ref ---
+ERROR:  group_capacity_main_out_of_scope
+DETAIL:  Main is read-only under the current Adam boundary, and the reviewed capacity file cannot apply to it as written: the legacy list_group_recruitment_posts wrapper re-declares a subject output column that Main's released result does not have (a return-type change PostgreSQL rejects), Main has no group_recruitment_posts.
+--- no target ---
+ERROR:  group_capacity_prerequisite_unpinned
+DETAIL:  citylink.
+
+===== 8. F8 — hard regclass cast aborts the whole block =====
+NOTICE:  F8 short-circuit assumption failed: 42P01 / relation "public.courses" does not exist
+NOTICE:  F8b unguarded constraint count: 42P01 / relation "public.study_groups" does not exist
+NOTICE:  F8c repaired form runs, constraint rows = 0
+
+===== 9. MAIN-SHAPE MECHANISM (Finding 1, upgraded from inference) =====
+ERROR:  column g.subject does not exist
+LINE 5: ...language sql stable as $$ select g.id, g.id, 'n', g.subject,...
+                                                             ^
+--- calling the plpgsql read that created successfully ---
+ERROR:  column p.subject does not exist
+LINE 1: select p.subject from public.group_recruitment_posts p limit...
+               ^
+NOTICE:  M3 create RPCs remaining inside the transaction after the blob drop: 0
+M3 create RPCs after rollback (fixture intact again): 1
+
+===== 10. F10 — the blob's own begin/commit vs --single-transaction =====
+psql:/home/ubuntu/role6-static/p51-repro/ev/bloblike.sql:1: WARNING:  there is already a transaction in progress
+WARNING:  there is no transaction in progress
+objects present after --single-transaction run: a_from_blob, b_after_blob
+plain-script run respected internal rollback; c_rolled_back rows exist = 0
+
+===== 11. FIXTURE-POPULATED REPAIRED GUARD (G6 faithfulness test) =====
+DETAIL:  16 check(s) failed for target "wkzclgmhrtecnpexfesr": G2 public.group_memberships missing || G2 public.group_join_requests missing || G2 public.profile
+--- blob declarations vs guard expected literals ---
+381:     <> '{profile_id,group_id,group_name,group_status,group_size}' then
+384:      || '; expected {profile_id,group_id,group_name,group_status,group_size}';
+returnstable(profile_iduuid,group_iduuid,group_nametext,group_statustext,group_sizebigint)
+returnstable(group_iduuid,group_nametext,group_statustext,active_member_countbigint,can_create_postboolean,has_moreboolean
+returnstable(post_iduuid,group_iduuid,group_nametext,subjecttext,active_member_countbigint,author_nametext,bodytext,post_statustext,created_attimestamptz,updated_attimestamptz,closed_attimestamptz,apply_enabledboolean,can_manageboolean,has_moreboolean
+
+===== 12. CLEANUP + FINAL REPOSITORY PROOF =====
+server stopped
+stray postgres processes: 0
+0
+
+## [32mfeature/role6-capacity-successor-draft-20261122[m
+bc6a6d557cba1d4a61c6cabd48ec181b4e3da098	refs/heads/feature/role6-capacity-successor-draft-20261122
+1a583e30c019733d1880d2614ca853481509fdad	refs/heads/main

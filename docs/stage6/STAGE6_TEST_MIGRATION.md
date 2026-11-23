@@ -7,7 +7,9 @@ Approved by Role 6 at head `771bb8c` on 2026-11-18; applied to Test on 2026-11-1
 - Migration: `supabase/migrations/20261118050000_stage6_chat_recruitment.sql`
 - Source proposal: `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` (revision 2), merged with PR #5 as `03563bc`
 - Target: disposable Test project, ref `wkzclgmhrtecnpexfesr`, only
-- Main: never touched by this migration
+- Main: never touched by the Test-only application described here
+
+**Historical clarification (Adam option C, 2026-11-22):** this remains the dated Test-only application record. Adam later gave a separate, one-time Main authorization on 2026-11-18; commits `c3d65e40310a9282dc0ea020dc08d972915b6721` and `0fd6926be6796b6c1537de70d11bb3967ae1c561` record the authorization and successful Main application as live ledger version `20261118080722`. That authorization expired with its report. The clarification records historical governance evidence and does not authorize any current or future Main write.
 
 ## Authorization
 
