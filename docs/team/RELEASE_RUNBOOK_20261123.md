@@ -77,3 +77,31 @@ There is no rollback. Step 1 and Step 4 are forward-only shape changes; the blob
 > 5. Signed-in multi-account QA on Launch in the same window.
 >
 > This authorizes no merge, no publication of the Prototype, and no change to `wkzclgmhrtecnpexfesr`.
+
+## Addendum 2026-11-23 16:00 — revised sequence after Role 6's combined verdict
+
+This addendum supersedes the step order in the body above. It does not change any file fingerprint.
+Read it as the operative order; the original text is kept for history.
+
+| #   | Step                          | Exact artefact                                                                                                         | Stop condition                                                                        |
+| --- | ----------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 0   | Session preflight             | page 00 identity + engine                                                                                              | target is not `pijslbchvstkoweslymr` or engine is not 17                              |
+| 1   | **Data preflight (new, F23)** | the two SELECTs in Role 6 §8, run in this same session                                                                 | either count is non-zero                                                              |
+| 2   | S1                            | `20261118083000_stage6_people_page_naming.sql`, blob `70cb7871…`, 747 lines                                            | non-zero exit; S1 is a single transaction so an abort leaves the target unchanged     |
+| 3   | Pin capture (F9)              | pages 01/05 evidence, declared values `f150f880…db57`, `7d50da9e…b4d9`                                                 | any declared value empty                                                              |
+| 4   | S3                            | blob `a04048e9…` / SHA-256 `5cf0a66a…4887`, applied verbatim, no `--single-transaction`, no outer `BEGIN`              | any error                                                                             |
+| 5   | **Gate install (changed)**    | `supabase/migrations/20261123120000_capacity_apply_gate.sql` from PR #54 head — replaces installing the draft document | PR #54 not accepted by Role 6, or migration absent from the ledger afterwards         |
+| 6   | Gate call                     | `select private.citylink_capacity_apply_gate();`                                                                       | anything other than `group_capacity_gate_satisfied run=… target=pijslbchvstkoweslymr` |
+| 7   | Client                        | the published Launch frontend built from `344c1058e78fd2cccfde89574e226f3e65a1457c`                                    | build id not matching that head                                                       |
+| 8   | Signed-in QA                  | QA account `citylink.qa.20261123@example.com` on Launch                                                                | —                                                                                     |
+
+Notes that must survive into execution:
+
+- Step 1 is a **fresh** measurement. The 15:56 result (0 blocking profiles of 3, 0 groups of 0) is
+  evidence that the target was clean then, not permission to skip the check.
+- Step 5 is now visible to the ledger; the previous plan installed the wrapper from a document, which no
+  audit would ever show (Role 6 F24).
+- The gate itself only checks declarations; it does not verify the target, the engine or the pin. The
+  evidence that this is Launch, on engine 17, with the pinned helpers still comes from pages 00/01/05.
+- S2 is **not** in this sequence. It lives on PR #52 head and is a measured no-op once S1 has run; it is
+  needed only if S3 were ever applied to a target that had not had S1.

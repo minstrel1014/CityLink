@@ -486,13 +486,44 @@ Recorded from Adam's message of 2026-11-23 00:53. This entry also closes the con
 - **Earlier approvals stand; the "still undecided" list was stale coordinator text, not a revocation (Adam, project lead, 2026-11-23 00:53).** The successor reshape (option b), the real-parser threshold, the F10 operating-sheet prohibition and the F2 replacement remain approved exactly as recorded on 2026-11-23 00:08–00:14, and the reshape already implemented at PR #51 head `7114b9611294460c59721c04183d099f37ef145c` is not reopened. The conflict the coordinator flagged at 00:40 is therefore **resolved in favour of the existing record**, and the coordinator's own list text is identified as the stale artefact rather than any decision by Adam. Role 6's in-flight F13 assignment proceeds unchanged; nothing about it is wasted.
 - **F14 is decided: the gate becomes a CityLink Launch-scoped wrapper (Adam, 2026-11-23 00:53).** Rather than abandoning the wrapper for a manual runbook, the wrapper is re-scoped so that the release target is the authorised one: `pijslbchvstkoweslymr` (CityLink Launch) is in scope, and `wkzclgmhrtecnpexfesr` (CityLink Prototype, frozen, do not migrate) is explicitly out of scope and must be refused. This inverts today's hard-coded behaviour, where the Prototype is the only accepted ref and Launch raises `group_capacity_gate_target_out_of_scope` (45003) — a state that made the gate structurally incapable of authorising the only apply that will ever matter. Consequences recorded for the next assignment: the success token must carry the ref it was produced for, per Adam's 00:40 requirement, so a verdict from the Launch wrapper cannot be mistaken for one from anywhere else; the 45001–45009 refusal semantics are retained and must stay distinguishable, with the out-of-scope refusal now covering the Prototype; and because pages are independent of the wrapper, local rehearsal continues to work unchanged while any local wrapper call is expected to be refused, which is the correct behaviour rather than a regression.
 - **Sequencing note, so the decision is not acted on prematurely.** Role 6's F13 assignment was already running when this decision was made, and a running finite assignment is not interrupted. The Launch-scoped wrapper therefore becomes Role 6's **next** finite assignment, dispatched only after the F13 handoff lands, and it must not be folded into the current work silently.
+
 ## Adam's 2026-11-23 01:48 decisions — F13 verified, and dispatch becomes manual
+
 Recorded from Adam's message of 2026-11-23 01:48.
+
 - **Role 6's F13 fix is verified at exact head `24ab8cb3552285f7d5198f3b3bd8101ce1de634c`.** Two commits on the draft branch, five files all under `docs/capacity-successor/`, `git diff 7114b96..24ab8cb -- supabase` at **0 bytes**, the reviewed blob still `5cf0a66a…4887`, and zero delta on client, server, `vite.config.ts`, `package.json` and the lockfile. `A-TRG-02` now requires `count=1` **and** an identity match against the pin, so it fails on an addition and on a removal; `A-TRG-03` captures the whole attachment set so "unchanged across the apply" is capture-and-compare rather than inferred. Refusals 45003–45009 now carry `target=<ref>`, with 45001/45002 documented as the two states where the ref cannot exist. Recorded in `docs/team/ROLE6_F13_COORDINATOR_VERIFICATION_20261123.md`.
 - **The "measured on Test" pin was checked rather than accepted.** Role 6's task has no Supabase connector, so the basis had to be the earlier approval, and it is: Adam's read-only SELECT-only dry run against `wkzclgmhrtecnpexfesr` covers catalog identity capture, which changes no row and reads no application row. The measured identity matches the coordinator's static derivation and its own read-only count character for character, which settles the F13 attribution in favour of `supabase/schema.sql:354-357`. It remains explicitly **not** a pin against CityLink Launch, and it proves attachment rather than enforcement.
 - **Dispatch becomes manual from here (Adam, 2026-11-23 01:48).** Where the next step requires assigning work to any task, the coordinator prepares the packet and Adam sends it himself, so he can select the task's model profile — currently Manus Flex — at the moment of dispatch. The coordinator therefore stops calling `manus-tasks.send_task_message` to assign owner work and instead delivers a copy-paste packet plus a file, and records that the packet was prepared but not sent. This supersedes the coordinator-dispatches convention in the shared project instructions; the instruction text still reflects the older convention and should be amended when convenient rather than silently diverging.
+
 ## Adam's 2026-11-23 02:25 decisions — F17 option 1, target-relative F16, F9 pin sequenced after F17
+
 Recorded from Adam's message of 2026-11-23 02:25.
+
 - **F17 takes option 1 (Adam, 2026-11-23 02:25).** A small, separately reviewed pre-blob reconciliation migration drops `public.list_group_recruitment_posts(uuid,timestamptz,uuid,integer)` so the reviewed blob can recreate it in the 14-column shape. The blob stays byte-identical at `5cf0a66a…4887`; the release sequence becomes three steps and must be reviewed and authorised as such. The coordinator's comparison of all thirteen functions the blob creates found exactly one return-type collision, so the fix is genuinely one function — but Role 6 must still complete the full matrix rather than trust that spot check.
 - **`A-RPL-06` becomes target-relative (Adam, 2026-11-23 02:25).** The row judges against the declared target's own state rather than a Prototype-captured value. It must still fail on a genuinely unexpected state, and must return `UNPINNED`/`CAPTURE` rather than `PASS` when the target state is unknown.
 - **The F9 pin is approved but sequenced after F17 (Adam, 2026-11-23 02:25).** Producing `P-H1-DIG`/`P-H2-DIG` requires a run against the target, and doing that before the target's schema question is settled would pin a state that is about to change. Preparation only until then.
+
+## 2026-11-23 15:58 — Adam: promote the gate, gate row 8 on the data preflight, authorise the apply
+
+Three decisions given in response to Role 6's combined verdict
+(`COORDINATOR_VERIFICATION_ROLE6_SEQUENCE_VERDICT_20261123.md`):
+
+1. **The apply gate is promoted into the migration ledger.** The refusal wrapper stops living only in
+   `docs/capacity-successor/preflight/90_apply_gate_wrapper_DRAFT.sql` and becomes
+   `supabase/migrations/20261123120000_capacity_apply_gate.sql`, carrying its own fresh Role 6 review, so
+   that a ledger audit can show it was installed. Implemented in draft PR #54, head
+   `b55fb06bedd35b2ef7e9fa074778ddf63975b194`; the copied block is byte-identical to the reviewed draft
+   (SHA-256 `a36a2e78…7db0`), so the created definition and its pin digest are unchanged.
+2. **The F23 data preflight becomes a hard gate before S1**, inside the same authorised session, and not
+   a snapshot relied on from an earlier record.
+3. **The apply is authorised.** Recorded as Adam's decision to proceed with applying the sequence to
+   CityLink Launch.
+
+Scope limits that this record must keep visible:
+
+- Decision 3 authorises applying, but the sequence is **not yet executable**: PR #54 is a draft awaiting
+  its Role 6 review, and until it is accepted the fourth step still ends in `42883`.
+- Decision 3 did **not** name the exact heads, target ref or time window that the project instructions
+  require before an apply. Those remain to be confirmed in one message immediately before execution.
+- Nothing here authorises merging any PR, marking a draft ready, publishing the site, changing repository
+  visibility, or touching the Prototype project or its database.
