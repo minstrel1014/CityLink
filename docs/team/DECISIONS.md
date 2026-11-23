@@ -463,7 +463,18 @@ publication.
   The migration no longer references `realtime.*` at all and adds
   `get_direct_thread_state(uuid)` for a ~2 s poll; any future Realtime work must be a separate
   migration so a failure there cannot take the core schema down with it.
-- **Drafts, not applied.** `supabase/migrations/20261123120000_group_search_capacity.sql` and
-  `supabase/migrations/20261123130000_direct_messages.sql` are committed as drafts for a Role 6
-  exact-head review. Nothing has been executed against `pijslbchvstkoweslymr`, no PR is merged,
-  and the published site is unchanged.
+- **Applied to `pijslbchvstkoweslymr` on 2026-11-23.** Adam authorised applying both migrations
+  at 20:32 after choosing polling. Preflight was read-only and all green: the four-argument
+  `list_current_term_course_groups_capacity` existed with no five-argument overload, no
+  `direct_*` objects existed, `private.both_enrolled_in_course(uuid,uuid,uuid)` and
+  `private.is_current_term(uuid)` were present, `courses.term_id` and `profiles.display_name`
+  existed, `gen_random_uuid()` was available, and no direct-message RPC existed. Both files were
+  applied verbatim (no `--single-transaction`, no outer `BEGIN`) at 12:33:13Z and 12:33:18Z UTC;
+  both ended in `COMMIT`. Post-conditions: exactly one `list_current_term_course_groups_capacity`
+  overload (five arguments); six direct-message RPCs present; both tables have RLS enabled with
+  zero policies; eight indexes and ten constraints present; `authenticated` holds zero table
+  privileges and six EXECUTE grants; `realtime` gained no policy. Transaction-scoped smoke tests
+  (rolled back, nothing persisted) exercised start → send → unread → read → refusal of a
+  non-classmate, and the search argument in five-argument, four-argument and legacy-wrapper
+  forms. **Still not authorised or done:** no merge of PR #60, no deployment, no publication, and
+  no client change yet.
