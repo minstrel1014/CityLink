@@ -13,14 +13,28 @@
 --   * no change to the currently unattached invitation-integrity guard; a
 --     complete guard/trigger change is deferred until it can authorize every
 --     existing lifecycle path, including expiry and profile-deletion cleanup.
---   * capacity fields in the three read RPCs whose return shapes change.
+--   * Option A compatibility (Adam's 2026-11-21 decision):
+--     capacity-bearing reads are exposed as new *_capacity contracts
+--     while the three legacy read RPC names keep their exact legacy
+--     column sets so older strict client allowlists still parse them;
+--   * public.create_group_and_invite(uuid, uuid, text) is kept as a
+--     fail-closed upgrade stub raising the stable
+--     group_capacity_upgrade_required signal instead of being dropped;
+--   * explicit EXECUTE normalization for the replaced invitation,
+--     request and review RPCs, which otherwise inherit the target
+--     database's existing access privileges.
 --
 -- This is forward-only and targets the disposable Test project only after the
 -- separate review/authorization gates. It does not reset or delete data.
 --
--- Client note: changing a RETURNS TABLE shape requires a matching client
--- mapper/UI release. Applying this SQL alone will make older clients reject the
--- new response keys. That client work is intentionally outside this SQL draft.
+-- Client note (Option A): the legacy read names no longer change shape, so
+-- an old client keeps parsing their responses. Capacity-aware clients must
+-- call only the new *_capacity contracts and the four-argument create RPC;
+-- old clients receive a fail-closed upgrade signal on the three-argument
+-- create path. Cached-client recovery (build/version marker, refresh
+-- control, no-cache shell) stays a separate client-side requirement and
+-- is NOT provided by this file. Contract inventory and rollout order:
+-- docs/team/CAPACITY_COMPATIBILITY_MIGRATION_ROLE6_20261121.md.
 
 begin;
 
@@ -221,10 +235,14 @@ grant execute on function public.set_group_max_members(uuid, integer)
 -- ---------------------------------------------------------------------------
 
 -- The naming migration replaced the old two-argument overload with the
--- three-argument name-bearing overload. Drop both exact historical signatures
--- so neither can bypass the maximum. No CASCADE: a dependency must fail loudly.
+-- three-argument name-bearing overload. The two-argument signature is dropped
+-- outright because no supported client calls it. No CASCADE: a dependency
+-- must fail loudly. The three-argument signature is deliberately NOT
+-- dropped: section 3b replaces only its body with a fail-closed stub, so
+-- an old cached client gets a stable, machine-detectable reason instead of
+-- a missing-function error, while still being unable to create anything or
+-- bypass max_members.
 drop function if exists public.create_group_and_invite(uuid, uuid);
-drop function if exists public.create_group_and_invite(uuid, uuid, text);
 
 create or replace function public.create_group_and_invite(
   p_course_id uuid,
@@ -349,6 +367,42 @@ $function$;
 revoke all on function public.create_group_and_invite(uuid, uuid, text, integer)
   from public, anon;
 grant execute on function public.create_group_and_invite(uuid, uuid, text, integer)
+  to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 3b. Old three-argument creation path: fail-closed upgrade stub
+-- ---------------------------------------------------------------------------
+
+-- SECURITY INVOKER on purpose: the body touches no table, no auth.uid() and
+-- no private helper, so it cannot read application data or escalate
+-- privileges. The signature and the RETURNS TABLE column list are identical
+-- to the released three-argument function, so an old client can still
+-- resolve and call it; the call always aborts and rolls back.
+--
+-- Stable machine signal, both parts are contract:
+--   * SQLSTATE 45000  -> PostgREST error.code
+--   * group_capacity_upgrade_required -> PostgREST error.message
+-- A client must map either one to the approved refresh/recovery message and
+-- must never retry it or fall back to unlimited group creation.
+create or replace function public.create_group_and_invite(
+  p_course_id uuid,
+  p_recipient_id uuid,
+  p_name text
+)
+returns table(group_id uuid, invitation_id uuid)
+language plpgsql
+security invoker
+set search_path to ''
+as $function$
+begin
+  raise exception 'group_capacity_upgrade_required'
+    using errcode = '45000';
+end;
+$function$;
+
+revoke all on function public.create_group_and_invite(uuid, uuid, text)
+  from public, anon;
+grant execute on function public.create_group_and_invite(uuid, uuid, text)
   to authenticated;
 
 -- ---------------------------------------------------------------------------
@@ -488,6 +542,13 @@ begin
 end;
 $function$;
 
+-- Explicit EXECUTE normalization: CREATE OR REPLACE above otherwise
+-- inherits whatever privileges the target database already holds.
+revoke all on function public.send_group_invitation(uuid, uuid)
+  from public, anon;
+grant execute on function public.send_group_invitation(uuid, uuid)
+  to authenticated;
+
 create or replace function public.request_to_join_group(p_group_id uuid)
 returns uuid
 language plpgsql
@@ -580,6 +641,11 @@ begin
   return v_request;
 end;
 $function$;
+
+revoke all on function public.request_to_join_group(uuid)
+  from public, anon;
+grant execute on function public.request_to_join_group(uuid)
+  to authenticated;
 
 create or replace function public.respond_to_group_invitation(
   p_invitation_id uuid,
@@ -753,6 +819,11 @@ begin
 end;
 $function$;
 
+revoke all on function public.respond_to_group_invitation(uuid, boolean)
+  from public, anon;
+grant execute on function public.respond_to_group_invitation(uuid, boolean)
+  to authenticated;
+
 create or replace function public.review_group_join_request(
   p_request_id uuid,
   p_approve boolean
@@ -887,6 +958,11 @@ begin
   return 'approved';
 end;
 $function$;
+
+revoke all on function public.review_group_join_request(uuid, boolean)
+  from public, anon;
+grant execute on function public.review_group_join_request(uuid, boolean)
+  to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 5. Leader-only manual removal and private cancellation context
@@ -1105,12 +1181,10 @@ grant execute on function public.remove_group_member(uuid, uuid)
 -- below remains safe while the guard is unattached.
 
 -- ---------------------------------------------------------------------------
--- 7. Read RPCs with capacity fields
+-- 7. Read contracts: new capacity RPCs plus legacy-shape wrappers
 -- ---------------------------------------------------------------------------
 
-drop function if exists public.list_course_group_summaries(uuid);
-
-create function public.list_course_group_summaries(p_course_id uuid)
+create or replace function public.list_course_group_summaries_capacity(p_course_id uuid)
 returns table(
   profile_id uuid,
   group_id uuid,
@@ -1201,14 +1275,47 @@ as $function$
   order by base.profile_id, base.group_id;
 $function$;
 
+revoke all on function public.list_course_group_summaries_capacity(uuid)
+  from public, anon;
+grant execute on function public.list_course_group_summaries_capacity(uuid)
+  to authenticated;
+
+-- Legacy shape (Option A). The released People mapper accepts exactly
+-- these five columns and rejects unknown keys, so no capacity column is
+-- exposed here. Two deliberate, capacity-consistent behavior deltas for
+-- old clients: group_size already included the forming-creator bonus and
+-- still does, and a forming group with only its creator (no active
+-- membership row) is now hidden, matching the approved verification case.
+create or replace function public.list_course_group_summaries(
+  p_course_id uuid
+)
+returns table(
+  profile_id uuid,
+  group_id uuid,
+  group_name text,
+  group_status text,
+  group_size bigint
+)
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select
+    legacy.profile_id,
+    legacy.group_id,
+    legacy.group_name,
+    legacy.group_status,
+    legacy.group_size::bigint
+  from public.list_course_group_summaries_capacity(p_course_id) as legacy;
+$function$;
+
 revoke all on function public.list_course_group_summaries(uuid)
   from public, anon;
 grant execute on function public.list_course_group_summaries(uuid)
   to authenticated;
 
-drop function if exists public.list_current_term_course_groups(uuid, text, uuid, integer);
-
-create function public.list_current_term_course_groups(
+create or replace function public.list_current_term_course_groups_capacity(
   p_course_id uuid,
   p_after_group_name text default null,
   p_after_group_id uuid default null,
@@ -1324,14 +1431,57 @@ begin
 end;
 $function$;
 
+revoke all on function public.list_current_term_course_groups_capacity(uuid, text, uuid, integer)
+  from public, anon;
+grant execute on function public.list_current_term_course_groups_capacity(uuid, text, uuid, integer)
+  to authenticated;
+
+-- Legacy shape (Option A): six columns exactly, as the released browse
+-- mapper expects. can_create_post is retained only for allowlist
+-- compatibility. It is structurally constant false because the browse rows
+-- exclude the viewer's own active group; it must never be treated as
+-- authorization. Real posting authority is
+-- private.can_manage_recruitment_post plus membership checks. Deliberate
+-- delta: active_member_count now carries the canonical capacity count
+-- (active memberships plus the narrow forming-creator bonus) instead of the
+-- raw active-membership count.
+create or replace function public.list_current_term_course_groups(
+  p_course_id uuid,
+  p_after_group_name text default null,
+  p_after_group_id uuid default null,
+  p_limit integer default 25
+)
+returns table (
+  group_id uuid,
+  group_name text,
+  group_status text,
+  active_member_count bigint,
+  can_create_post boolean,
+  has_more boolean
+)
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select
+    legacy.group_id,
+    legacy.group_name,
+    legacy.group_status,
+    legacy.active_member_count::bigint,
+    legacy.can_create_post,
+    legacy.has_more
+  from public.list_current_term_course_groups_capacity(
+    p_course_id, p_after_group_name, p_after_group_id, p_limit
+  ) as legacy;
+$function$;
+
 revoke all on function public.list_current_term_course_groups(uuid, text, uuid, integer)
   from public, anon;
 grant execute on function public.list_current_term_course_groups(uuid, text, uuid, integer)
   to authenticated;
 
-drop function if exists public.list_group_recruitment_posts(uuid, timestamptz, uuid, integer);
-
-create function public.list_group_recruitment_posts(
+create or replace function public.list_group_recruitment_posts_capacity(
   p_course_id uuid,
   p_after_created_at timestamptz default null,
   p_after_id uuid default null,
@@ -1536,6 +1686,66 @@ begin
       page.has_more
     from page;
 end;
+$function$;
+
+revoke all on function public.list_group_recruitment_posts_capacity(uuid, timestamptz, uuid, integer)
+  from public, anon;
+grant execute on function public.list_group_recruitment_posts_capacity(uuid, timestamptz, uuid, integer)
+  to authenticated;
+
+-- Legacy shape (Option A): fourteen columns exactly, as the released
+-- recruitment mapper expects. max_members, capacity_count,
+-- capacity_state and apply_block_reason stay on the *_capacity contract
+-- only. Deliberate delta: apply_enabled is the capacity-aware value, so an
+-- old client disables Apply for full, unset-maximum and over-limit groups
+-- instead of offering an action the write RPCs would reject;
+-- active_member_count carries the canonical capacity count. The write
+-- path stays authoritative either way.
+create or replace function public.list_group_recruitment_posts(
+  p_course_id uuid,
+  p_after_created_at timestamptz default null,
+  p_after_id uuid default null,
+  p_limit integer default 20
+)
+returns table (
+  post_id uuid,
+  group_id uuid,
+  group_name text,
+  subject text,
+  active_member_count bigint,
+  author_name text,
+  body text,
+  post_status text,
+  created_at timestamptz,
+  updated_at timestamptz,
+  closed_at timestamptz,
+  apply_enabled boolean,
+  can_manage boolean,
+  has_more boolean
+)
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select
+    legacy.post_id,
+    legacy.group_id,
+    legacy.group_name,
+    legacy.subject,
+    legacy.active_member_count::bigint,
+    legacy.author_name,
+    legacy.body,
+    legacy.post_status,
+    legacy.created_at,
+    legacy.updated_at,
+    legacy.closed_at,
+    legacy.apply_enabled,
+    legacy.can_manage,
+    legacy.has_more
+  from public.list_group_recruitment_posts_capacity(
+    p_course_id, p_after_created_at, p_after_id, p_limit
+  ) as legacy;
 $function$;
 
 revoke all on function public.list_group_recruitment_posts(uuid, timestamptz, uuid, integer)
