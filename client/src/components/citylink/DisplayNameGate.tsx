@@ -1,4 +1,11 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import { BackNavigationFrame } from "@/components/citylink/BackNavigation";
 import { supabaseClient } from "@/lib/supabaseClient";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import {
@@ -12,16 +19,27 @@ type GateState = "checking" | "ready" | "needs-name" | "error";
 export default function DisplayNameGate({ children }: { children: ReactNode }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? session.user?.id : undefined;
+  const authGeneration = session.authGeneration ?? 0;
+  const sessionIdentity = `${userId ?? "signed-out"}:${authGeneration}`;
   const [state, setState] = useState<GateState>("checking");
+  const [readyIdentity, setReadyIdentity] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [retryToken, setRetryToken] = useState(0);
+  const userIdRef = useRef(userId);
+  userIdRef.current = userId;
+  const saveGeneration = useRef(0);
+  useEffect(() => {
+    saveGeneration.current += 1;
+    setSaving(false);
+  }, [authGeneration, session.status, userId]);
 
   useEffect(() => {
     let active = true;
     setError("");
     setName("");
+    setReadyIdentity(null);
     if (session.status === "loading") {
       setState("checking");
       return () => {
@@ -30,12 +48,14 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     }
     if (!userId) {
       setState("ready");
+      setReadyIdentity(sessionIdentity);
       return () => {
         active = false;
       };
     }
     if (!supabaseClient) {
       setState("error");
+      setReadyIdentity(sessionIdentity);
       setError("Supabase is not configured, so your name cannot be checked.");
       return () => {
         active = false;
@@ -52,6 +72,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
         if (!active) return;
         if (loadError) {
           setState("error");
+          setReadyIdentity(sessionIdentity);
           setError(
             "CityLink could not confirm your stored display name. Check your connection and try again."
           );
@@ -59,6 +80,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
         }
         if (!data) {
           setState("error");
+          setReadyIdentity(sessionIdentity);
           setError(
             "Your signed-in account has no profile row, so CityLink cannot confirm your name."
           );
@@ -71,12 +93,15 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
           current === DEFAULT_NAME
         ) {
           setState("needs-name");
+          setReadyIdentity(sessionIdentity);
           return;
         }
         setState("ready");
+        setReadyIdentity(sessionIdentity);
       } catch {
         if (!active) return;
         setState("error");
+        setReadyIdentity(sessionIdentity);
         setError(
           "CityLink could not confirm your stored display name. Check your connection and try again."
         );
@@ -85,7 +110,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     return () => {
       active = false;
     };
-  }, [retryToken, session.status, userId]);
+  }, [authGeneration, retryToken, session.status, userId]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -101,15 +126,22 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
       setError("Please choose your own display name.");
       return;
     }
+    const saveUserId = userId;
+    const generation = saveGeneration.current;
+    const isCurrentSave = () =>
+      saveGeneration.current === generation && userIdRef.current === saveUserId;
     setSaving(true);
     setError("");
     try {
-      await updateOwnDisplayName(userId, value);
+      await updateOwnDisplayName(saveUserId, value, undefined, isCurrentSave);
+      if (!isCurrentSave()) return;
       setState("ready");
+      setReadyIdentity(sessionIdentity);
     } catch {
+      if (!isCurrentSave()) return;
       setError("Your name was not saved. Check your connection and try again.");
     } finally {
-      setSaving(false);
+      if (isCurrentSave()) setSaving(false);
     }
   }
 
@@ -119,22 +151,26 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
     window.location.assign("/");
   }
 
+  const identityMatches = !userId || readyIdentity === sessionIdentity;
+  const effectiveState = userId && !identityMatches ? "checking" : state;
   const canRenderChildren =
     session.status === "unconfigured" ||
     session.status === "error" ||
-    (session.status === "ready" && (!userId || state === "ready"));
+    (session.status === "ready" && effectiveState === "ready");
 
   return (
     <>
-      {canRenderChildren ? children : null}
-      {state !== "ready" && (
+      {canRenderChildren ? (
+        <BackNavigationFrame>{children}</BackNavigationFrame>
+      ) : null}
+      {effectiveState !== "ready" && (
         <div
           className="display-name-gate"
           role="dialog"
           aria-modal="true"
           aria-labelledby="display-name-title"
         >
-          {state === "checking" && (
+          {effectiveState === "checking" && (
             <div className="display-name-gate-card" role="status">
               <p className="eyebrow">CHECKING YOUR ACCOUNT</p>
               <h1 id="display-name-title">Confirming your display name…</h1>
@@ -143,7 +179,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
               </p>
             </div>
           )}
-          {state === "error" && (
+          {effectiveState === "error" && (
             <div className="display-name-gate-card" role="alert">
               <p className="eyebrow">NAME CHECK UNAVAILABLE</p>
               <h1 id="display-name-title">We could not confirm your name.</h1>
@@ -170,7 +206,7 @@ export default function DisplayNameGate({ children }: { children: ReactNode }) {
               </button>
             </div>
           )}
-          {state === "needs-name" && (
+          {effectiveState === "needs-name" && (
             <form className="display-name-gate-card" onSubmit={save}>
               <p className="eyebrow">WELCOME TO CITYLINK</p>
               <h1 id="display-name-title">Set your display name</h1>

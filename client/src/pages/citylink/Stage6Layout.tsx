@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowLeft, LockKeyhole, RefreshCw } from "lucide-react";
+import { LockKeyhole, RefreshCw } from "lucide-react";
 import { Link } from "wouter";
 import AppShell from "@/components/citylink/AppShell";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
@@ -18,9 +18,7 @@ export function Stage6Layout({
       <div className="authenticated-courses-page authenticated-courses-embedded">
         <main className="authenticated-courses-main authenticated-courses-main-embedded">
           <div className="stage6-breadcrumb">
-            <Link href="/my-courses">
-              <ArrowLeft size={15} /> My Courses
-            </Link>
+            <Link href="/dashboard">My Courses</Link>
             <span aria-hidden="true">/</span>
             <strong>{title}</strong>
           </div>

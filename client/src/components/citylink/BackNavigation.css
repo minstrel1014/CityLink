@@ -1,0 +1,50 @@
+.citylink-back-navigation {
+  padding: 8px 24px;
+  background: var(--background);
+}
+.citylink-back-control {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border: 1px solid #bac7ae;
+  border-radius: 8px;
+  background: var(--card);
+  color: #334b2a;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.citylink-back-control:hover:not(:disabled) {
+  background: #edf2e7;
+}
+.citylink-back-control:focus-visible {
+  outline: 3px solid #476c35;
+  outline-offset: 3px;
+}
+.citylink-back-control:disabled {
+  color: #626c60;
+  background: #f3f4f0;
+  border-color: #d3d9cd;
+  cursor: not-allowed;
+}
+/* The sidebar is fixed; the Back strip must start to its right, not under it. */
+@media (min-width: 801px) {
+  .citylink-route-frame:has(> .citylink-workspace-shell, > .app-shell)
+    > .citylink-back-navigation {
+    margin-left: 226px;
+  }
+}
+@media (min-width: 801px) and (max-width: 1250px) {
+  .citylink-route-frame:has(> .citylink-workspace-shell, > .app-shell)
+    > .citylink-back-navigation {
+    margin-left: 203px;
+  }
+}
+@media (max-width: 800px) {
+  .citylink-back-navigation {
+    padding: 6px 16px;
+  }
+}

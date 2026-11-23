@@ -323,7 +323,7 @@ export function GroupMemberProfilePage({
             className="secondary"
             href={`/groups/${encodeURIComponent(groupId)}/members`}
           >
-            <Users size={15} /> Back to group members
+            <Users size={15} /> View group members
           </Link>
         </article>
       )}

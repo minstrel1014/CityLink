@@ -1,0 +1,16 @@
+.stage6-capacity-status.available {
+  border-color: #e4ead9;
+  background: #f1f5eb;
+  color: #526b44;
+}
+
+.stage6-apply-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stage6-apply-control .stage6-readonly-note {
+  margin: 0;
+}

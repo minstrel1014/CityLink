@@ -109,8 +109,11 @@ export default function MyCourses({
 }) {
   const session = useSupabaseSession();
   const userId = session.user?.id ?? null;
+  const authGeneration = session.authGeneration ?? 0;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const authGenerationRef = useRef(authGeneration);
+  authGenerationRef.current = authGeneration;
 
   const [snapshot, setSnapshot] = useState<
     (CourseDirectorySnapshot & { userId: string }) | null
@@ -199,7 +202,7 @@ export default function MyCourses({
         requestGeneration.current += 1;
       }
     };
-  }, [retryToken, session.status, userId]);
+  }, [authGeneration, retryToken, session.status, userId]);
 
   const ownSnapshot = snapshot?.userId === userId ? snapshot : null;
   const courses = useMemo(
@@ -239,7 +242,14 @@ export default function MyCourses({
     return () => {
       active = false;
     };
-  }, [view, session.status, userId, ownSnapshot, enrollmentCounts]);
+  }, [
+    authGeneration,
+    view,
+    session.status,
+    userId,
+    ownSnapshot,
+    enrollmentCounts,
+  ]);
 
   const enrolledIds = useMemo(
     () =>
@@ -275,19 +285,21 @@ export default function MyCourses({
     }
 
     const expectedUserId = userId;
+    const expectedAuthGeneration = authGeneration;
     const expectedGeneration = requestGeneration.current;
     const isCurrent = () =>
       requestGeneration.current === expectedGeneration &&
-      userIdRef.current === expectedUserId;
+      userIdRef.current === expectedUserId &&
+      authGenerationRef.current === expectedAuthGeneration;
     const wasEnrolled = enrolledIds.has(courseId);
 
     setBusyCourseId(courseId);
     setNotice(null);
     try {
       if (wasEnrolled) {
-        await removeOwnCourseEnrolment(expectedUserId, courseId);
+        await removeOwnCourseEnrolment(expectedUserId, courseId, isCurrent);
       } else {
-        await addOwnCourseEnrolment(expectedUserId, courseId);
+        await addOwnCourseEnrolment(expectedUserId, courseId, isCurrent);
       }
       if (!isCurrent()) return;
 

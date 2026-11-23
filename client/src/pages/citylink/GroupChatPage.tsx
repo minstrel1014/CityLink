@@ -20,8 +20,13 @@ type LoadState = "loading" | "ready" | "error" | "unauthorized";
 export default function GroupChatPage({ groupId }: { groupId: string }) {
   const session = useSupabaseSession();
   const userId = session.status === "ready" ? (session.user?.id ?? null) : null;
+  const authGeneration = session.authGeneration ?? 0;
   const userIdRef = useRef(userId);
   userIdRef.current = userId;
+  const authGenerationRef = useRef(authGeneration);
+  authGenerationRef.current = authGeneration;
+  const groupIdRef = useRef(groupId);
+  groupIdRef.current = groupId;
   const [state, setState] = useState<LoadState>("loading");
   const [access, setAccess] = useState<GroupChatAccess | null>(null);
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
@@ -37,10 +42,15 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
   useEffect(() => {
     const currentGeneration = ++generation.current;
     let active = true;
+    setDraft("");
+    setBusy(false);
+    setOlderBusy(false);
     const isCurrent = () =>
       active &&
       generation.current === currentGeneration &&
-      userIdRef.current === userId;
+      userIdRef.current === userId &&
+      authGenerationRef.current === authGeneration &&
+      groupIdRef.current === groupId;
 
     if (session.status === "loading") {
       setState("loading");
@@ -91,7 +101,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       active = false;
       if (generation.current === currentGeneration) generation.current += 1;
     };
-  }, [groupId, reloadToken, session.status, userId]);
+  }, [authGeneration, groupId, reloadToken, session.status, userId]);
 
   async function loadOlder() {
     if (!userId || !messages.length || olderBusy || !hasOlder) return;
@@ -106,7 +116,9 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       });
       if (
         generation.current !== expectedGeneration ||
-        userIdRef.current !== userId
+        userIdRef.current !== userId ||
+        authGenerationRef.current !== authGeneration ||
+        groupIdRef.current !== groupId
       )
         return;
       setMessages(previous => [...[...page].reverse(), ...previous]);
@@ -114,14 +126,18 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     } catch (loadError) {
       if (
         generation.current === expectedGeneration &&
-        userIdRef.current === userId
+        userIdRef.current === userId &&
+        authGenerationRef.current === authGeneration &&
+        groupIdRef.current === groupId
       ) {
         setFeedback(getStage6ErrorMessage(loadError));
       }
     } finally {
       if (
         generation.current === expectedGeneration &&
-        userIdRef.current === userId
+        userIdRef.current === userId &&
+        authGenerationRef.current === authGeneration &&
+        groupIdRef.current === groupId
       )
         setOlderBusy(false);
     }
@@ -136,17 +152,30 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     setBusy(true);
     setFeedback("");
     try {
-      await sendGroupChatMessage(userId, groupId, text);
+      await sendGroupChatMessage(
+        userId,
+        groupId,
+        text,
+        () =>
+          generation.current === expectedGeneration &&
+          userIdRef.current === userId &&
+          authGenerationRef.current === authGeneration &&
+          groupIdRef.current === groupId
+      );
       if (
         generation.current !== expectedGeneration ||
-        userIdRef.current !== userId
+        userIdRef.current !== userId ||
+        authGenerationRef.current !== authGeneration ||
+        groupIdRef.current !== groupId
       )
         return;
       setDraft("");
       const latest = await listGroupChatMessages(userId, groupId);
       if (
         generation.current !== expectedGeneration ||
-        userIdRef.current !== userId
+        userIdRef.current !== userId ||
+        authGenerationRef.current !== authGeneration ||
+        groupIdRef.current !== groupId
       )
         return;
       setMessages([...latest].reverse());
@@ -154,14 +183,18 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     } catch (sendError) {
       if (
         generation.current === expectedGeneration &&
-        userIdRef.current === userId
+        userIdRef.current === userId &&
+        authGenerationRef.current === authGeneration &&
+        groupIdRef.current === groupId
       ) {
         setFeedback(getStage6ErrorMessage(sendError));
       }
     } finally {
       if (
         generation.current === expectedGeneration &&
-        userIdRef.current === userId
+        userIdRef.current === userId &&
+        authGenerationRef.current === authGeneration &&
+        groupIdRef.current === groupId
       )
         setBusy(false);
     }
@@ -218,7 +251,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               </p>
             </div>
             <Link className="secondary" href="/my-courses">
-              Back to courses
+              View My Courses
             </Link>
           </header>
 

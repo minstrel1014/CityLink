@@ -42,6 +42,16 @@
 .course-detail-embedded .classmate-group-meta.looking strong {
   color: #697b58;
 }
+.course-detail-actions .course-detail-member-label {
+  width: auto;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  line-height: 1.4;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .course-detail-page .classmate-portfolio-link,
 .course-detail-embedded .classmate-portfolio-link {
   display: block;

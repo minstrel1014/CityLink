@@ -39,7 +39,8 @@ export default function AppShell({
     href === "/courses"
       ? location === href ||
         location.startsWith("/courses/") ||
-        location.startsWith("/students/")
+        location.startsWith("/students/") ||
+        location.startsWith("/my-courses/")
       : href === "/invitations"
         ? location === href || location === "/my-groups"
         : href === "/messages"
