@@ -31,10 +31,29 @@ export function createR2Client(config: GroupFileSignerConfig): S3Client {
   });
 }
 
-/** Escapes a filename for use inside a quoted `filename=` parameter. */
+/**
+ * Builds a `Content-Disposition` that cannot be broken out of, and that keeps a
+ * non-ASCII filename readable.
+ *
+ * `original_name` is a client-supplied string: the database only trims it and
+ * caps the length, so it may contain quotes, CR/LF or any Unicode. Concatenating
+ * it into a header is how a filename becomes header injection, and dropping the
+ * non-ASCII bytes is how a Chinese filename becomes a row of underscores.
+ *
+ * So: an ASCII-only fallback in `filename=` for old clients, plus RFC 5987
+ * `filename*=UTF-8''…` with the full name percent-encoded. Both are escaped;
+ * neither passes a quote, a backslash or a control character through.
+ */
 export function contentDispositionFor(fileName: string): string {
-  const safe = fileName.replace(/[\r\n"\\]/g, "_");
-  return `attachment; filename="${safe}"`;
+  const cleaned = fileName.replace(/[\r\n]+/g, "").trim() || "file";
+  const ascii = cleaned
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_");
+  const encoded = encodeURIComponent(cleaned).replace(
+    /['()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
 
 /**

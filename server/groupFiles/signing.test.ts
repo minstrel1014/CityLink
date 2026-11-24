@@ -75,7 +75,7 @@ describe("presignDownload", () => {
 
     expect(params.get("X-Amz-Expires")).toBe("300");
     expect(params.get("response-content-disposition")).toBe(
-      'attachment; filename="qa-p1-small.txt"'
+      'attachment; filename="qa-p1-small.txt"; filename*=UTF-8\'\'qa-p1-small.txt'
     );
     expect(params.get("response-content-type")).toBe("text/plain");
   });
@@ -83,8 +83,23 @@ describe("presignDownload", () => {
 
 describe("contentDispositionFor", () => {
   it("cannot be broken out of with quotes, newlines or backslashes", () => {
-    expect(contentDispositionFor('a"b\nc\\d.txt')).toBe(
-      'attachment; filename="a_b_c_d.txt"'
+    const header = contentDispositionFor('a"b\nc\\d.txt');
+    // No raw quote, CR, LF or backslash survives into the header.
+    expect(header).not.toMatch(/[\r\n]/);
+    expect(header.match(/"/g)).toHaveLength(2);
+    expect(header).toContain('attachment; filename="a_bc_d.txt"');
+    expect(header).toContain("filename*=UTF-8''");
+  });
+  it("keeps a non-ASCII name readable via RFC 5987", () => {
+    const header = contentDispositionFor("報告.pdf");
+    expect(header).toContain('filename="__.pdf"');
+    expect(header).toContain(
+      "filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf"
+    );
+  });
+  it("falls back to a name when the client sends only whitespace", () => {
+    expect(contentDispositionFor("   ")).toBe(
+      'attachment; filename="file"; filename*=UTF-8\'\'file'
     );
   });
 });
@@ -108,7 +123,7 @@ describe("GROUP_FILE_CONTENT_TYPE", () => {
     const params = query(url);
     expect(params.get("response-content-type")).toBe("application/octet-stream");
     expect(params.get("response-content-disposition")).toBe(
-      'attachment; filename="payload.html"'
+      'attachment; filename="payload.html"; filename*=UTF-8\'\'payload.html'
     );
   });
 });
