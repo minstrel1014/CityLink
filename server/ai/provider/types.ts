@@ -55,7 +55,7 @@ export class AnalysisProviderError extends Error {
       | "analysis_provider_not_configured"
       | "analysis_provider_failed"
       | "analysis_cancelled",
-    message: string,
+    message: string
   ) {
     super(message);
     this.name = "AnalysisProviderError";

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { CONTEXT_DROPPED_NOTICE, type ChatTurn } from "../../../shared/aiChatContext";
+import {
+  CONTEXT_DROPPED_NOTICE,
+  type ChatTurn,
+} from "../../../shared/aiChatContext";
 import {
   AI_REPLY_HARD_LIMIT,
   AI_REPLY_TRUNCATION_NOTICE,
@@ -11,7 +14,12 @@ import { answerGroupQuestion } from "./answerQuestion";
 const NOW = new Date("2026-11-24T12:00:00.000Z");
 const GROUP = "group-1";
 
-function turn(id: string, authorKind: "member" | "ai", body: string, minutesAgo: number): ChatTurn {
+function turn(
+  id: string,
+  authorKind: "member" | "ai",
+  body: string,
+  minutesAgo: number
+): ChatTurn {
   return {
     id,
     authorKind,
@@ -53,7 +61,7 @@ describe("the end-to-end answer", () => {
           turn("a3", "ai", "third", 20),
         ],
       },
-      { provider: new MockAnalysisProvider() },
+      { provider: new MockAnalysisProvider() }
     );
 
     expect(result.context.dropped).toBe(true);
@@ -63,7 +71,7 @@ describe("the end-to-end answer", () => {
   it("has no notice when nothing was dropped", async () => {
     const result = await answerGroupQuestion(
       { ...base, history: [turn("m1", "member", "one short message", 5)] },
-      { provider: new MockAnalysisProvider() },
+      { provider: new MockAnalysisProvider() }
     );
 
     expect(result.context.dropped).toBe(false);
@@ -79,7 +87,12 @@ describe("the end-to-end answer", () => {
           providerId: "long",
           model: null,
           body: "x".repeat(5_000),
-          usage: { inputChars: 0, outputChars: 5_000, turnsUsed: 0, filesUsed: 0 },
+          usage: {
+            inputChars: 0,
+            outputChars: 5_000,
+            turnsUsed: 0,
+            filesUsed: 0,
+          },
         };
       },
     };
@@ -93,7 +106,7 @@ describe("the end-to-end answer", () => {
           turn("a3", "ai", "oldest kept", 20),
         ],
       },
-      { provider: longProvider },
+      { provider: longProvider }
     );
 
     expect(result.truncated).toBe(true);
@@ -112,7 +125,12 @@ describe("the end-to-end answer", () => {
           providerId: "long",
           model: null,
           body: "y".repeat(4_000),
-          usage: { inputChars: 0, outputChars: 4_000, turnsUsed: 0, filesUsed: 0 },
+          usage: {
+            inputChars: 0,
+            outputChars: 4_000,
+            turnsUsed: 0,
+            filesUsed: 0,
+          },
         };
       },
     };
@@ -120,7 +138,10 @@ describe("the end-to-end answer", () => {
     await answerGroupQuestion(base, { provider: longProvider, log });
 
     expect(log).toHaveBeenCalledWith(
-      expect.objectContaining({ event: "ai_reply_truncated", originalChars: 4_000 }),
+      expect.objectContaining({
+        event: "ai_reply_truncated",
+        originalChars: 4_000,
+      })
     );
   });
 
@@ -135,7 +156,12 @@ describe("the end-to-end answer", () => {
           providerId: "spy",
           model: null,
           body: "short",
-          usage: { inputChars: 0, outputChars: 5, turnsUsed: request.turns.length, filesUsed: 0 },
+          usage: {
+            inputChars: 0,
+            outputChars: 5,
+            turnsUsed: request.turns.length,
+            filesUsed: 0,
+          },
         };
       },
     };
@@ -149,7 +175,7 @@ describe("the end-to-end answer", () => {
           turn("m1", "member", "m".repeat(3_000), 20),
         ],
       },
-      { provider: spyProvider },
+      { provider: spyProvider }
     );
 
     // Two AI answers alone exceed 4,000 characters, so the member message and
@@ -160,7 +186,10 @@ describe("the end-to-end answer", () => {
   it("cancels cleanly", async () => {
     const controller = new AbortController();
     const provider = new MockAnalysisProvider({ delayMs: 50 });
-    const pending = answerGroupQuestion(base, { provider, signal: controller.signal });
+    const pending = answerGroupQuestion(base, {
+      provider,
+      signal: controller.signal,
+    });
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "analysis_cancelled" });
   });

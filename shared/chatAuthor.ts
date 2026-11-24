@@ -36,13 +36,13 @@ export function isAiMessage(row: Pick<ChatMessageRow, "authorKind">): boolean {
  * "CityLink AI" would put words in the product's mouth.
  */
 export function isDeletedAccountMessage(
-  row: Pick<ChatMessageRow, "authorKind" | "senderId">,
+  row: Pick<ChatMessageRow, "authorKind" | "senderId">
 ): boolean {
   return row.authorKind === "member" && row.senderId === null;
 }
 
 export function displayAuthor(
-  row: Pick<ChatMessageRow, "authorKind" | "senderNameSnapshot">,
+  row: Pick<ChatMessageRow, "authorKind" | "senderNameSnapshot">
 ): string {
   return row.authorKind === "ai" ? AI_AUTHOR_NAME : row.senderNameSnapshot;
 }
@@ -63,6 +63,9 @@ export function canReadAiReplies(membership: MembershipForReading): boolean {
 }
 
 /** Sending a new question is an active-member action. */
-export function canAskAi(membership: MembershipForReading, groupAbandoned: boolean): boolean {
+export function canAskAi(
+  membership: MembershipForReading,
+  groupAbandoned: boolean
+): boolean {
   return membership === "active" && !groupAbandoned;
 }

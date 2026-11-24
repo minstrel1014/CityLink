@@ -37,7 +37,7 @@ export function charLength(text: string): number {
  */
 export function finaliseAiReply(
   raw: string,
-  options: { log?: ReplyLogger } = {},
+  options: { log?: ReplyLogger } = {}
 ): FinalisedReply {
   const trimmed = raw.trim();
   const total = charLength(trimmed);
@@ -71,7 +71,10 @@ export function isWithinTargetBand(body: string): boolean {
 }
 
 /** Prefixes the dropped-context notice when the context builder reports one. */
-export function applyContextNotice(body: string, notice: string | null): string {
+export function applyContextNotice(
+  body: string,
+  notice: string | null
+): string {
   if (notice === null) return body;
   if (body.startsWith(notice)) return body;
   return `${notice}\n\n${body}`;

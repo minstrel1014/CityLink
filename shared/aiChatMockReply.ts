@@ -36,22 +36,26 @@ export function composeMockReply(input: MockReplyInput): string {
     paragraphs.push(
       `我讀到 ${memberTurns.length} 則成員訊息，其中最近的一則是「${clip(
         memberTurns[memberTurns.length - 1].body,
-        90,
-      )}」。`,
+        90
+      )}」。`
     );
   } else {
-    paragraphs.push("這次的 context 沒有包含成員訊息，所以我只能依你的問題與檔案內容回答。");
+    paragraphs.push(
+      "這次的 context 沒有包含成員訊息，所以我只能依你的問題與檔案內容回答。"
+    );
   }
 
   if (aiTurns.length > 0) {
-    paragraphs.push(`先前的 AI 回應有 ${aiTurns.length} 則在 context 內，我會避免重複已經講過的部分。`);
+    paragraphs.push(
+      `先前的 AI 回應有 ${aiTurns.length} 則在 context 內，我會避免重複已經講過的部分。`
+    );
   }
 
   if (input.files.length > 0) {
     const names = input.files.map(file => file.name).join("、");
     paragraphs.push(
       `你選取了 ${input.files.length} 個檔案（${names}）。以「${clip(input.files[0].text, 100)}」這段為例，` +
-        "檔案內容看起來與問題相關，建議先確認它的結論是否仍然成立，再決定要不要採用。",
+        "檔案內容看起來與問題相關，建議先確認它的結論是否仍然成立，再決定要不要採用。"
     );
   } else {
     paragraphs.push("這次沒有選取檔案，所以答案只依據聊天 context。");
@@ -59,7 +63,7 @@ export function composeMockReply(input: MockReplyInput): string {
 
   paragraphs.push(
     "建議的下一步：先把上面提到的重點寫成兩三句共識，再分配誰去確認哪一項；" +
-      "如果有新的成員加入，請把這段結論貼進聊天室，讓後加入的人不必重讀整段歷史。",
+      "如果有新的成員加入，請把這段結論貼進聊天室，讓後加入的人不必重讀整段歷史。"
   );
 
   const padding = [
@@ -86,7 +90,10 @@ export function composeMockReply(input: MockReplyInput): string {
     "關於限制：我只是一個輔助工具，最終的判斷仍然由你和組員負責；重要的結論請以你們確認過的版本為準。",
   ];
   let index = 0;
-  while (charLength(paragraphs.join("\n\n")) < AI_REPLY_TARGET_MIN && index < padding.length) {
+  while (
+    charLength(paragraphs.join("\n\n")) < AI_REPLY_TARGET_MIN &&
+    index < padding.length
+  ) {
     paragraphs.push(padding[index]);
     index += 1;
   }

@@ -11,7 +11,9 @@ import {
 describe("author_kind tells the AI apart from a deleted account", () => {
   it("recognises an AI row", () => {
     expect(isAiMessage({ authorKind: "ai" })).toBe(true);
-    expect(isDeletedAccountMessage({ authorKind: "ai", senderId: null })).toBe(false);
+    expect(isDeletedAccountMessage({ authorKind: "ai", senderId: null })).toBe(
+      false
+    );
   });
 
   it("treats a member row with no sender as a deleted account, not the AI", () => {
@@ -22,20 +24,20 @@ describe("author_kind tells the AI apart from a deleted account", () => {
 
   it("does not treat a live member as deleted", () => {
     expect(
-      isDeletedAccountMessage({ authorKind: "member", senderId: "user-1" }),
+      isDeletedAccountMessage({ authorKind: "member", senderId: "user-1" })
     ).toBe(false);
   });
 
   it("always displays the AI as CityLink AI, whatever the snapshot says", () => {
-    expect(displayAuthor({ authorKind: "ai", senderNameSnapshot: "anything" })).toBe(
-      AI_AUTHOR_NAME,
-    );
+    expect(
+      displayAuthor({ authorKind: "ai", senderNameSnapshot: "anything" })
+    ).toBe(AI_AUTHOR_NAME);
     expect(AI_AUTHOR_NAME).toBe("CityLink AI");
   });
 
   it("displays a member's snapshot, including for a deleted account", () => {
     expect(
-      displayAuthor({ authorKind: "member", senderNameSnapshot: "Ada (left)" }),
+      displayAuthor({ authorKind: "member", senderNameSnapshot: "Ada (left)" })
     ).toBe("Ada (left)");
   });
 });

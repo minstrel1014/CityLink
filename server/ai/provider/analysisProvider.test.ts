@@ -19,7 +19,9 @@ const request: AiChatRequest = {
   groupId: "group-1",
   question: "What did we decide about the storage layer?",
   turns: [turn("m1", "member", "We should keep it provider-neutral.")],
-  files: [{ id: "f1", name: "brief.pdf", text: "The brief asks for a prototype." }],
+  files: [
+    { id: "f1", name: "brief.pdf", text: "The brief asks for a prototype." },
+  ],
   contextNotice: null,
 };
 
@@ -35,11 +37,15 @@ describe("the provider boundary", () => {
   });
 
   it("refuses an unconfigured provider instead of falling back", () => {
-    expect(() => createAnalysisProvider("openrouter")).toThrowError(AnalysisProviderError);
+    expect(() => createAnalysisProvider("openrouter")).toThrowError(
+      AnalysisProviderError
+    );
     try {
       createAnalysisProvider("openrouter");
     } catch (error) {
-      expect((error as AnalysisProviderError).code).toBe("analysis_provider_not_configured");
+      expect((error as AnalysisProviderError).code).toBe(
+        "analysis_provider_not_configured"
+      );
     }
   });
 });
@@ -59,7 +65,9 @@ describe("the mock provider", () => {
 
   it("is deterministic", async () => {
     const provider = new MockAnalysisProvider();
-    expect(await provider.answer(request)).toEqual(await provider.answer(request));
+    expect(await provider.answer(request)).toEqual(
+      await provider.answer(request)
+    );
   });
 
   it("aims for the 1,200-1,500 character band", async () => {
@@ -77,13 +85,16 @@ describe("the mock provider", () => {
   });
 
   it("says so when no file was selected", async () => {
-    const reply = await new MockAnalysisProvider().answer({ ...request, files: [] });
+    const reply = await new MockAnalysisProvider().answer({
+      ...request,
+      files: [],
+    });
     expect(reply.body).toContain("沒有選取檔案");
   });
 
   it("fails loudly on an empty question", async () => {
     await expect(
-      new MockAnalysisProvider().answer({ ...request, question: "   " }),
+      new MockAnalysisProvider().answer({ ...request, question: "   " })
     ).rejects.toMatchObject({ code: "analysis_provider_failed" });
   });
 

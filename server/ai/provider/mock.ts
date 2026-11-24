@@ -16,23 +16,34 @@ export class MockAnalysisProvider implements AnalysisProvider {
 
   constructor(private readonly options: { delayMs?: number } = {}) {}
 
-  async answer(request: AiChatRequest, signal?: AbortSignal): Promise<AiChatReply> {
+  async answer(
+    request: AiChatRequest,
+    signal?: AbortSignal
+  ): Promise<AiChatReply> {
     if (this.options.delayMs) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(resolve, this.options.delayMs);
         signal?.addEventListener("abort", () => {
           clearTimeout(timer);
-          reject(new AnalysisProviderError("analysis_cancelled", "Answer was cancelled."));
+          reject(
+            new AnalysisProviderError(
+              "analysis_cancelled",
+              "Answer was cancelled."
+            )
+          );
         });
       });
     }
     if (signal?.aborted) {
-      throw new AnalysisProviderError("analysis_cancelled", "Answer was cancelled.");
+      throw new AnalysisProviderError(
+        "analysis_cancelled",
+        "Answer was cancelled."
+      );
     }
     if (request.question.trim().length === 0) {
       throw new AnalysisProviderError(
         "analysis_provider_failed",
-        "Mock provider received an empty question.",
+        "Mock provider received an empty question."
       );
     }
 
@@ -44,8 +55,14 @@ export class MockAnalysisProvider implements AnalysisProvider {
 
     const inputChars =
       Array.from(request.question).length +
-      request.turns.reduce((sum, turn) => sum + Array.from(turn.body).length, 0) +
-      request.files.reduce((sum, file) => sum + Array.from(file.text).length, 0);
+      request.turns.reduce(
+        (sum, turn) => sum + Array.from(turn.body).length,
+        0
+      ) +
+      request.files.reduce(
+        (sum, file) => sum + Array.from(file.text).length,
+        0
+      );
 
     return {
       providerId: this.id,

@@ -20,7 +20,7 @@ export function createAnalysisProvider(name: string): AnalysisProvider {
     default:
       throw new AnalysisProviderError(
         "analysis_provider_not_configured",
-        `No analysis provider is configured for "${name}". Only "mock" is available on this branch.`,
+        `No analysis provider is configured for "${name}". Only "mock" is available on this branch.`
       );
   }
 }

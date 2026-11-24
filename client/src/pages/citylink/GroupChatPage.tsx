@@ -321,7 +321,8 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
             open={aiOpen}
             history={messages.map<ChatTurn>(message => ({
               id: message.id,
-              authorKind: message.senderName === AI_AUTHOR_NAME ? "ai" : "member",
+              authorKind:
+                message.senderName === AI_AUTHOR_NAME ? "ai" : "member",
               authorName: message.senderName,
               body: message.body,
               createdAt: message.createdAt,

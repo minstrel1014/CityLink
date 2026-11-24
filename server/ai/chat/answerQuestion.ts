@@ -38,7 +38,7 @@ export interface AnswerQuestionResult extends FinalisedReply {
 
 export async function answerGroupQuestion(
   input: AiChatContextInput,
-  deps: AnswerQuestionDeps,
+  deps: AnswerQuestionDeps
 ): Promise<AnswerQuestionResult> {
   const context = buildAiChatContext(input);
 
@@ -50,7 +50,7 @@ export async function answerGroupQuestion(
       files: context.files,
       contextNotice: context.notice,
     },
-    deps.signal,
+    deps.signal
   );
 
   const withNotice = applyContextNotice(reply.body, context.notice);

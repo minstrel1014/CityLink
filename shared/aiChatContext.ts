@@ -93,7 +93,11 @@ function afterCutoff(turn: ChatTurn, cutoff: string | null): boolean {
  * passed its retention date. Expired or replaced files are excluded here even if
  * a caller passes them, so the rule cannot be lost in a UI filter.
  */
-export function isFileEligible(file: SelectableFile, groupId: string, now: Date): boolean {
+export function isFileEligible(
+  file: SelectableFile,
+  groupId: string,
+  now: Date
+): boolean {
   if (file.groupId !== groupId) return false;
   if (file.status !== "current") return false;
   if (file.retentionExpiresAt === null) return true;
@@ -106,7 +110,7 @@ export function buildAiChatContext(input: AiChatContextInput): AiChatContext {
   const now = input.now ?? new Date();
   const question = input.question.trim();
   const inScope = sortChronological(
-    input.history.filter(turn => afterCutoff(turn, input.contextStartsAt)),
+    input.history.filter(turn => afterCutoff(turn, input.contextStartsAt))
   );
 
   const aiAnswers = inScope.filter(turn => turn.authorKind === "ai");
@@ -146,7 +150,9 @@ export function buildAiChatContext(input: AiChatContextInput): AiChatContext {
 
   // Files: at most two, in the order the caller supplied (the UI sends the ones
   // the member ticked), total text within the budget.
-  const eligible = input.files.filter(file => isFileEligible(file, input.groupId, now));
+  const eligible = input.files.filter(file =>
+    isFileEligible(file, input.groupId, now)
+  );
   if (eligible.length < input.files.length) dropped = true;
 
   const selectedFiles: AiChatContext["files"] = [];

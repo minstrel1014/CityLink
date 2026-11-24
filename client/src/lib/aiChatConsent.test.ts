@@ -29,7 +29,9 @@ describe("consent starts empty and stays per question", () => {
     }
     expect(isConsentComplete(state)).toBe(false);
 
-    state[AI_CHAT_CONSENT_STATEMENTS[AI_CHAT_CONSENT_STATEMENTS.length - 1].id] = true;
+    state[
+      AI_CHAT_CONSENT_STATEMENTS[AI_CHAT_CONSENT_STATEMENTS.length - 1].id
+    ] = true;
     expect(decideAskAi(state)).toEqual({ canAsk: true, reason: null });
   });
 
@@ -39,7 +41,7 @@ describe("consent starts empty and stays per question", () => {
 
   it("exports nothing that would remember a choice", () => {
     const suspicious = Object.keys(consent).filter(key =>
-      /storage|cookie|remember|persist/i.test(key),
+      /storage|cookie|remember|persist/i.test(key)
     );
     expect(suspicious).toEqual([]);
   });
@@ -55,7 +57,9 @@ describe("the two mandated sentences appear verbatim", () => {
 
   it("says former members can still read AI answers", () => {
     expect(allText).toContain("前成員仍可讀取 AI 回答");
-    expect(AI_CHAT_REQUIRED_PHRASES.formerMembers).toBe("前成員仍可讀取 AI 回答");
+    expect(AI_CHAT_REQUIRED_PHRASES.formerMembers).toBe(
+      "前成員仍可讀取 AI 回答"
+    );
   });
 
   it("names the provider, the route and the country", () => {

@@ -16,7 +16,7 @@ function turn(
   id: string,
   authorKind: "member" | "ai",
   body: string,
-  minutesAgo: number,
+  minutesAgo: number
 ): ChatTurn {
   return {
     id,
@@ -39,7 +39,9 @@ function file(overrides: Partial<SelectableFile> = {}): SelectableFile {
   };
 }
 
-function build(overrides: Partial<Parameters<typeof buildAiChatContext>[0]> = {}) {
+function build(
+  overrides: Partial<Parameters<typeof buildAiChatContext>[0]> = {}
+) {
   return buildAiChatContext({
     question: "What did we decide about the storage layer?",
     history: [],
@@ -78,7 +80,9 @@ describe("rule b: at most two AI answers, oldest dropped first", () => {
       ],
     });
 
-    const aiIds = context.turns.filter(t => t.authorKind === "ai").map(t => t.id);
+    const aiIds = context.turns
+      .filter(t => t.authorKind === "ai")
+      .map(t => t.id);
     expect(aiIds).toEqual(["a2", "a3"]);
     expect(context.dropped).toBe(true);
     expect(context.notice).toBe(CONTEXT_DROPPED_NOTICE);
@@ -105,9 +109,13 @@ describe("rule c: the remaining budget goes to the most recent member messages",
       ],
     });
 
-    const memberIds = context.turns.filter(t => t.authorKind === "member").map(t => t.id);
+    const memberIds = context.turns
+      .filter(t => t.authorKind === "member")
+      .map(t => t.id);
     expect(memberIds).toEqual(["m3", "m4"]);
-    expect(context.stats.chatChars).toBeLessThanOrEqual(AI_CHAT_LIMITS.chatChars);
+    expect(context.stats.chatChars).toBeLessThanOrEqual(
+      AI_CHAT_LIMITS.chatChars
+    );
     expect(context.dropped).toBe(true);
   });
 
@@ -131,7 +139,10 @@ describe("rule c: the remaining budget goes to the most recent member messages",
 
   it("reports no drop when everything fits", () => {
     const context = build({
-      history: [turn("m1", "member", "short", 10), turn("a1", "ai", "also short", 5)],
+      history: [
+        turn("m1", "member", "short", 10),
+        turn("a1", "ai", "also short", 5),
+      ],
     });
     expect(context.dropped).toBe(false);
     expect(context.notice).toBeNull();
@@ -183,12 +194,18 @@ describe("file eligibility", () => {
 
   it("refuses an expired file", () => {
     expect(
-      isFileEligible(file({ retentionExpiresAt: "2026-11-01T00:00:00.000Z" }), GROUP, NOW),
+      isFileEligible(
+        file({ retentionExpiresAt: "2026-11-01T00:00:00.000Z" }),
+        GROUP,
+        NOW
+      )
     ).toBe(false);
   });
 
   it("treats an unreadable expiry as ineligible rather than as permanent", () => {
-    expect(isFileEligible(file({ retentionExpiresAt: "not a date" }), GROUP, NOW)).toBe(false);
+    expect(
+      isFileEligible(file({ retentionExpiresAt: "not a date" }), GROUP, NOW)
+    ).toBe(false);
   });
 
   it("drops ineligible files from the context and flags it", () => {
@@ -221,7 +238,9 @@ describe("file budget", () => {
         file({ id: "third", text: "c".repeat(100) }),
       ],
     });
-    expect(context.stats.fileChars).toBeLessThanOrEqual(AI_CHAT_LIMITS.fileChars);
+    expect(context.stats.fileChars).toBeLessThanOrEqual(
+      AI_CHAT_LIMITS.fileChars
+    );
     expect(context.files.map(f => f.id)).not.toContain("second");
   });
 });

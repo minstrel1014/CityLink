@@ -41,7 +41,9 @@ export default function GroupAiDrawer({
   onAiMessage: (body: string) => void;
 }) {
   const [question, setQuestion] = useState("");
-  const [consent, setConsent] = useState<ConsentState>(() => initialConsentState());
+  const [consent, setConsent] = useState<ConsentState>(() =>
+    initialConsentState()
+  );
   const [showConsent, setShowConsent] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [contextStartsAt, setContextStartsAt] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export default function GroupAiDrawer({
 
   const eligibleFiles = useMemo(
     () => files.filter(file => file.status === "current"),
-    [files],
+    [files]
   );
 
   if (!open) return null;
@@ -62,7 +64,7 @@ export default function GroupAiDrawer({
         ? current.filter(id => id !== fileId)
         : current.length >= 2
           ? current
-          : [...current, fileId],
+          : [...current, fileId]
     );
   };
 
@@ -92,7 +94,9 @@ export default function GroupAiDrawer({
         turns: context.turns,
         files: context.files,
       });
-      const finalised = finaliseAiReply(applyContextNotice(raw, context.notice));
+      const finalised = finaliseAiReply(
+        applyContextNotice(raw, context.notice)
+      );
 
       setAnswer(finalised.body);
       onAiMessage(finalised.body);
@@ -116,7 +120,10 @@ export default function GroupAiDrawer({
         </button>
       </header>
 
-      <label className="citylink-ai-drawer__label" htmlFor="citylink-ai-question">
+      <label
+        className="citylink-ai-drawer__label"
+        htmlFor="citylink-ai-question"
+      >
         你的問題
       </label>
       <textarea
@@ -147,14 +154,20 @@ export default function GroupAiDrawer({
       </fieldset>
 
       {showConsent && (
-        <section className="citylink-ai-drawer__consent" aria-label="Disclosure">
+        <section
+          className="citylink-ai-drawer__consent"
+          aria-label="Disclosure"
+        >
           {AI_CHAT_CONSENT_STATEMENTS.map(statement => (
             <label key={statement.id}>
               <input
                 type="checkbox"
                 checked={consent[statement.id] === true}
                 onChange={event =>
-                  setConsent(current => ({ ...current, [statement.id]: event.target.checked }))
+                  setConsent(current => ({
+                    ...current,
+                    [statement.id]: event.target.checked,
+                  }))
                 }
               />
               <span>{statement.text}</span>
@@ -180,7 +193,12 @@ export default function GroupAiDrawer({
         >
           {AI_CHAT_COPY.clearContext}
         </button>
-        <button type="button" className="primary" onClick={submit} disabled={busy}>
+        <button
+          type="button"
+          className="primary"
+          onClick={submit}
+          disabled={busy}
+        >
           {busy ? "…" : showConsent ? AI_CHAT_COPY.send : AI_CHAT_COPY.button}
         </button>
       </div>
