@@ -1118,3 +1118,35 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   needs 8 GiB of real usage; (c) no HTTP call, so CORS and token handling remain Eunice's P1 evidence,
   not this.
 - **Not done:** no data changed (every scenario rolled back), no merge, no deployment, `main` still `519a69e`.
+## 2026-11-24 — Adam sets the deployment shape: Edge Function signer, drawer UI, open uploads, demo site
+**Six decisions, from Adam via Side Chat, and one finding that corrects an assumption of mine.**
+- **Deploy: yes.** The file feature is to be deployed rather than left local-only.
+- **Target: the published demo site** `citylink-vm2mka3y.manus.space` (WebDev project `Vm2mKA3YornoSGba8WBzse`),
+  explicitly **not** the Prototype `wkzclgmhrtecnpexfesr`.
+- **Secrets: Adam enters the R2 values himself** in the host's secret settings. Never in chat, never in the
+  repo, never in a browser bundle.
+- **Entry point: a drawer**, opened from the group chat header, sliding in from the right with the chat
+  behind it. Not a separate page.
+- **Upload restriction: none.** No allowlist, no registration gate. Adam chose open access.
+- **Signer host: a Supabase Edge Function.** Not the WebDev project, not a separate VM.
+- **Measured finding: the published site already uses Launch.** I verified this independently rather than
+  accepting it second-hand: `assets/index-COcQxoTh.js` (947,775 bytes, HTTP 200) contains
+  `pijslbchvstkoweslymr` once, `wkzclgmhrtecnpexfesr` zero times, `sb_publishable_` twice, `service_role`
+  zero times, and no `eyJ…` JWT. So `VITE_SUPABASE_URL` and the publishable key are already correct there,
+  and nothing about frontend configuration needs setting.
+- **Correction of my own framing, recorded so it is not repeated:** I had offered a choice between "keep the
+  demo fictional" and "point it at Launch". That framing was wrong. Only the `/demo` route is fictional;
+  the site's authenticated entry already talks to Launch. Earlier notes that treated the whole published
+  site as fictional are superseded on that point.
+- **The standing "no public-demo changes/publication during reconstruction" rule is satisfied, not ignored.**
+  It required a specific approved choice before touching the demo; this is that choice, made explicitly and
+  named here. It does not extend to anything beyond what Adam listed.
+- **Accepted risk, with Adam's name on it:** open uploads on a public site mean anyone who can register can
+  consume the shared budget — 1 GiB per group, 8 GiB across the deployment. The caps are the only control;
+  there is no per-user ceiling and no moderation. Recorded as accepted, not as an oversight.
+- **Port cost, stated plainly:** the signer is Express + `@aws-sdk`; Edge Functions are Deno. The signing
+  logic ports, the router does not. `aws4fetch` is the intended SigV4 path, and its Content-Type binding
+  must be proven by a test before the swap is accepted — that exact header was silently unbound once already.
+- **Still not authorized by any of this:** implementing the function, deploying it, changing the site,
+  publishing it, or setting secrets on Adam's behalf. He named the shape, not the window. Plan:
+  `docs/stage6/P2_EDGE_FUNCTION_AND_DRAWER_PLAN.md`.
