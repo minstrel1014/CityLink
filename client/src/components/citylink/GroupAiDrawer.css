@@ -1,0 +1,123 @@
+.citylink-ai-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(420px, 100vw);
+  height: 100vh;
+  padding: 20px;
+  overflow-y: auto;
+  background: #ffffff;
+  box-shadow: -18px 0 48px rgba(15, 23, 42, 0.18);
+}
+
+.citylink-ai-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.citylink-ai-drawer__header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.citylink-ai-drawer__header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.citylink-ai-drawer__header button {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.citylink-ai-drawer__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.citylink-ai-drawer textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+.citylink-ai-drawer__files,
+.citylink-ai-drawer__consent {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.citylink-ai-drawer__files legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.citylink-ai-drawer__files label,
+.citylink-ai-drawer__consent label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.citylink-ai-drawer__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.citylink-ai-drawer__feedback {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #b45309;
+}
+
+.citylink-ai-drawer__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.citylink-ai-drawer__answer {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.citylink-ai-drawer__answer h3 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.citylink-ai-drawer__answer p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.stage6-message-ai {
+  border-left: 3px solid #6366f1;
+  padding-left: 10px;
+}
