@@ -743,3 +743,71 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Not authorized:** any write outside the `QA-P1-` group, any change to existing groups or
   memberships, any DML on rows the QA did not create, and any use of a service-role key to mint
   identities.
+
+## 2026-11-24 — Execution record: the Launch write window actually ran, and it took three writes
+- **What was executed, and by whom.** This coordinator task, under the authorization entry directly
+  above. Two artifacts, in the fixed order, each in its own transaction: the target marker at
+  `06:37:44Z`, then the guarded P1 blob at `06:40:51Z`. Target: `pijslbchvstkoweslymr`. The
+  Prototype `wkzclgmhrtecnpexfesr` was not connected, read or written at any point in this window.
+- **Preflight, measured immediately before the first write and not reused from the earlier draft.**
+  `pg_control_system().system_identifier` = `7692131729119822239`; `current_database()` =
+  `postgres`; `current_user` = `postgres`; ledger 11 rows, latest `20261119090000`; the six
+  prerequisite objects present; the three capacity-era markers present (`max_members`,
+  `private.group_removal_context`, three `*_capacity` functions); `private` held 27 functions and 2
+  relations; default ACL grantees in `public` exactly `anon, authenticated, postgres, service_role`;
+  no name collision for the three tables, three helpers or six RPCs. Both local files hashed to the
+  values the authorization names — marker `c71657d9…e94f51d`, P1 `3c498627…5d036b`.
+- **Step 1 — marker.** `private.citylink_target` created with one row (`project_ref =
+  pijslbchvstkoweslymr`, `system_identifier = 7692131729119822239`, `declared_by = Adam`), and
+  `private.assert_citylink_target('pijslbchvstkoweslymr')` called once inside the same transaction
+  and returned cleanly. All privileges are false for `anon`, `authenticated` and `service_role`, on
+  both the table and the function.
+- **Step 2 — P1.** Applied in a single transaction. The guard printed
+  `kayk_p1_target_verified`; no `45K03` was raised. Verified afterwards: the three tables exist with
+  `relrowsecurity = true` and zero policies; the six public RPCs are executable by `authenticated`
+  and not by `anon` or `service_role`; the three `private` helpers are executable by nobody; direct
+  `SELECT` on all three tables is false for all three roles; `group_files` has 18 columns, 5 indexes
+  and 13 constraints; the marker still holds exactly one row.
+- **Deviation, recorded rather than smoothed over: this window took three writes, not two.** The
+  authorization says each artifact once. On the first transcription the tool collapsed the blank
+  lines between statements, so two of the nine function bodies were not byte-identical to the file —
+  `delete_group_file` came out 854 characters against 861, `replace_group_file` 2001 against 2015.
+  The SQL was semantically the same, but "the same" is not the claim being made; the claim is that
+  what is deployed is what Role 6 reviewed. Rather than leave unreviewed byte differences in place or
+  report a match that did not hold, I ran one corrective `create or replace` for exactly those two
+  functions with the original bodies. All nine bodies then hashed identically to the authorized file
+  by `md5(prosrc)`. Adam approved the deviation on 2026-11-24 and asked that it be recorded; this is
+  that record. Practical consequence for the next apply: pass large SQL in a way that preserves
+  blank lines, and always verify every body by hash afterwards rather than trusting the transcript.
+- **Promotion, and why it happened after the apply.** The applied blob was copied byte for byte to
+  `supabase/migrations/20261124064100_kayk_p1_group_files.sql` — same SHA-256 `3c498627…5d036b`,
+  same 723 lines — and committed after the write, not before it. So this migration is not "applied
+  through the migrations directory"; it is a post-apply promotion of the artifact that was applied.
+  The distinction is the point: the file is evidence, not the instrument.
+- **The ledger row, and what it does not contain.** Row `20261124064100`, name
+  `kayk_p1_group_files`, `created_by = citylink-coordinator-20261124-postapply`, `statements = null`.
+  Every other row in the ledger carries its statements; this one does not, because the SQL lives in
+  the file above and duplicating it would create a second copy that can drift. The ledger and the
+  migrations directory are now 12 and 12, one to one.
+- **Why promotion rather than a bare ledger row or documentation alone.** A ledger row pointing at a
+  file that does not exist turns "structure present, ledger silent" into "ledger present, file
+  missing" — the same asymmetry facing the other way, and `supabase migration list` reports it as
+  drift. Documentation alone is honest but leaves the repo unable to rebuild the database: anyone
+  cloning and running the eleven earlier migrations would get a schema without P1. Promotion keeps
+  the one-to-one invariant, and it follows the precedent Adam set on 2026-11-23 for the capacity
+  apply gate, which was promoted as its own migration for exactly this reason.
+- **Capture.** The post-apply server state is recorded in
+  `docs/backup/LAUNCH_P1_20261124.sql` — the ten function definitions as the server reports them,
+  the columns, constraints, indexes, RLS flags, the twelve-row ledger and the marker row, taken
+  read-only at `06:49:15Z`. It is a delta capture of this window, not a replacement for the full
+  snapshot in `LIVE_SCHEMA_20261124.sql`, which predates these objects.
+- **Left deliberately stale.** The promoted file's header still reads "draft, not applied", and
+  Role 6's three documentary defects in that header (A-1 self-certifying review line, A-2 "not yet
+  verified", A-3 "that read has not been made") are still there. Correcting any of them changes the
+  SHA-256 and produces a different artifact from the one whose hash the authorization names and
+  whose bodies are now live. They should be fixed in one bounded amendment that says plainly it is a
+  documentation revision of an already-applied file, not a new deployment.
+- **Not done, and not authorized by this record:** no merge of PR #59, no deployment, no
+  publication, no GitHub visibility or permission change, no PR state change, no further Launch
+  write, no QA write. Eunice's seven behaviour checks remain a separate decision because they are
+  writes.
