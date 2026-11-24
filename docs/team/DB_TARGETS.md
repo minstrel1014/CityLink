@@ -9,7 +9,7 @@ against three independent sources (see §4).
 
 | ref | Supabase project name | Region | PostgreSQL | Status | Writable? |
 |---|---|---|---|---|---|
-| `pijslbchvstkoweslymr` | CityLink Launch (read-only until release) | ap-southeast-1 | 17.11.0.003 | **The only authorised target.** This is what the capacity documents call "Main". | **No** — read-only until release. A write needs Adam's explicit written authorization recorded in `docs/team/DECISIONS.md` *before* execution. |
+| `pijslbchvstkoweslymr` | CityLink Launch (read-only until release) | ap-southeast-1 | 17.11.0.003 | **The only authorised target.** This is what the capacity documents call "Main". | **Read-only by default.** Two dated exceptions exist, both executed on 2026-11-24 under Adam's explicit authorization recorded in `docs/team/DECISIONS.md`: `create_group_alone` with the group-visibility widening, and `leave_group` with the one-time creator backfill. Any further write needs a new authorization recorded there *before* execution. |
 | `wkzclgmhrtecnpexfesr` | CityLink Prototype (do not migrate) | eu-west-1 | 17.11.0.011 | **Frozen historical reference.** Out of scope since F14 (2026-11-23 01:50). The capacity gate refuses it with `45003 group_capacity_gate_target_out_of_scope`. | **No** — never. Read-only catalog inspection only where separately justified. |
 
 Copy the ref from this table. Do not retype it: a single transposed letter
