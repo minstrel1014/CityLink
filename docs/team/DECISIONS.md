@@ -607,3 +607,39 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Not authorized, not done:** applying anything to Launch or the Prototype, any Supabase
   connection, deployment, publication, merge of PR #59, GitHub visibility change, and any
   change to `PROJECT_INSTRUCTIONS.md` or the shared project folder.
+
+## 2026-11-24 — Authorization: first Launch write window — target marker, then Kayk P1 (guarded blob)
+
+- **Authorized by Adam, 2026-11-24, option (a).** One authorization covers two artifacts in a
+  fixed order, in the same window. Nothing else may be applied in this window.
+- **Step 1 — the target marker.** Create `private.citylink_target` and
+  `private.assert_citylink_target(text)` with the single row
+  `project_ref = 'pijslbchvstkoweslymr'`, `system_identifier = '7692131729119822239'`, then call
+  the assertion once. From the next migration onward, every migration calls
+  `private.assert_citylink_target('pijslbchvstkoweslymr')` before its first statement.
+- **Step 2 — the P1 migration, guarded blob.** Apply
+  `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql` at commit head
+  `813cc8246651044d6142f4c0cc559582921d72a5`, blob
+  `c4e29aa57522bfd78ab52edaa5819d2509d0888f`, SHA-256
+  `3c4986275d077aff72185f8bccc302225fa86a2505113e8919cf89cdef5d036b`, 723 lines. This blob
+  carries the fail-closed target assertion (Section 0, SQLSTATE 45K01/45K02/45K03) that Role 6
+  reviewed on 2026-11-24. The 548-line body it wraps is byte-identical to the `baa08e65` blob
+  reviewed earlier, so that review carries over unchanged.
+- **Preconditions measured read-only on Launch, 2026-11-24:** all six prerequisite objects and
+  all three capacity-era markers the guard tests are present (`max_members`,
+  `private.group_removal_context`, 3 `*_capacity` functions); `private` schema present with 27
+  functions; no name collision for the three helpers, three tables or six RPCs;
+  `study_groups(creator_id, status, term_id)` and `academic_terms(code, starts_on)` present;
+  11 migrations applied, latest `20261119090000`; `postgres`-owned default ACL grantees in
+  schema `public` are exactly `anon, authenticated, postgres, service_role` — no fifth role.
+- **Baseline cluster identity, for a future amendment:** `pg_control_system().system_identifier`
+  measured as `7692131729119822239`. Recorded, not enforced: a hard comparison would refuse a
+  legitimate restore or branch.
+- **Read-only status.** Launch is recorded as read-only until release. This entry lifts that
+  hold **only for step 1 and step 2 in this window**, and for nothing else.
+- **Independent QA.** The seven behaviour checks are owned by Eunice (CityLink — Independent QA
+  and Documentation), not by the applying task. Where they run is a separate decision because
+  they are writes.
+- **Not authorized by this entry:** any write to `wkzclgmhrtecnpexfesr`, any other Launch write,
+  merge, deployment, publication, GitHub visibility change, or any QA write beyond what a
+  separate decision permits.
