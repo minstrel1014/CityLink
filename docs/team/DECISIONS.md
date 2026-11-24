@@ -1070,3 +1070,27 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Promotion shape (Adam, item 2 approved):** identical to P1 — byte-identical copy into
   `supabase/migrations/`, ledger row added separately, and the file is not edited to record its own
   applied state. Status lives in this log, not in the migration.
+## 2026-11-24 08:22Z — APPLIED: the two read functions are on Launch, verified by md5
+- **Applied once, one transaction, under Adam's authorization.** Preflight immediately before the
+  write: cluster `7692131729119822239`, marker assert clean, neither function present, ledger 12 rows,
+  0 rows with `uploaded_by is null`.
+- **Verification is byte-level, not "no error appeared".** Both bodies match the md5 computed locally
+  from the approved blob *before* the write: `group_file_usage` 597 chars `1cf9b13792e2954e88ca2a7b295af774`,
+  `group_file_upload_target` 939 chars `7b3145cbd61cfaf092c8207b9b51a904`. Both are `stable`,
+  `security definer`, `search_path=""`, owned by `postgres`, with the expected return shapes.
+- **Grants are exactly as designed:** `anon` false, `authenticated` true, `service_role` false, for both.
+  Revoking `service_role` is not a mistake — `auth.uid()` is NULL for that role, so the functions could
+  never have worked there anyway; the missing grant turns a silent NULL into a permission error.
+- **Nothing else moved.** P1's nine public functions are still present, `group_files` still holds its
+  4 rows, ledger went 12 → 13, and no other object was touched. The pending row declared at 100 MB is
+  still pending and still must never be confirmed.
+- **Promoted byte-identically** as `supabase/migrations/20261124082200_coordinator_group_file_read_functions.sql`
+  (`cmp` clean, sha256 still `ed30cfd3…`), commit `33c6e3c` on the same draft branch. The file does not
+  record its own applied state; status lives here, the same rule P1 followed.
+- **Ledger row** `20261124082200 / coordinator_group_file_read_functions / created_by citylink-coordinator-20261124-postapply / statements null`.
+- **Known bookkeeping mismatch, stated rather than hidden:** `main` carries 11 migration files; PR #59
+  carries the P1 file and PR #65 carries this one. The ledger's 13 rows only correspond to 13 files when
+  both branches are present. Any merge has to carry both, in that order, or the ledger will point at
+  files that are not there.
+- **Not done, and not authorized by this sentence:** no signed-in call to either function, no QA, no
+  merge, no deployment, no publication, no GitHub visibility change, `main` still `519a69e`.
