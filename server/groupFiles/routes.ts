@@ -12,7 +12,12 @@ import {
   GroupFileSignerConfigError,
   readGroupFileSignerConfig,
 } from "./env";
-import { createR2Client, presignDownload, presignUpload } from "./signing";
+import {
+  GROUP_FILE_CONTENT_TYPE,
+  createR2Client,
+  presignDownload,
+  presignUpload,
+} from "./signing";
 import {
   GroupFileRequestError,
   createUserClient,
@@ -61,20 +66,18 @@ export function registerGroupFileRoutes(app: Express): void {
       await requireUserId(config, token);
       const client = createUserClient(config, token);
       const target = await resolveUploadTarget(client, parsed.data.file_id);
-      const contentType = target.detectedMime ?? "application/octet-stream";
-
       const url = await presignUpload({
         client: createR2Client(config),
         bucket: config.r2Bucket,
         objectKey: target.objectKey,
-        contentType,
+        contentType: GROUP_FILE_CONTENT_TYPE,
         expiresIn: config.uploadTtlSeconds,
       });
 
       res.set("Cache-Control", "no-store").json({
         url,
         method: "PUT",
-        headers: { "Content-Type": contentType },
+        headers: { "Content-Type": GROUP_FILE_CONTENT_TYPE },
         expires_in: config.uploadTtlSeconds,
         object_key: target.objectKey,
       });
@@ -106,7 +109,7 @@ export function registerGroupFileRoutes(app: Express): void {
         bucket: config.r2Bucket,
         objectKey: target.objectKey,
         fileName: target.originalName,
-        contentType: target.detectedMime ?? "application/octet-stream",
+        contentType: GROUP_FILE_CONTENT_TYPE,
         expiresIn: config.downloadTtlSeconds,
       });
 

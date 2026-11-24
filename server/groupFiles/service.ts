@@ -15,7 +15,6 @@ import type { GroupFileSignerConfig } from "./env";
 export type ResolvedFile = {
   objectKey: string;
   originalName: string;
-  detectedMime: string | null;
 };
 
 export class GroupFileRequestError extends Error {
@@ -94,7 +93,7 @@ export async function resolveUploadTarget(
   if (error) throw toRequestError(error.message);
 
   const row = (Array.isArray(data) ? data[0] : data) as
-    | { object_key?: string; original_name?: string; declared_mime?: string }
+    | { object_key?: string; original_name?: string }
     | null
     | undefined;
 
@@ -105,7 +104,6 @@ export async function resolveUploadTarget(
   return {
     objectKey: row.object_key,
     originalName: row.original_name ?? "file",
-    detectedMime: row.declared_mime ?? "application/octet-stream",
   };
 }
 
@@ -123,7 +121,7 @@ export async function resolveDownloadTarget(
   if (error) throw toRequestError(error.message);
 
   const row = (Array.isArray(data) ? data[0] : data) as
-    | { object_key?: string; original_name?: string; detected_mime?: string }
+    | { object_key?: string; original_name?: string }
     | null
     | undefined;
 
@@ -134,6 +132,5 @@ export async function resolveDownloadTarget(
   return {
     objectKey: row.object_key,
     originalName: row.original_name ?? "file",
-    detectedMime: row.detected_mime ?? "application/octet-stream",
   };
 }

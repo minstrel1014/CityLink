@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createR2Client, contentDispositionFor, presignDownload, presignUpload } from "./signing";
+import {
+  GROUP_FILE_CONTENT_TYPE,
+  contentDispositionFor,
+  createR2Client,
+  presignDownload,
+  presignUpload,
+} from "./signing";
 import type { GroupFileSignerConfig } from "./env";
 
 const config: GroupFileSignerConfig = {
@@ -79,6 +85,30 @@ describe("contentDispositionFor", () => {
   it("cannot be broken out of with quotes, newlines or backslashes", () => {
     expect(contentDispositionFor('a"b\nc\\d.txt')).toBe(
       'attachment; filename="a_b_c_d.txt"'
+    );
+  });
+});
+
+describe("GROUP_FILE_CONTENT_TYPE", () => {
+  // The declared MIME type is a client-supplied string, so it is never signed.
+  // These two assertions are the contract: uploads store an inert type, and
+  // downloads are served as that same inert type with attachment disposition.
+  it("is the inert type used for uploads", () => {
+    expect(GROUP_FILE_CONTENT_TYPE).toBe("application/octet-stream");
+  });
+  it("is what a download is served as, not whatever was declared", async () => {
+    const url = await presignDownload({
+      client,
+      bucket: config.r2Bucket,
+      objectKey,
+      fileName: "payload.html",
+      contentType: GROUP_FILE_CONTENT_TYPE,
+      expiresIn: config.downloadTtlSeconds,
+    });
+    const params = query(url);
+    expect(params.get("response-content-type")).toBe("application/octet-stream");
+    expect(params.get("response-content-disposition")).toBe(
+      'attachment; filename="payload.html"'
     );
   });
 });

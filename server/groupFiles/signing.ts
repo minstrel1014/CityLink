@@ -37,6 +37,18 @@ export function contentDispositionFor(fileName: string): string {
   return `attachment; filename="${safe}"`;
 }
 
+/**
+ * The only content type this module will ever sign.
+ *
+ * The MIME type the client declares at request time is untrusted — it is a
+ * string in a JSON body, not a property of the bytes. Signing it would let the
+ * caller choose how a later GET is interpreted. Uploads are therefore always
+ * signed as `application/octet-stream` (so R2 stores an inert type) and
+ * downloads are always served as `application/octet-stream` with
+ * `Content-Disposition: attachment`, so no browser renders an uploaded file
+ * inline. Real type detection belongs on the server, after the bytes exist.
+ */
+export const GROUP_FILE_CONTENT_TYPE = "application/octet-stream";
 export async function presignUpload(args: {
   client: S3Client;
   bucket: string;
