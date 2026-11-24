@@ -1050,3 +1050,23 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   both `200`, both `application/octet-stream`, object deleted afterwards. 665 tests pass.
 - **Not done:** the bundle is still not applied. Applying needs Adam's authorization naming this blob,
   this ref and this window; nothing about a Role 6 approval or a green preflight grants it.
+## 2026-11-24 — AUTHORIZATION: apply the two-function bundle to Launch, then promote it
+**Adam's authorization, verbatim:**
+
+> Adam, 2026-11-24: 批准在單一窗口內套用 ed30cfd3852602b01aa01116e50749fc2ba8f25a0b3ff985e880f3604fcf61a0（commit 3fcc260，139 行）到 Launch pijslbchvstkoweslymr，單一交易、一次、ON_ERROR_STOP=1。套用後原樣 promote 進 supabase/migrations/ 並補一筆 ledger 紀錄。除此之外一律不做
+
+- **Scope:** one apply, one transaction, one time, against `pijslbchvstkoweslymr` only. Then a byte-identical
+  promotion into `supabase/migrations/` and one ledger row. Nothing else: no other schema change, no
+  data change, no QA run, no merge, no deployment, no GitHub visibility change, `main` untouched.
+- **The target blob is `3fcc260` / sha256 `ed30cfd3…61a0` / 139 lines** — the blob Role 6 approved and the
+  blob the preflight was run against. It is not edited between approval and apply; if it needed an edit,
+  the approval and this authorization would both be void.
+- **Expected function bodies, computed locally from that blob before the write:**
+  `group_file_usage` 597 chars md5 `1cf9b13792e2954e88ca2a7b295af774`;
+  `group_file_upload_target` 939 chars md5 `7b3145cbd61cfaf092c8207b9b51a904`.
+  Neither body contains a blank line, which matters: this project's SQL tooling has collapsed blank lines
+  before, and the P1 apply needed a corrective `create or replace`. With no blank line inside either body,
+  that failure mode cannot reach `prosrc`, and `md5(prosrc)` becomes a real proof rather than a hope.
+- **Promotion shape (Adam, item 2 approved):** identical to P1 — byte-identical copy into
+  `supabase/migrations/`, ledger row added separately, and the file is not edited to record its own
+  applied state. Status lives in this log, not in the migration.
