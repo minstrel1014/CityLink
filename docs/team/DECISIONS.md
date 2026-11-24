@@ -1940,3 +1940,13 @@ becomes `13a4e8ccd5990d4cd443672e3a15adc6dab1b75c`, 528 lines, 96,716 bytes, sha
 `a49abe8883dadc9da77f54dcf1e383e766abb3a4ba661ea458bafdd504ad48cd`. Deploy 2 is unchanged at
 `9700679905c11e3d2b5046080f6ebccdf06288729ba909da1e2ca6a1b90ad15e`, so the object an
 authorisation names did not move.
+
+**17.12 re-run, because the targets are 17.11.** Role 6 asked for the apply suite on a 17.12
+cluster: the batch above was measured on 16.15 only. PostgreSQL 17.12 was installed from PGDG in
+the coordinator sandbox (cluster `17/main`, port 5433, unix socket only, no Supabase project) and
+the same suites were run against commit `ec35c4b`: apply suite **29/29**, full suite **54 files /
+825 tests**, both exit 0. One invocation detail worth recording rather than hiding: the harness
+opens each throwaway database by bare name, so it follows `PGPORT`, not
+`CITYLINK_TEST_PG_URI`; the first attempt with the URI alone failed at the stub step with psql
+status 2 (it connected to 5432, where that database does not exist), which says nothing about the
+SQL. Re-run with `PGPORT=5433`: green.
