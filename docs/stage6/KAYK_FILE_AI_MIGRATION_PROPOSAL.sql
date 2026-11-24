@@ -1,6 +1,8 @@
 -- CityLink — 群組聊天室檔案：P1 migration 提案
 --
 -- 狀態：草案，供 Role 6 exact-head 審查。**尚未套用**，且現行 head 尚無人審查。
+-- 檔頭以下第 0 節是 fail-closed 的目標斷言：不在 CityLink Launch 上執行就會
+--   以 kayk_p1_target_out_of_scope（45K03）中止整個交易，unknown 一律拒絕。
 -- 套用需要 Adam 另行授權，並指名本檔的確切 blob。
 --
 -- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
@@ -33,6 +35,179 @@
 -- 而檔案的產品規則是被移除者立即失去權限。此差異是刻意的，不可「統一」。
 
 begin;
+
+-- ===========================================================================
+-- Section 0 — fail-closed target assertion (added 2026-11-24, Adam-approved)
+-- ===========================================================================
+-- 預期目標：CityLink Launch，Supabase ref `pijslbchvstkoweslymr`。它是 F14 之後
+--   唯一可套用對象（`docs/team/DB_TARGETS.md` 與 `docs/team/DECISIONS.md` 的
+--   2026-11-24 F14 條目）。`wkzclgmhrtecnpexfesr` 是**凍結的 Prototype**，本檔
+--   在任何情況下都不應該在它上面執行。
+--
+-- WHY THIS EXISTS. On 2026-11-24 a continuity task read a pre-F14 document, believed
+--   the frozen Prototype was a disposable Test database, and prepared to apply this
+--   file there. The capacity line cannot be walked into that mistake:
+--   20261119085000_capacity_apply_gate.sql refuses the wrong ref with
+--   group_capacity_gate_target_out_of_scope (SQLSTATE 45003). This file is a
+--   standalone migration and had no equivalent, so the only thing standing between it
+--   and the wrong project was the operator's attention. This block closes that gap.
+--
+-- WHY IT IS NOT A REMINDER. There is no current_setting(), no GUC, no psql variable
+--   and nothing else an operator fills in: every check below is a read of pg_catalog,
+--   and the expected values are compiled into this reviewed file. A guard that asked
+--   the applier "are you sure you mean Launch?" would have passed on 2026-11-24,
+--   because the applier was sure.
+--
+-- THE EVIDENCE — three capacity-era objects, each created by
+--   supabase/migrations/20261119090000_group_hard_max.sql, which docs/team/DECISIONS.md
+--   records as applied to CityLink Launch at 08:38:53Z on 2026-11-23:
+--     * column public.study_groups.max_members
+--     * private.group_removal_context
+--     * the three _capacity read functions in schema public
+--   Why this discriminates: the same record shows Launch's migration ledger moving
+--   from 7 rows to 11 in that session, while the 2026-11-24 read of the Prototype
+--   found 7 rows ending at 20261118082247 — the Prototype never received S3, and after
+--   F14 it must not. The objects are therefore absent there and present on Launch, and
+--   nothing on this branch drops them.
+--
+-- FAIL-CLOSED SEMANTICS. Unknown is never a pass, matching the capacity contract:
+--     kayk_p1_prerequisite_missing        45K01  not a CityLink database at all
+--     kayk_p1_target_evidence_unreadable  45K02  the catalog could not be consulted
+--     kayk_p1_target_out_of_scope         45K03  readable, and the Launch markers are absent
+--   The SQLSTATEs are this file's own and are deliberately NOT 45003, so a log line
+--   says which line of work refused. Each raise aborts the transaction.
+--
+--   Placement is load-bearing: this block sits INSIDE the file's own `begin;`
+--   transaction. When it raises, that transaction is aborted, so every statement that
+--   follows in this file fails with 25P02 until a rollback, and the final `commit;`
+--   becomes a rollback. The file therefore cannot be half-applied even by a runner that
+--   ignores errors and does not set ON_ERROR_STOP. Do not move it above `begin;`.
+--
+-- HOW TO RUN THIS CORRECTLY, ON LAUNCH. Under a written Adam authorization recorded in
+--   docs/team/DECISIONS.md naming this ref, the commit head and this blob:
+--     psql "$LAUNCH_URI" -v ON_ERROR_STOP=1 -f docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql
+--   Expect the NOTICE kayk_p1_target_verified ... first, then the DDL. A Supabase CLI
+--   apply (supabase db push) against the Launch project passes the same block. If you
+--   see 45K03, STOP: you are pointed at a project that is not Launch, and that is the
+--   refusal working — do not edit the block to make it pass.
+--
+-- LIMITS OF THIS ASSERTION, read before trusting it:
+--   * It proves history, not identity: "this cluster received the capacity apply that
+--     only Launch was authorized to receive". A point-in-time restore or branch clone
+--     made from Launch after 2026-11-23 08:48Z carries the same three markers and WOULD
+--     pass, and so would a project where someone recreates those objects by hand. That
+--     is the residual false-pass surface; it is bounded to copies of Launch, but it is
+--     not zero.
+--   * A database name cannot help: current_database() is `postgres` on every Supabase
+--     project, as 20261119085000_capacity_apply_gate.sql already records.
+--   * The next hardening step is to pin a per-cluster value — pg_control_system()
+--     .system_identifier, unique to a cluster lineage — against a literal measured by
+--     one authorized read of Launch and archived in docs/team/DECISIONS.md. That read
+--     has not been made, so the block currently prints the observed identifier as a
+--     NOTICE (telemetry, no authority, never compared) so an authorized run records the
+--     value for a later amendment.
+--   * If a future approved migration legitimately drops one of the three markers, this
+--     block must be amended in that same change. Its failure mode is a refused apply,
+--     never a wrong-target apply, which is the intended asymmetry.
+
+do $kayk_p1_target$
+declare
+  v_missing text[] := '{}';
+  v_capacity_functions integer := 0;
+  v_max_members boolean := false;
+  v_removal_context boolean := false;
+  v_evidence_ok boolean := false;
+  v_evidence_error text := '';
+  v_system_identifier text := 'unreadable';
+begin
+  -- Layer 1: is this a CityLink database at all? Each object here is a dependency
+  -- the statements below already assume, so a miss is also a schema defect.
+  if to_regclass('public.profiles') is null then
+    v_missing := array_append(v_missing, 'public.profiles');
+  end if;
+  if to_regclass('public.academic_terms') is null then
+    v_missing := array_append(v_missing, 'public.academic_terms');
+  end if;
+  if to_regclass('public.courses') is null then
+    v_missing := array_append(v_missing, 'public.courses');
+  end if;
+  if to_regclass('public.study_groups') is null then
+    v_missing := array_append(v_missing, 'public.study_groups');
+  end if;
+  if to_regclass('public.group_memberships') is null then
+    v_missing := array_append(v_missing, 'public.group_memberships');
+  end if;
+  if to_regprocedure('private.is_active_group_member(uuid,uuid)') is null then
+    v_missing := array_append(v_missing, 'private.is_active_group_member(uuid,uuid)');
+  end if;
+
+  if v_missing <> '{}' then
+    raise exception 'kayk_p1_prerequisite_missing this is not a CityLink database, absent=%',
+      array_to_string(v_missing, ',')
+      using errcode = '45K01';
+  end if;
+
+  -- Layer 2: the Launch-only evidence. Read-only catalog queries; any unexpected
+  -- failure becomes a refusal, never a pass.
+  begin
+    select count(*)
+      into v_capacity_functions
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in (
+         'list_course_group_summaries_capacity',
+         'list_current_term_course_groups_capacity',
+         'list_group_recruitment_posts_capacity'
+       );
+
+    select exists (
+      select 1
+        from pg_catalog.pg_attribute a
+       where a.attrelid = 'public.study_groups'::regclass
+         and a.attname = 'max_members'
+         and a.attnum > 0
+         and not a.attisdropped
+    )
+      into v_max_members;
+
+    v_removal_context := to_regclass('private.group_removal_context') is not null;
+    v_evidence_ok := true;
+  exception
+    when others then
+      get stacked diagnostics v_evidence_error = message_text;
+      v_evidence_ok := false;
+  end;
+
+  if not v_evidence_ok then
+    raise exception 'kayk_p1_target_evidence_unreadable cannot decide whether ref=pijslbchvstkoweslymr error=%',
+      v_evidence_error
+      using errcode = '45K02';
+  end if;
+
+  if v_capacity_functions < 3
+     or v_max_members is not true
+     or v_removal_context is not true then
+    raise exception 'kayk_p1_target_out_of_scope ref=pijslbchvstkoweslymr requires the capacity-era markers and they are not all here: capacity_functions=% max_members=% group_removal_context=% (this looks like the frozen Prototype, another project, or a pre-capacity copy — do not apply here)',
+      v_capacity_functions, v_max_members, v_removal_context
+      using errcode = '45K03';
+  end if;
+
+  -- Telemetry only: records which cluster answered. Not compared to anything, so it
+  -- cannot fail the run, and it cannot be forged into a pass either.
+  begin
+    select system_identifier::text
+      into v_system_identifier
+      from pg_catalog.pg_control_system();
+  exception
+    when others then
+      v_system_identifier := 'unreadable';
+  end;
+
+  raise notice 'kayk_p1_target_verified capacity_functions=% max_members=true group_removal_context=true system_identifier=% current_database=%',
+    v_capacity_functions, v_system_identifier, current_database();
+end
+$kayk_p1_target$;
 
 -- ---------------------------------------------------------------------------
 -- 1. 資料表

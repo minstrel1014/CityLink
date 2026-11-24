@@ -546,3 +546,64 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Gating sequence for any Kayk P1 apply, in order, each gate independent and none assumable from a previous run:** (1) a fresh Role 6 exact-head review of the current blob — the `service_role` amendment at `6ca76ab` and the comment-only correction at `375eece` have no reviewer, so "two rounds passed" cannot be carried forward; (2) Adam's written authorization recorded in this file naming ref `pijslbchvstkoweslymr`, the commit head and the blob path; (3) three read-only preflights plus a `pg_default_acl` read against Launch, immediately before applying; (4) the apply; (5) live QA of the seven behaviour checks, the removed-member-loses-access case first.
 - **Mechanism that survives the void measurement:** a Supabase project whose `pg_default_acl` grants `service_role` on new objects keeps that grant unless a revoke names it, and migrations run as `postgres`. Whether Launch carries those defaults has **not** been read; every revoke names `service_role` so the migration is correct either way.
 - **Not authorized, not done:** any write to Launch, any write to the Prototype, deployment, publication, merge, GitHub visibility change, and any further preflight against `wkzclgmhrtecnpexfesr`.
+
+## 2026-11-24 — P1 now carries a fail-closed target assertion; the blob moved again
+
+- **Requested by:** the coordinator's dispatch of 2026-11-24, which Adam approved as a
+  follow-up to the three PR #59 corrections. Scope was the guard and comments only: no
+  business statement, function signature, grant or RLS setting was touched. The diff is
+  purely additive - 175 lines inserted, none removed.
+- **What was missing:** the capacity line refuses a wrong ref through
+  `private.citylink_capacity_apply_gate()` (tokens at SQLSTATE 45001-45009), but of the
+  eleven migration files only `20261119085000_capacity_apply_gate.sql` carried such a
+  check. Kayk's P1 is a standalone migration with no equivalent, which is the mechanism
+  behind the 2026-11-24 incident rather than a wording problem.
+- **The guard:** section 0, a `do $kayk_p1_target$` block placed **inside** the file's own
+  `begin;` transaction and before the first DDL. Two layers, three refusal tokens, each its
+  own SQLSTATE so a log line says which line of work refused, deliberately not 45003:
+  `kayk_p1_prerequisite_missing` (45K01, not a CityLink database),
+  `kayk_p1_target_evidence_unreadable` (45K02, the catalog could not be consulted, which is
+  a refusal not a pass), and `kayk_p1_target_out_of_scope` (45K03, readable and the Launch
+  markers are absent).
+- **No operator input is trusted.** There is no `current_setting()`, GUC or psql variable in
+  the block; it reads `pg_catalog.pg_proc`, `pg_catalog.pg_attribute` and `to_regclass()` /
+  `to_regprocedure()` only, and the expected values are compiled into the reviewed file. A
+  guard that asked the applier to declare the ref would have passed on 2026-11-24, because
+  the applier was confident.
+- **The objective basis is capacity-era structure:** the column `public.study_groups.max_members`,
+  the table `private.group_removal_context` and the three `_capacity` read functions in
+  `public`, all created by `supabase/migrations/20261119090000_group_hard_max.sql`, which this
+  file records at "Launch capacity application" as applied to CityLink Launch at 08:38:53Z on
+  2026-11-23. The same record shows Launch's ledger moving from 7 rows to 11, while the
+  2026-11-24 read of `wkzclgmhrtecnpexfesr` found 7 rows ending at `20261118082247`: the
+  Prototype never received that file and after F14 must not, so the markers are absent there.
+  Nothing on this branch drops them.
+- **Stated limits, because the guard proves history and not identity:** a point-in-time
+  restore or branch clone made from Launch after 2026-11-23 08:48Z carries the same three
+  markers and would pass, and so would a project where someone recreates them by hand.
+  `current_database()` cannot help - it is `postgres` on every Supabase project, as the gate
+  file already records. The next hardening step is to pin
+  `pg_control_system().system_identifier` against a value captured by one authorized read of
+  Launch and archived here; until then the block prints the observed identifier as a NOTICE
+  for the record and treats it as telemetry with no authority.
+- **Measured, not assumed, on the disposable local PostgreSQL 17.12 harness:** an empty
+  database returned 45K01 naming the five absent objects; the pre-capacity stub shape - the
+  Prototype's shape - returned 45K03 reporting `capacity_functions=0 max_members=f`, and the
+  three P1 tables were absent afterwards; the same careless invocation without
+  `ON_ERROR_STOP` failed 36 later statements with `25P02 current transaction is aborted` and
+  still created nothing; with the markers present the run emitted
+  `kayk_p1_target_verified` and applied, twice. Tests:
+  `server/stage6GroupFilesMigrationApplies.test.ts` covers all four paths against a fixture
+  (`server/fixtures/groupFilesLaunchMarkersFixture.sql`), and
+  `server/stage6GroupFilesSqlContract.test.ts` pins the token-to-SQLSTATE pairing, the
+  placement after `begin;` and before the first DDL, the absence of `current_setting` and of
+  grant/revoke inside the guard.
+- **Consequence for the review chain:** this is a SQL body change, so the blob moved from
+  `f67f18b280469003b6fe18cd9d7a1a672674466b51298f33b12df71bc13507f3` to `3c4986275d077aff72185f8bccc302225fa86a2505113e8919cf89cdef5d036b` (723 lines, was 548) and **no reviewer has seen it**. The
+  comment-only F14 relabel at `375eece` left the statements identical; this one adds a real
+  block, so the earlier proof that the stripped hash was unchanged no longer applies. Role 6
+  owes an exact-head review of this blob before any apply, and any written apply authorization
+  must name the new hash.
+- **Not authorized, not done:** applying anything to Launch or the Prototype, any Supabase
+  connection, deployment, publication, merge of PR #59, GitHub visibility change, and any
+  change to `PROJECT_INSTRUCTIONS.md` or the shared project folder.

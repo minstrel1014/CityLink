@@ -120,3 +120,44 @@
 ## 14. Test preflight finding: Supabase default privileges (2026-11-24)
 
 Section 2's posture — tables unreachable directly, six RPCs the only entry point, `authenticated` the only grantee — is achieved by explicit statements in the migration, not by the project's defaults. the frozen Prototype `wkzclgmhrtecnpexfesr` was measured to carry `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` that auto-grants new tables, functions and sequences to `anon`, `authenticated` and `service_role`, and `service_role` holds `BYPASSRLS`. A revoke that omits `service_role` therefore leaves it effective on a real project even though it measures correctly on a plain local PostgreSQL. Every revoke in the P1 proposal names `service_role` for that reason, and `docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql` reproduces both the leak and the fix. That read predates the F14 correction and describes the Prototype, not the authorized apply target `pijslbchvstkoweslymr`, whose `pg_default_acl` has **not** been read; the rule is written to be safe either way, and the target's own state must be re-measured before any apply. Any later migration in this feature must name `service_role` in every revoke for the same reason.
+
+## 15. Fail-closed apply-target assertion in the P1 migration (2026-11-24)
+
+Section 14's cause was never only a wrong document: the P1 migration had no way to notice it
+was being run on the wrong project. The capacity line does - `20261119085000_capacity_apply_gate.sql`
+defines `private.citylink_capacity_apply_gate()` and refuses the frozen Prototype with
+`group_capacity_gate_target_out_of_scope` (SQLSTATE 45003) - but that instrument covers the
+capacity ladder only, and it depends on declarations the operator supplies. The P1 proposal now
+carries its own guard, as section 0 of `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql`, added on
+the coordinator's Adam-approved dispatch of 2026-11-24.
+
+Unlike the capacity gate it takes **no operator input**: no `current_setting()`, no GUC, no psql
+variable, nothing the applier types. It reads `pg_catalog` and compares against values compiled
+into the reviewed file, so a confident-but-wrong operator cannot wave it through, which is exactly
+what happened on 2026-11-24. Two layers and three refusal tokens, each with its own SQLSTATE so a
+log identifies which line of work refused: `kayk_p1_prerequisite_missing` (45K01, the database is
+not CityLink), `kayk_p1_target_evidence_unreadable` (45K02, the catalog could not be consulted -
+unknown is a refusal, never a pass), `kayk_p1_target_out_of_scope` (45K03, readable and the Launch
+markers are absent). The block sits inside the file's own `begin;` transaction and before the
+first DDL, so a refusal aborts that transaction and every later statement in the file fails with
+`25P02` until the final `commit;` degenerates into a rollback: the migration cannot be half-applied
+even by a runner that ignores errors.
+
+The evidence it looks for is structural, created by
+`supabase/migrations/20261119090000_group_hard_max.sql` and recorded in `docs/team/DECISIONS.md` as
+applied to CityLink Launch on 2026-11-23: the column `public.study_groups.max_members`, the table
+`private.group_removal_context`, and the three `_capacity` read functions in `public`. That file was
+never applied to the Prototype, whose migration ledger still ends at `20261118082247`, and after F14
+it must not be.
+
+Honest limits, which Role 6 should weigh rather than take on faith: structural evidence proves
+**history, not identity**. A point-in-time restore or branch clone of Launch made after that apply
+carries the same three markers and would pass, and so would a project where someone recreates the
+objects by hand. `current_database()` cannot discriminate because it is `postgres` on every Supabase
+project. The remaining hardening step is to pin a per-cluster value -
+`pg_control_system().system_identifier` - against a literal captured by one authorized read of Launch
+and archived in `docs/team/DECISIONS.md`; until such a read is authorized, the guard only prints the
+identifier it observes, as a NOTICE, with no authority over the verdict. Both the runtime paths and
+the placement rules are covered by `server/stage6GroupFilesMigrationApplies.test.ts` and
+`server/stage6GroupFilesSqlContract.test.ts`, and adding the guard moved the blob, so the exact-head
+review obligation restarts.

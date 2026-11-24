@@ -143,6 +143,10 @@ describe("group files migration proposal", () => {
 
   it("emits only known error tokens", () => {
     const allowed = new Set([
+      // Section 0 target assertion (fail-closed refusal tokens).
+      "kayk_p1_prerequisite_missing",
+      "kayk_p1_target_evidence_unreadable",
+      "kayk_p1_target_out_of_scope",
       "group_files_no_permission",
       "group_files_upload_too_large",
       "group_files_name_required",
@@ -159,13 +163,65 @@ describe("group files migration proposal", () => {
       "group_files_term_missing",
       "group_files_term_code_unrecognised",
     ]);
-    const raised = [...sql.matchAll(/raise exception\s+'([a-z_]+)'/gi)].map(
+    // The leading token only, because the guard's messages continue with the observed
+    // evidence after the token; a closing quote here would let an unknown token slip by.
+    // Digits are in the class because the refusal tokens name the phase (kayk_p1_*).
+    const raised = [...sql.matchAll(/raise exception\s+'([a-z0-9_]+)/gi)].map(
       m => m[1]
     );
     expect(raised.length).toBeGreaterThan(10);
     for (const token of raised) {
       expect(allowed.has(token), `unexpected token: ${token}`).toBe(true);
     }
+  });
+
+  it("asserts the apply target fail-closed, with its own SQLSTATEs", () => {
+    const start = sql.indexOf("do $kayk_p1_target$");
+    const end = sql.indexOf("$kayk_p1_target$;", start);
+    expect(start, "section 0 target guard is missing").toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const guard = sql.slice(start, end);
+
+    // Requirement: no operator-supplied input. A GUC the applier fills in is a reminder,
+    // not a check, so the guard may only read the catalog.
+    expect(guard).not.toMatch(/current_setting/i);
+    expect(guard).not.toMatch(/set\s+kayk/i);
+    expect(guard).toMatch(/pg_catalog\.pg_proc/i);
+    expect(guard).toMatch(/pg_catalog\.pg_attribute/i);
+    expect(guard).toMatch(/to_regclass/i);
+    expect(guard).toMatch(/to_regprocedure/i);
+
+    // The guard grants and revokes nothing; it is a refusal, not a privilege change.
+    expect(guard).not.toMatch(/\bgrant\b/i);
+    expect(guard).not.toMatch(/\brevoke\b/i);
+
+    // Unknown is never a pass: all three branches raise, each token is immediately
+    // followed by its own distinct SQLSTATE, and none of them borrows the capacity
+    // line's code. Pairing is asserted by order and distance rather than one regular
+    // expression, because the refusal messages carry the observed evidence between them.
+    const pairs: [string, string][] = [
+      ["kayk_p1_prerequisite_missing", "45K01"],
+      ["kayk_p1_target_evidence_unreadable", "45K02"],
+      ["kayk_p1_target_out_of_scope", "45K03"],
+    ];
+    for (const [token, code] of pairs) {
+      const at = guard.indexOf(token);
+      expect(at, `missing token ${token}`).toBeGreaterThan(-1);
+      const codeAt = guard.indexOf(`errcode = '${code}'`);
+      expect(codeAt, `missing errcode ${code}`).toBeGreaterThan(at);
+      expect(codeAt - at).toBeLessThan(600);
+    }
+    expect(sqlNoComments).not.toMatch(/45003/);
+    expect(guard).toMatch(/exception\s+when others/i);
+
+    // Placement is load-bearing: inside the file's own transaction, before any DDL, so a
+    // refusal aborts the transaction instead of leaving a half-applied migration.
+    const code = sqlNoComments;
+    const guardAt = code.indexOf("do $kayk_p1_target$");
+    expect(code.trimStart().startsWith("begin;")).toBe(true);
+    expect(guardAt).toBeGreaterThan(code.indexOf("begin;"));
+    expect(guardAt).toBeLessThan(code.indexOf("create table"));
+    expect(code.trimEnd().endsWith("commit;")).toBe(true);
   });
 
   it("treats the group leader as study_groups.creator_id", () => {
