@@ -1425,3 +1425,49 @@ width would break words — and the conversation is a fixed `clamp(520px, 76vh, 
 `<Link href="/my-courses" className="back-link">View My Courses</Link>`. The My Group page also has a
 "My Courses" link at `:89` and the phrase in copy at `:710`. Removing the breadcrumbs would remove the
 only way back to the course list from those two pages, so nothing was changed.
+
+## 2026-11-24 20:00-20:36 — the chat names itself, and the breadcrumbs go
+Adam asked whether everyone can reach a group chat, and asked for three UI changes: remove the two
+breadcrumbs, add a way from the chat back to its group, and leave the bubble size alone ("the bubble is
+fine now").
+
+**The chat was already private; the notice was not.** The read predicate
+`private.can_read_group_chat` requires an existing membership row with status `active`, `left` or
+`removed` — a pending invitation or join request does not create one — and `private.can_send_group_chat`
+additionally requires `active` and a group that is not abandoned. Verified against the live database
+rather than read from SQL: QA-C (`citylink.qa4…`, a student with no membership in the QA group) called
+`get_group_chat_access` and `list_group_chat_messages` and both returned
+`P0001 not authorized to read this group chat`. Adam was reading the old notice, which opened with what
+members *can* do and only mentioned restriction afterwards. The notice now opens with the restriction:
+"Only members of this group can open this chat, and the server checks that on every request — a pending
+invitation or join request does not grant access."
+
+**The header names the conversation.** A student with several chats open saw "Conversation" on all of
+them. `loadGroupChatHeading(userId, groupId)` reads the group's `name` and `course_id`, then the course
+`title`, and the panel renders `"<course title>: <group name>"` — for example
+`QA Capacity Course: QA-P1-20261124-1519`. It is decoration only: the access check has already decided
+permission, the reads are the same table reads the My Group page makes, it runs beside the message
+request rather than before it, and any failure leaves the generic heading in place.
+
+**The breadcrumbs are gone, and the earlier note was wrong.** The previous entry said removing them
+would remove the only way back to the course list. That was not true — the workspace sidebar carries
+"My Courses" on every page, and the layout breadcrumb above the title stays. Adam asked for them to go,
+so the two `<Link href="/my-courses" className="back-link">View My Courses</Link>` elements were
+deleted from `GroupChatPicker.tsx` and `AuthenticatedMyGroup.tsx`. The "My Courses" button inside the
+My Group empty state (`:89`) is a recovery action in a failure panel, not a breadcrumb, and stays.
+
+**A way back to the group.** The chat header now carries `View group` next to `Files`, linking to
+`/courses/<courseId>`. `loadGroupChatHeading` already read `course_id`, so the link costs no extra
+request; it renders only once the heading resolves, and the actions row got a flex rule because two
+buttons in a plain block would have stacked.
+
+**Published and verified live.** Build `3b24bc4a764b0d06` (commit `68dc187`): the header reads
+`QA Capacity Course: QA-P1-20261124-1519`, `View group` navigates to
+`/courses/0804189d-bb79-4d59-90f9-50a3b0fe3297`, and neither the picker nor the My Group page shows a
+breadcrumb above its title any more. `pnpm check` clean, 638 tests pass.
+
+**The Preview stays unavailable, by Adam's decision.** He confirmed uploads work on the published site
+and said to leave the Manus Preview as it is. The cause is unchanged and outside this repository: the
+R2 bucket's own CORS rule lists only the published origin, and the token cannot edit it. The signer's
+origin resolution (version 5) is committed as `eccd7bd` on `feature/coordinator-edge-signer` (PR #66,
+draft) so the deployed code has a reviewable source; nothing was deployed or merged in this round.
