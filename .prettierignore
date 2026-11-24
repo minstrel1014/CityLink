@@ -16,6 +16,8 @@ package-lock.json
 pnpm-lock.yaml
 
 # Database
+# SQL is hand-formatted for review; Prettier has no SQL parser and errors.
+*.sql
 *.db
 *.sqlite
 *.sqlite3
