@@ -124,10 +124,11 @@ revoke all on table public.group_ai_requests from public, anon, authenticated, s
 
 ## 6. 抽屜 UI
 
-- 位置：聊天室頂部工具列，**Files 按鈕旁**加一個 AI 按鈕；按下由上（右側）滑出抽屜。每個群組聊天室是獨立 session，切換群組即重設。
+- 位置：聊天室頂部工具列，**Files 按鈕旁**加一個 AI 按鈕；按下**由上滑出**抽屜（top-anchored，`translateY(-100%)` → `0`，180ms；`prefers-reduced-motion` 時不播放動畫）。每個群組聊天室是獨立 session，切換群組即重設。
 - 內容：提問輸入框、可選檔案清單（只列 `current` 且未過期的本群組檔案，最多選 2 個）、同意區塊（首次提問前展開）、清空 context 按鈕、最近一則回答。
 - **沒有自動送出**：開啟抽屜不會送出任何內容；必須按「送出提問」且同意全部勾選。
 - 實作位置：`client/src/components/citylink/GroupAiDrawer.tsx`（純前端，接 `shared/aiChatMockReply.ts` 的 mock）。
+- **已知限制（Adam 2026-11-24 批准接受）**：這個分支還沒有群組檔案清單，所以 `GroupChatPage.tsx` 以 `files={[]}` 傳入，檔案選擇只在測試中被驗證。drawer 與 context 組裝層已接受檔案並執行「最多 2 個、合計 10,000 字元」的限制；接上真實檔案清單是獨立工作，不在本草案範圍。
 
 ## 7. 揭露文字（必須包含兩句）
 
