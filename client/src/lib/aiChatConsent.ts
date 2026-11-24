@@ -78,6 +78,7 @@ export const AI_CHAT_COPY = {
   drawerSubtitle: "一個問題、全組共用的一條對話。回答會寫進聊天室。",
   contextCleared: "已清空 context：只移動了時間戳，沒有任何訊息被刪除。",
   noFiles: "本群組目前沒有可選取的檔案（僅限 current 且未過期的檔案）。",
+  filesUnavailable: "檔案清單暫時無法載入，請稍後再試。",
   emptyQuestion: "請先輸入問題。",
   truncation: "（回答過長，已截斷）",
   droppedContext: "（本次未包含較早的對話）",

@@ -548,6 +548,7 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
         senderName: "A Student",
         body: "Hello",
         createdAt: "2026-11-17T10:00:00.000Z",
+        authorKind: "member",
       },
     ]);
     expect(supabaseMocks.rpc).toHaveBeenCalledWith("list_group_chat_messages", {

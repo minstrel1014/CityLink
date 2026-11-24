@@ -62,6 +62,7 @@ export interface GroupChatMessage {
   senderName: string;
   body: string;
   createdAt: string;
+  authorKind: "member" | "ai";
 }
 
 export interface GroupChatCursor {
@@ -144,7 +145,8 @@ type RpcName =
   | "edit_group_recruitment_post"
   | "close_group_recruitment_post"
   | "list_course_ungrouped_classmates"
-  | "get_current_term_coursemate_profile";
+  | "get_current_term_coursemate_profile"
+  | "list_group_files";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -375,6 +377,64 @@ export function mapGroupChatAccess(value: unknown): GroupChatAccess {
   return { canRead: true, canSend };
 }
 
+export interface GroupFileSummary {
+  id: string;
+  name: string;
+  mimeType: string | null;
+  byteSize: number;
+  createdAt: string;
+  retentionExpiresAt: string;
+}
+
+/**
+ * `public.list_group_files` already filters to current, undeleted, unexpired
+ * rows of the group the caller can access, so the mapper does not re-filter.
+ * It does refuse unknown keys: the read contract is an allowlist here, which is
+ * why a new column needs a new mapper rather than a silent extra field.
+ */
+export function mapGroupFiles(value: unknown): GroupFileSummary[] {
+  return parseRows(value, "group files").map(row => {
+    allowOnlyKeys(row, [
+      "id",
+      "original_name",
+      "declared_mime",
+      "detected_mime",
+      "byte_size",
+      "uploaded_by",
+      "analysis_status",
+      "retention_expires_at",
+      "created_at",
+    ]);
+    const createdAt = requiredString(row, "created_at");
+    if (!Number.isFinite(Date.parse(createdAt))) {
+      throw new Error("The group files contain an invalid timestamp.");
+    }
+    const expiresAt = requiredString(row, "retention_expires_at");
+    if (!Number.isFinite(Date.parse(expiresAt))) {
+      throw new Error("The group files contain an invalid retention date.");
+    }
+    const size = row.byte_size;
+    if (typeof size !== "number" || !Number.isFinite(size) || size < 0) {
+      throw new Error("The group files contain an invalid byte size.");
+    }
+    const detected = row.detected_mime;
+    const declared = row.declared_mime;
+    return {
+      id: requiredString(row, "id"),
+      name: requiredString(row, "original_name"),
+      mimeType:
+        typeof detected === "string" && detected.trim()
+          ? detected
+          : typeof declared === "string" && declared.trim()
+            ? declared
+            : null,
+      byteSize: size,
+      createdAt,
+      retentionExpiresAt: expiresAt,
+    };
+  });
+}
+
 export function mapGroupChatMessages(value: unknown): GroupChatMessage[] {
   return parseRows(value, "group chat messages").map(row => {
     allowOnlyKeys(row, ["message_id", "sender_name", "body", "created_at"]);
@@ -387,6 +447,11 @@ export function mapGroupChatMessages(value: unknown): GroupChatMessage[] {
       senderName: requiredString(row, "sender_name"),
       body: requiredString(row, "body"),
       createdAt,
+      // The current read contract has no author_kind column, so every row from
+      // the server is a member row. The AI answers this client produces are
+      // tagged locally. Rendering must never infer "AI" from the sender name:
+      // a member may set their display name to "CityLink AI".
+      authorKind: "member" as const,
     };
   });
 }
@@ -680,6 +745,12 @@ export async function listGroupChatMessages(
       p_before_id: before?.id ?? null,
       p_limit: CHAT_PAGE_SIZE,
     })
+  );
+}
+
+export async function listGroupFiles(userId: string, groupId: string) {
+  return mapGroupFiles(
+    await callRpc(userId, "list_group_files", { p_group_id: groupId })
   );
 }
 

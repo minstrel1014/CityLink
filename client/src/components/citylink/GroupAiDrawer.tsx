@@ -30,6 +30,7 @@ export default function GroupAiDrawer({
   open,
   history,
   files,
+  filesUnavailable = false,
   onClose,
   onAiMessage,
 }: {
@@ -37,6 +38,8 @@ export default function GroupAiDrawer({
   open: boolean;
   history: ChatTurn[];
   files: SelectableFile[];
+  /** The list could not be read; say so rather than implying there are none. */
+  filesUnavailable?: boolean;
   onClose: () => void;
   onAiMessage: (body: string) => void;
 }) {
@@ -138,7 +141,11 @@ export default function GroupAiDrawer({
       <fieldset className="citylink-ai-drawer__files">
         <legend>選取檔案（最多 2 個）</legend>
         {eligibleFiles.length === 0 ? (
-          <p className="citylink-ai-drawer__hint">{AI_CHAT_COPY.noFiles}</p>
+          <p className="citylink-ai-drawer__hint">
+            {filesUnavailable
+              ? AI_CHAT_COPY.filesUnavailable
+              : AI_CHAT_COPY.noFiles}
+          </p>
         ) : (
           eligibleFiles.map(file => (
             <label key={file.id}>

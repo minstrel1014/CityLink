@@ -29,7 +29,13 @@ export interface SelectableFile {
   id: string;
   groupId: string;
   name: string;
-  text: string;
+  /**
+   * Extracted text, when the caller has it. The client never extracts; the
+   * server does, at request time, so a file selected in the drawer arrives here
+   * with the name and id only. Missing text costs zero characters rather than
+   * being treated as an error.
+   */
+  text?: string;
   status: "pending" | "current";
   retentionExpiresAt: string | null;
 }
@@ -162,12 +168,12 @@ export function buildAiChatContext(input: AiChatContextInput): AiChatContext {
       dropped = true;
       continue;
     }
-    const cost = charLength(file.text);
+    const cost = charLength(file.text ?? "");
     if (fileChars + cost > AI_CHAT_LIMITS.fileChars) {
       dropped = true;
       continue;
     }
-    selectedFiles.push({ id: file.id, name: file.name, text: file.text });
+    selectedFiles.push({ id: file.id, name: file.name, text: file.text ?? "" });
     fileChars += cost;
   }
 

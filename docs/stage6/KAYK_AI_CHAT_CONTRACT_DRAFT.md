@@ -160,7 +160,9 @@ grant select, insert, update on table public.group_ai_requests to service_role;
 - 內容：提問輸入框、可選檔案清單（只列 `current` 且未過期的本群組檔案，最多選 2 個）、同意區塊（首次提問前展開）、清空 context 按鈕、最近一則回答。
 - **沒有自動送出**：開啟抽屜不會送出任何內容；必須按「送出提問」且同意全部勾選。
 - 實作位置：`client/src/components/citylink/GroupAiDrawer.tsx`（純前端，接 `shared/aiChatMockReply.ts` 的 mock）。
-- **已知限制（Adam 2026-11-24 批准接受）**：這個分支還沒有群組檔案清單，所以 `GroupChatPage.tsx` 以 `files={[]}` 傳入，檔案選擇只在測試中被驗證。drawer 與 context 組裝層已接受檔案並執行「最多 2 個、合計 10,000 字元」的限制；接上真實檔案清單是獨立工作，不在本草案範圍。
+- **檔案清單已接上（2026-11-24）。** 群組檔案功能已在 Launch 上線，`GroupChatPage.tsx` 以 `list_group_files(p_group_id)` 取得清單（該函式本身已過濾 `status='current'`、`deleted_at is null`、`retention_expires_at > now()` 與存取權），傳入 drawer 後再經 `isFileEligible` 二次過濾。清單讀取失敗不會擋住聊天：drawer 顯示「檔案清單暫時無法載入」，而不是假裝沒有檔案。
+- **檔案文字由伺服器擷取，不在瀏覽器。** 前端只持有 `id`、檔名與到期日；`SelectableFile.text` 因此是 optional，缺文字時以 0 字元計入預算，而不是報錯。真正的文字擷取與 10,000 字元上限在伺服器（`server/ai/extraction/**`）與 provider 邊界（`server/ai/chat/answerQuestion.ts`）執行。
+- **`author_kind` 的客戶端先行版（對應 Role 6 C-2）。** 讀取合約目前還沒有 `author_kind` 欄位（未套用），所以 `mapGroupChatMessages` 一律標記 `authorKind: "member"`，只有這個客戶端自己產生的 AI 回答標為 `"ai"`。前端**不再用 `sender_name_snapshot` 判斷是否為 AI**：把 display name 設成 `CityLink AI` 的成員，其訊息仍是成員訊息。schema 套用後，這個欄位改由伺服器回傳，渲染邏輯不變。
 
 ## 7. 揭露文字
 

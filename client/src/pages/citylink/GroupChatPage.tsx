@@ -11,10 +11,12 @@ import {
   getGroupChatAccess,
   getStage6ErrorMessage,
   listGroupChatMessages,
+  listGroupFiles,
   MAX_CHAT_MESSAGE_LENGTH,
   sendGroupChatMessage,
   type GroupChatAccess,
   type GroupChatMessage,
+  type GroupFileSummary,
 } from "@/lib/supabaseStage6";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
@@ -33,6 +35,8 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
   const [state, setState] = useState<LoadState>("loading");
   const [access, setAccess] = useState<GroupChatAccess | null>(null);
   const [messages, setMessages] = useState<GroupChatMessage[]>([]);
+  const [files, setFiles] = useState<GroupFileSummary[]>([]);
+  const [filesUnavailable, setFilesUnavailable] = useState(false);
   const [hasOlder, setHasOlder] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,6 +63,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     if (session.status === "loading") {
       setState("loading");
       setMessages([]);
+      setFiles([]);
       return () => {
         active = false;
       };
@@ -67,6 +72,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       setState("unauthorized");
       setAccess(null);
       setMessages([]);
+      setFiles([]);
       setError("Sign in with a Supabase account before opening group chat.");
       return () => {
         active = false;
@@ -76,6 +82,8 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     setState("loading");
     setAccess(null);
     setMessages([]);
+    setFiles([]);
+    setFilesUnavailable(false);
     setError("");
     setFeedback("");
     void (async () => {
@@ -85,8 +93,16 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
         setAccess(permitted);
         const page = await listGroupChatMessages(userId, groupId);
         if (!isCurrent()) return;
+        // The file list is live (P1 is applied), but it must not decide whether
+        // chat opens: a failure here leaves the drawer without files and says so.
+        const groupFiles = await listGroupFiles(userId, groupId).catch(
+          () => null
+        );
+        if (!isCurrent()) return;
         const ordered = [...page].reverse();
         setMessages(ordered);
+        setFiles(groupFiles ?? []);
+        setFilesUnavailable(groupFiles === null);
         setHasOlder(page.length === CHAT_PAGE_SIZE);
         setState("ready");
       } catch (loadError) {
@@ -298,7 +314,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               {messages.map(message => (
                 <li
                   className={
-                    message.senderName === AI_AUTHOR_NAME
+                    message.authorKind === "ai"
                       ? "stage6-message stage6-message-ai"
                       : "stage6-message"
                   }
@@ -321,13 +337,19 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
             open={aiOpen}
             history={messages.map<ChatTurn>(message => ({
               id: message.id,
-              authorKind:
-                message.senderName === AI_AUTHOR_NAME ? "ai" : "member",
+              authorKind: message.authorKind,
               authorName: message.senderName,
               body: message.body,
               createdAt: message.createdAt,
             }))}
-            files={[]}
+            filesUnavailable={filesUnavailable}
+            files={files.map(file => ({
+              id: file.id,
+              groupId,
+              name: file.name,
+              status: "current" as const,
+              retentionExpiresAt: file.retentionExpiresAt,
+            }))}
             onClose={() => setAiOpen(false)}
             onAiMessage={body => {
               setMessages(current => [
@@ -337,6 +359,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
                   senderName: AI_AUTHOR_NAME,
                   body,
                   createdAt: new Date().toISOString(),
+                  authorKind: "ai",
                 },
               ]);
             }}
