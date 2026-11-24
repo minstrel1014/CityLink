@@ -13,6 +13,11 @@ import { describe, expect, it } from "vitest";
  *
  * Live behaviour (RLS, real objects, concurrency) still needs Test QA under a
  * separate authorization.
+ *
+ * Maintenance: sqlPath points at the proposal under docs/stage6. When the SQL
+ * is promoted to supabase/migrations it must be repointed, and the
+ * `blocks.length` assertion must be raised when a later phase (P4/P5) adds a
+ * function. Both are intentional tripwires, not accidental coupling.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -149,6 +154,38 @@ describe("group files migration proposal", () => {
     // there is no separate leader column, and succession rewrites creator_id.
     expect(sqlNoComments).toMatch(/g\.creator_id = v_actor/i);
     expect(sqlNoComments).not.toMatch(/leader_id/i);
+  });
+
+  it("matches every revoke/grant signature to the function definition", () => {
+    // A mismatched signature makes revoke/grant fail and rolls back the whole
+    // transaction, which is this repository's most common failure mode.
+    const signatures = [
+      ...sql.matchAll(
+        /create or replace function\s+([a-z_]+)\.([a-z_]+)\s*\(([^)]*)\)/gi
+      ),
+    ].map(m => ({
+      schema: m[1].toLowerCase(),
+      name: m[2].toLowerCase(),
+      args: m[3]
+        .split(",")
+        .map(part => part.trim())
+        .filter(Boolean)
+        .map(part => part.split(/\s+/).pop()!.toLowerCase())
+        .join(", "),
+    }));
+
+    expect(signatures.length).toBe(9);
+    for (const sig of signatures) {
+      const target = `${sig.schema}.${sig.name}(${sig.args})`;
+      expect(sql.toLowerCase()).toContain(
+        `revoke all on function ${target} from public, anon, authenticated`
+      );
+      if (sig.schema === "public") {
+        expect(sql.toLowerCase()).toContain(
+          `grant execute on function ${target} to authenticated`
+        );
+      }
+    }
   });
 
   it("wraps the file in a transaction and bounds user-controlled text", () => {
