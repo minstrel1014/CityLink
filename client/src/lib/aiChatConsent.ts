@@ -10,8 +10,21 @@
  * Chinese because the mandated wording is Chinese and the audience is Hong Kong
  * students; the surrounding chat UI stays English.
  *
- * Consent is per request: no storage key, no cookie, no "remember", so the next
- * question asks again.
+ * UI consent is per request: no storage key, no cookie, no "remember" here, so the
+ * next question asks again.
+ *
+ * Adam's F-11 ruling (2026-11-24) changes what the SERVER knows: acceptance is
+ * recorded once on the server (`profiles.ai_disclosure_accepted_at`, written by the
+ * `accept_ai_disclosure()` RPC) and `begin_group_ai_request` refuses with
+ * `group_ai_disclosure_required` (45N09) when it is missing. That timestamp is the
+ * authoritative gate; this module's checkboxes are a UI promise repeated every
+ * question, and neither side pretends otherwise. The module deliberately keeps no
+ * acceptance state of its own, so nothing here can drift out of sync with the server.
+ *
+ * Adam's F-12 ruling (2026-11-24, option c) is that there is no group-level AI switch
+ * and no per-member opt-out: one member's question sends other members' chat and this
+ * group's file text. The disclosure therefore has to say that out loud, which is the
+ * `others-data` statement below.
  */
 
 export interface ConsentStatement {
@@ -46,8 +59,16 @@ export const AI_CHAT_CONSENT_STATEMENTS: readonly ConsentStatement[] = [
     requiredPhrase: AI_CHAT_REQUIRED_PHRASES.formerMembers,
   },
   {
+    id: "others-data",
+    text: "其他成員無法單獨退出：你提問時，送出的內容包含本群組其他成員的聊天記錄與本群組檔案的文字，群組沒有 AI 開關，成員也沒有個人退出選項。",
+  },
+  {
     id: "per-question",
-    text: "這次同意只涵蓋這一個問題，系統不會記住你的選擇，下一個問題會再問一次。",
+    text: "這個介面每次提問都會再要求你勾選，不會記住這個介面的勾選狀態。",
+  },
+  {
+    id: "server-recorded",
+    text: "你第一次接受時，伺服器會記住「此帳號已看過本揭露」這一個時間點（只記錄時間，不記錄其他資料）；之後每次提問仍會要求你在介面再確認一次。",
   },
 ] as const;
 
@@ -82,6 +103,21 @@ export const AI_CHAT_COPY = {
   emptyQuestion: "請先輸入問題。",
   truncation: "（回答過長，已截斷）",
   droppedContext: "（本次未包含較早的對話）",
+  fileNotRead: "（部分選取檔案沒有可讀文字）",
+  /**
+   * N-6: both dropped notices can apply to one answer. Order is fixed here so the
+   * drawer and the server-side assembly cannot each invent their own: context first,
+   * then files, at most once each, before the answer body.
+   */
+  noticeOrder: ["droppedContext", "fileNotRead"] as readonly (
+    | "droppedContext"
+    | "fileNotRead"
+  )[],
+  disclosureRequired:
+    "請先確認已閱讀 AI 揭露（伺服器會記錄你已看過，但不記錄其他資料）。",
+  providerFailed: "CityLink AI 暫時無法回答，請稍後再試。",
+  rateLimited: (retryAfter: number) =>
+    `今天在這裡問得太多了，請 ${retryAfter} 秒後再試。`,
   clearContext: "清空 context",
   send: "送出提問",
   cancel: "取消",
