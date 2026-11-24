@@ -126,3 +126,24 @@ Role 6 對本文件做了一次唯讀靜態審查（全文見 `KAYK_ROLE6_REVIEW
 | R8  | `starts_on` 從未由任何 migration 填入        | 已記錄：推導規則是實質產品規則，且到期日是快照                            |
 
 R5 與 R6 均已定案，P1 的 SQL 提案（`KAYK_FILE_AI_MIGRATION_PROPOSAL.sql`）已包含全部六個 RPC 與保留期計算，並以 `server/stage6GroupFilesSqlContract.test.ts` 的九個靜態測試守住權限姿態。**尚未套用。**
+
+## 12. Role 6 對 P1 SQL 的審查（2026-11-24）與已知限制
+
+Role 6 判定草案**沒有阻擋級缺陷**，設計審查的四個阻擋項全部已在 SQL 中吸收。他要求套用前補三項，均已補上：A-1 三個使用者可控文字欄位加上長度檢查；A-2 `detected_mime` 與 `declared_mime` 不一致時寫入 `mime_mismatch` 而不是靜默接受；A-3 加上 `begin;`／`commit;` 交易包裹。
+
+另加一項超出他三項清單的修正（B-4）：`replaces_file_id` 加上唯一部分索引，避免同一檔案被兩個 pending 替換同時指向、確認後出現兩個 current 檔案。此項屬表結構改動，需他確認是否需要重審。
+
+其餘非阻擋觀察的處置：
+
+| #   | 觀察                                     | 處置                                                            |
+| --- | ---------------------------------------- | --------------------------------------------------------------- |
+| B-1 | pending 列不計配額，每人每群組最多 5 個  | 接受；配額不是即時精確值                                        |
+| B-2 | 過期列不再計入 DB 統計，但 R2 物件仍在   | 接受；清理上線前 DB 用量會低於帳單                              |
+| B-3 | `list_group_files` 無分頁                | 延後到 P3，屆時與 UI 一起加游標分頁                             |
+| B-5 | `group_analysis_jobs` 缺 `group_id` 索引 | P4 補                                                           |
+| B-6 | 群組刪除 cascade 掉列，R2 物件變孤兒     | 列入清理排程的已知債                                            |
+| B-7 | 替換時舊檔仍計入配額，接近上限會被拒絕   | 接受；保守方向正確                                              |
+| B-8 | `confirm` 未重驗保留期視窗               | 接受；產生的死列會被列表與配額過濾                              |
+| B-9 | RPC 回傳 `object_key` 給瀏覽器           | 接受；簽名端點必須以 `file_id` 重新推導，絕不接受前端傳來的 key |
+
+**營運依賴（Role 6 特別指出）：** `academic_terms.code` 在 schema 只限制長度，不限制格式。若新增非 `YYYY-Fall`／`YYYY-Spring` 的學期命名，該學期的所有上傳都會以 `group_files_term_code_unrecognised` 失敗。這是刻意的 fail-closed，但**新增學期命名時必須同步更新 `group_file_retention_expiry`**。

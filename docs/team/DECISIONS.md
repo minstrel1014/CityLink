@@ -496,3 +496,13 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Conclusion:** leadership is real and transferable, but it is stored in `creator_id` and reassigned on succession (earliest remaining active member, per the approved tie order). `creator_id = auth.uid()` is therefore the correct current-leader test, not an approximation, and no separate helper exists to call.
 - **Effect on P1:** `delete_group_file` was already correct. Its caveat comment was replaced with the verified statement, and a regression test now asserts the SQL uses `creator_id` and never references a `leader_id` column.
 - **Still not authorized:** applying the migration, deployment, Test or Main writes.
+
+## 2026-11-24 — Role 6's P1 review: no blockers, three fixes applied
+
+- **Verdict:** Role 6 found no blocking defects in the P1 migration draft and confirmed that the four design blockers (R1-R4) were absorbed. He also independently confirmed the leader conclusion: `creator_id` is the current-leader pointer because succession rewrites it, and a null `creator_id` fails closed.
+- **Applied before applying:** A-1 length checks on `declared_mime`, `detected_mime` and `content_hash`; A-2 records `mime_mismatch` instead of silently accepting a mismatch; A-3 wraps the file in `begin;`/`commit;`.
+- **Applied beyond his list:** a unique partial index on `replaces_file_id` for pending rows, so two concurrent replacements cannot both become current. This is a table-structure change and needs his confirmation on whether it requires re-review.
+- **Deferred with reasons:** pagination for `list_group_files` moves to P3 with the UI; the `group_analysis_jobs` index moves to P4; the orphan-object debt from group deletion is recorded as known.
+- **Operational dependency recorded:** `academic_terms.code` is only length-constrained, so a future term naming outside `YYYY-Fall`/`YYYY-Spring` would make every upload in that term fail closed. Adding a term naming convention requires updating the retention helper at the same time.
+- **R5 already closed:** the five-month retention is recorded in this file; Role 6's question about the earlier four-month wording is answered by the superseded note.
+- **Not authorized:** applying the migration, deployment, Test or Main writes.

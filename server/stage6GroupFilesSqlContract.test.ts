@@ -151,6 +151,23 @@ describe("group files migration proposal", () => {
     expect(sqlNoComments).not.toMatch(/leader_id/i);
   });
 
+  it("wraps the file in a transaction and bounds user-controlled text", () => {
+    expect(sqlNoComments.trimStart().startsWith("begin;")).toBe(true);
+    expect(sqlNoComments.trimEnd().endsWith("commit;")).toBe(true);
+    for (const column of ["declared_mime", "detected_mime", "content_hash"]) {
+      expect(sql).toMatch(
+        new RegExp(`${column} is null or char_length\\(${column}\\) <=`, "i")
+      );
+    }
+    expect(sql).toMatch(/mime_mismatch boolean not null default false/i);
+  });
+
+  it("prevents two pending replacements of the same file", () => {
+    expect(sql).toMatch(
+      /create unique index if not exists group_files_one_pending_replacement_idx[\s\S]*?where replaces_file_id is not null and status = 'pending'/i
+    );
+  });
+
   it("contains no destructive statements", () => {
     expect(sqlNoComments).not.toMatch(/drop table/i);
     expect(sqlNoComments).not.toMatch(/truncate/i);

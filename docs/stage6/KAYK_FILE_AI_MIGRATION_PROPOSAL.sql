@@ -4,11 +4,16 @@
 -- 套用需要 Adam 另行授權，並指名本檔的確切 blob。
 --
 -- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
+-- Role 6 審查（2026-11-24）：無阻擋項；已補 A-1（文字欄位長度）、A-2（MIME 不一致不再靜默）、
+-- A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被兩個 pending 替換同時指向。
+--
 -- 已套用的決定：300 秒 presigned TTL、日曆月 5 個月保留、8 GiB 全域上限、
 --   替換限現行版本上傳者（R6）、刪除允許上傳者或 leader（R6）、lazy expiry、不做掃描。
 --
 -- 刻意不用 private.can_read_group_chat：該 predicate 允許 left 與 removed，
 -- 而檔案的產品規則是被移除者立即失去權限。此差異是刻意的，不可「統一」。
+
+begin;
 
 -- ---------------------------------------------------------------------------
 -- 1. 資料表
@@ -19,10 +24,11 @@ create table if not exists public.group_files (
   group_id uuid not null references public.study_groups (id) on delete cascade,
   object_key text not null unique,
   original_name text not null check (char_length(original_name) between 1 and 255),
-  declared_mime text,
-  detected_mime text,
+  declared_mime text check (declared_mime is null or char_length(declared_mime) <= 255),
+  detected_mime text check (detected_mime is null or char_length(detected_mime) <= 255),
   byte_size bigint not null check (byte_size > 0 and byte_size <= 104857600),
-  content_hash text,
+  content_hash text check (content_hash is null or char_length(content_hash) <= 128),
+  mime_mismatch boolean not null default false,
   uploaded_by uuid references public.profiles (id) on delete set null,
   replaces_file_id uuid references public.group_files (id) on delete set null,
   status text not null default 'pending' check (status in ('pending', 'current')),
@@ -42,6 +48,10 @@ create index if not exists group_files_group_current_idx
 create index if not exists group_files_pending_idx
   on public.group_files (uploaded_by, created_at desc)
   where status = 'pending';
+
+create unique index if not exists group_files_one_pending_replacement_idx
+  on public.group_files (replaces_file_id)
+  where replaces_file_id is not null and status = 'pending';
 
 create table if not exists public.group_analysis_plans (
   group_id uuid primary key references public.study_groups (id) on delete cascade,
@@ -288,6 +298,11 @@ begin
   update public.group_files
   set status = 'current',
       detected_mime = coalesce(p_detected_mime, declared_mime),
+      mime_mismatch = (
+        p_detected_mime is not null
+        and declared_mime is not null
+        and lower(btrim(p_detected_mime)) <> lower(btrim(declared_mime))
+      ),
       confirmed_at = now()
   where id = p_file_id;
 
@@ -510,3 +525,5 @@ grant execute on function public.list_group_files(uuid) to authenticated;
 grant execute on function public.request_group_file_download(uuid) to authenticated;
 grant execute on function public.replace_group_file(uuid, text, text, bigint) to authenticated;
 grant execute on function public.delete_group_file(uuid) to authenticated;
+
+commit;
