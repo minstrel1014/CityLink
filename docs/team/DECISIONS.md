@@ -659,8 +659,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   (3) Adam's written authorization naming ref, commit head and blob path; (4) a post-apply
   read-only verification.
 - **The version string cannot serve as the fingerprint — measured on Launch, 2026-11-24.**
-  `version()` returns `PostgreSQL 17.11 on aarch64-unknown-linux-gnu, compiled by gcc (GCC)
-  15.2.0, 64-bit`, with no build suffix; `server_version` is `17.11` and `server_version_num`
+  `version()` returns `PostgreSQL 17.11 on aarch64-unknown-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit`, with no build suffix; `server_version` is `17.11` and `server_version_num`
   is `170011`. The build number (`17.11.0.003`) exists only as an API field, not in SQL. So the
   `C-MAJ-02` shape as written in the capacity preflight distinguishes nothing between two
   projects on the same minor version. `pg_control_system().system_identifier` is readable as
