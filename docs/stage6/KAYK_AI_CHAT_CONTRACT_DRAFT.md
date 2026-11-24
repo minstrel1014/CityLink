@@ -375,3 +375,48 @@ revoke all on table public.group_ai_requests from service_role;
 - `aa93a5f` → **本版**（回應第三輪）：檔頭（完整 OID、SQL 檔已存在）；§1.1（N-4 拆段＋N-5 索引）；§1.2（N-1 列來源）；§1.3（`turns`／`files` 是實際欄位的更正、`file_ids` 長度 CHECK、F-2 措辭改為 snapshot 重放）；§2（R-2 逐支函式 ACL 表）；§2.1（逐字還原＋G-1／G-2／G-3／G-5 定稿）；§6（N-6 提示順序、F-8 改為旗標）；§9（加 45N09／45N10／45N11、刪 `group_ai_context_cleared`、`group_ai_file_not_read` 改為旗標、標出純客戶端 token、補 SQLSTATE 欄）；§10（改掉「不含任何 SQL 檔」，寫明本地證據的範圍）；§11（審查史四 blob 表、B-1 列更正、F-9／F-10 更正、11.2 裁決、11.3 第三輪表、本節重寫）。§0、§3、§4、§5、§7、§8 本輪未改動；§7 第 5 項與 F-11 的關係在 §11.2 說明，未改該節文字。
 
 **目前狀態：** B-1、B-2、C-3、C-4、F-11、F-12 已由 Adam 裁決；R-1、R-2、N-1…N-6 已在本版處理。**SQL 提案檔已寫出但未套用**，附本地套用／行為測試（16 項）與靜態釘住測試（22 項），全數通過。依 Role 6 本輪明確指示**不做第四輪文件複查**：Role 6 先對本版新 blob 做「確認還原」短查（§2.1、ACL 段、§11），隨後在 **SQL blob 上做 exact-head 審查**。本檔與該 SQL 都不構成任何 migration、signed-in QA、merge、部署或發布授權。
+
+### 11.5 SQL 層級 exact-head 審查（2026-11-25，Role 6）與第二審查者的目錄核對
+
+**被審查的物件**：`docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql`，blob
+`1a4f6c84441cfc6886a826c75e82cd94da734136`，788 行／34,119 bytes，sha256
+`2931d19b97d337e04b33d866a80168294cae6e638cf51c285012db329584812d`，commit `01ae739`。
+**裁定：核准，附條件（approve with conditions）；未發現阻擋性安全缺陷。** 上一輪的 R-1／R-2 與 N-1／N-4／N-5
+在 SQL 層被逐段確認結案（守衛在任何寫入之前且同交易、七支函式全 definer＋`set search_path = ''`＋revoke 指名
+`service_role`、`group_ai_context` 的 upsert、約束 `not valid`＋另段 validate、partial index）。性質仍是**靜態審查**：
+Role 6 未連任何資料庫、未執行本檔任何敘述、未跑兩個測試檔，並把這點寫在第 5 節自己列出的八項未驗證清單裡。
+
+**本節刻意不改 SQL 文字**：下面 S-1／S-2／S-3／S-4 會改變檔案，而改變後就是一個**新的 blob**，授權必須指名那個新
+SHA（Adam 2026-11-25 的規則亦如此要求）。所以要等 Adam 裁決後才動。
+
+| 項   | 位置               | 一句話                                                                                                                   | 狀態                                                                                          |
+| ---- | ------------------ | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| S-1  | 633–637／660–664   | `finish` 的五個記錄參數有預設值且無條件覆寫 ⇒ `finish(id, body)` 會把 `chat_chars`／`dropped_context`／`files_used` 歸零 | 待 Adam 選修法（建議預設 `null` + `coalesce`）                                                |
+| S-2  | 595／637／664／640 | F-8 的揭露沒有送達客戶端的路徑：`begin` 記的是選取數、`finish` 只回傳 `message_id`、該表誰都讀不到                       | 待 Adam 選 (a) 改 `finish` 回傳型別／(b) 新狀態 RPC／(c) 接受僅供稽核並同步改 §9 與 §11.1 F-8 |
+| S-3  | 159–162            | `accept_ai_disclosure()` 每次覆寫時間戳，與 F-11 的**證據語意**和本檔 §11.2「只記第一次」矛盾                            | 修法明確（`where … is null`），仍待授權，因為會改 blob                                        |
+| S-4  | 21–32 vs 425–428   | 檔頭 SQLSTATE 清單漏 **45N11**（檔內實走 10 個碼、檔頭列 9 個）；靜態測試沒擋住檔頭                                      | 同上；並把該測試改為同時解析檔頭清單                                                          |
+| S-5  | 487–488／494–495   | SQL 的每日計數口徑與本合約 §2.1 末 G-3 的寫法差一類（120 秒內未 claim 的 `queued`）                                      | 待裁：改 SQL 或改文件，兩者必須同一句話                                                       |
+| S-6  | 543–549／562–568   | 迴圈遇到放不下的一則只設旗標再**繼續** ⇒ 保留的訊息可能不連續，此時規則 4 的提示會說錯方向                               | 待 Adam 裁：嚴格前綴 `exit`，或改不承諾順序的措辭                                             |
+| S-7  | 388／437／541／560 | 只有 20／10／1／120 被釘住；`4000`、`2`、`10`、`200` 也在 SQL 重複出現                                                   | 建議同批擴大釘住範圍（不改產品值）                                                            |
+| S-8  | 700＋660           | `left(btrim(p_body), 4000)` 截了卻不設 `truncated` ⇒ log 可能宣稱未截斷                                                  | 待 Adam 裁：DB 截斷是否寫進 `truncated`                                                       |
+| S-9  | 66／186／252／775  | **套裝方式**：單交易下第 186 行的 ACCESS EXCLUSIVE 持有到 commit ⇒ 186–788 行之間聊天室完全停寫                          | 待 Adam 選 (a) 單交易離峰／(b) 3.1 拆兩次部署**並重跑守衛**（Role 6 建議）／(c) 拆三交易      |
+| S-10 | 658                | `error_code` 是自由文字，未限制為 §9 寫的兩個正規值                                                                      | 非阻擋；建議加 CHECK 或明寫開放集合                                                           |
+
+**第二審查者的核對（屬回報，不是我在本沙盒實測）**：他宣稱對 Launch 做過唯讀目錄查詢，結果是本檔假設的依賴
+（`can_send_group_chat`、`can_read_group_chat`、`list_group_chat_messages(uuid,timestamptz,uuid,integer)`、
+`sender_name_snapshot` 與 `group_chat_messages_body_check`、`group_files` 的三個欄位）都存在；七支新函式與兩張新表
+都不存在 ⇒ 無衝突；`profiles.ai_disclosure_accepted_at` 確實尚未建立。他另外提出五點，與上表重疊：
+`limit 200` 會讓提示在最該出現時不出現（且 TS assembler 無此上限 ⇒ mock 與 live 不一致）、`finish` 可抹掉
+`dropped_context`（S-1）、4,000 clamp 不承認截斷（S-8）、日界依賴 session timezone（建議 `date_trunc('day', now(), 'UTC')`，
+本檔第 481 行確實是兩參數版）、檔頭在 45N03 上與程式矛盾（S-4）。**一條新事實**：Launch 的 `group_chat_messages`
+目前 **4 列**，所以這次的 `VALIDATE` 幾乎即時；本檔的自我量測義務保留，因為那張表會成長。
+
+**Adam 2026-11-25 的規則已入檔**：`docs/team/DECISIONS.md` 的
+`2026-11-25 — Group AI chat: the apply target, the transfer method, the five gates and the window`
+——唯一目標 Launch `pijslbchvstkoweslymr`；Prototype 依 F14 凍結不得 migrate；本地 PG 只是測試不是套用對象；
+`assert_citylink_target` 是**最後**一道防線；傳送必須保留空行（P1 曾因貼上吃掉空行導致 prosrc 與授權檔不符，
+事後補一次 `create or replace`）；套用後逐函式比對 `md5(prosrc)` 並貼出結果；**先套用、後 promote** 成
+`supabase/migrations/<timestamp>_kayk_ai_chat.sql` 並比照 P1 的 `20261124064100` 補一列 ledger（只指向檔案）；
+五關依序（Role 6 無 blocker → 協調任務確認無其他分支改同一批物件 → Launch 唯讀 preflight → Adam 指名 ref/blob/
+行數/sha256 的書面授權 → 同一交易套用後驗證）；第 3–5 關必須同窗口，隔日 preflight 作廢；不在 demo 或 live QA
+前夕套用；`author_kind` 是對 live 表的 `ALTER`，排在離峰。

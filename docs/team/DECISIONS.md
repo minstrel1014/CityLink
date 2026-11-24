@@ -1592,3 +1592,64 @@ nothing beyond what the 2026-11-24 chat entry above authorised.
   publication, GitHub visibility changes, or any write to Launch. Role 6's third review asked for a
   short "確認還原" check of the restored §2.1/ACL/§11 on a new blob, then a blob-level exact-head
   review of the SQL; there is explicitly **no fourth documentation round.**
+
+## 2026-11-25 — Group AI chat: the apply target, the transfer method, the five gates and the window
+
+Adam's rules for `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql`. They constrain **how and when** the
+migration may ever be applied; none of them is an authorisation to apply it, and no write has happened.
+
+**Where — the only target.**
+
+- **CityLink Launch `pijslbchvstkoweslymr` is the only apply target.**
+- Prototype `wkzclgmhrtecnpexfesr` is **frozen under F14 and must not be migrated** (the 2026-11-24 incident).
+- Local PostgreSQL is a **test harness, never an apply target**; a green local apply does not mean "applied".
+- Section 0's `private.assert_citylink_target('pijslbchvstkoweslymr')` is the **last line of defence, not the
+  first**: it is not a substitute for gates 1-4 below.
+
+**How — three mechanical requirements.**
+
+1. **Transfer that preserves blank lines and formatting** (a file or a CLI pipe). **No manual paste.**
+   Precedent: P1 was pasted once, blank lines were eaten, two functions' stored `prosrc` diverged from the
+   authorised file, and a follow-up `create or replace` had to be issued. That is a defect this rule exists
+   to prevent, not a style preference.
+2. **After applying, compare `md5(prosrc)` of every created/changed function against the authorised file, and
+   post the comparison.** All seven functions: `private.list_group_chat_messages_page`,
+   `public.list_group_chat_messages_ai`, `begin_group_ai_request`, `claim_group_ai_request`,
+   `finish_group_ai_request`, `clear_group_ai_context`, `accept_ai_disclosure`. A silent normalisation inside
+   `create or replace` is exactly what this catches.
+3. **Apply first, promote second — never the reverse.** After a successful apply, copy the **same bytes** to
+   `supabase/migrations/<timestamp>_kayk_ai_chat.sql`, commit it, and add one migration-ledger row following
+   P1's `20261124064100` precedent: the ledger points at the file, it does **not** re-store the statements.
+   The ledger is not an apply tool.
+
+**When — five gates, in order. Any gate that fails stops the sequence.**
+
+1. **Role 6's exact-head verdict of "no blocker" on the blob.** The reviewed blob is
+   `1a4f6c84441cfc6886a826c75e82cd94da734136` (788 lines, sha256
+   `2931d19b97d337e04b33d866a80168294cae6e638cf51c285012db329584812d`). Role 6 returned **approve with
+   conditions, no blocking security defect**, and conditions **S-1/S-2/S-3/S-4 change the SQL text**, so the
+   blob that will actually be authorised is a **new** one; authorisation must name that new SHA/sha256, never
+   `1a4f6c84…4136` for a file that has since been edited.
+2. **Coordinator confirms no other branch is modifying the same objects** (`group_chat_messages`, `profiles`,
+   the chat read functions, the two new tables).
+3. **Launch read-only preflight**: current schema, existing functions, the invitation trigger, object
+   ownership, default **and** effective privileges, the `private` schema, the migration ledger,
+   `pg_control_system()`. Any mismatch stops it — **no "apply first, fix afterwards"**.
+4. **Adam writes a dated authorisation in this file**, naming the ref, the blob, the line count and the sha256.
+5. **Apply inside one transaction**, then run read-back verification, the `md5(prosrc)` comparison, the ledger
+   row and the promotion.
+
+**Window conditions.**
+
+- Gates 3-5 must happen **in one window**; a preflight re-run the next day counts as **invalid**.
+- Not on the eve of a demo or live QA; leave time for verification after the apply.
+- Confirm nobody is editing the branch before applying.
+- `author_kind` is an `ALTER` on the live `group_chat_messages`, which takes a lock → schedule a low-traffic
+  slot. (A second reviewer reports Launch currently holds **4 rows** in that table, which is why the
+  `NOT VALID` → `VALIDATE` step looks instant today; that is a **reported** measurement from a read-only
+  catalog query, not evidence I produced, and the file's own duty to measure before applying still stands
+  because the table grows.)
+
+**Not authorised by this entry.** No apply, no preflight execution, no Launch write, no `notify pgrst`, no
+signed-in QA, no merge, no ready-for-review transition, no deployment or publication. Recording the rules is
+not granting permission. Connection strings, project URLs and keys stay out of PR bodies, chat and this file.
