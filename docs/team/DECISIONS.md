@@ -660,7 +660,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   merge, deployment, publication, GitHub visibility change, or any QA write beyond what a
   separate decision permits.
 
-## 2026-11-24 — Kayk P1 target control: procedural (option a), with a cluster fingerprint captured at preflight
+## 2026-11-24 — Kayk P1 target control: procedural, with a cluster fingerprint captured at preflight
 
 - **Decided by Adam, 2026-11-24.** The P1 group-files migration
   `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql` neither asserts nor can assert its own
@@ -668,7 +668,10 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   occurrences of `current_database()`, of a `DO` block, of `set_config`/`current_setting`, and
   of `inet_server_addr()`; the executable body begins at `begin;`. A name-based assertion would
   not help either, because `current_database()` returns `postgres` on both projects.
-- **Option (a) is adopted.** The control is procedural, and four records must name the same
+- **The procedural control is adopted.** (This entry originally called it "option (a)"; the label
+  was defined nowhere — not in this repo, not in the handovers, not in the shared project folder —
+  so it has been removed rather than left as an unverifiable name.) The control is procedural, and
+  four records must name the same
   target: (1) the operator-declared ref echoed as a preflight marker, in the shape already used
   by `docs/capacity-successor/preflight/00_target_identity_and_engine.sql` `C-MRK-13`; (2) the
   cluster fingerprint, which must be `pg_control_system().system_identifier` (see below);
@@ -693,7 +696,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 
 - **Decided by Adam, 2026-11-24.** The first authorized write to Launch
   `pijslbchvstkoweslymr` is to create the target marker. After that, every later migration
-  asserts the marker and refuses when it is absent or when it names another ref. Option (a) is
+  asserts the marker and refuses when it is absent or when it names another ref. This control is
   therefore transitional and terminates at that write.
 - **Why the first write cannot be gated by the marker.** Creating the marker is itself a write,
   so it runs under the procedural control recorded above. That is the only step that does.
@@ -811,3 +814,25 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   publication, no GitHub visibility or permission change, no PR state change, no further Launch
   write, no QA write. Eunice's seven behaviour checks remain a separate decision because they are
   writes.
+
+## 2026-11-24 — Documentation revision of the applied P1 file: comments only, no redeployment
+- **Authorized by Adam, 2026-11-24:** fix Role 6's three documentary defects and the stale "draft,
+  not applied" status line, in one bounded amendment, as a one-off rather than a habit.
+- **What changed.** Four comment blocks in `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql` and its
+  promoted copy `supabase/migrations/20261124064100_kayk_p1_group_files.sql`: the status line now
+  says the file was applied on 2026-11-24; the review paragraph now names the blob it reviewed
+  instead of certifying itself; the "Launch's default privileges have not been verified" sentence
+  now carries the measured grantees; and the "that read has not been made" sentence now carries the
+  measured identifier and points at the marker that enforces it.
+- **Proof that nothing executable moved.** `git diff` touches 25 lines per file and every changed
+  line begins with `--`; the four hunks sit at lines 3, 9-10, 26-27 and 105-108, all above the
+  `do $kayk_p1_target$` block at line 120 and far above the first `create or replace function` at
+  line 293. Non-comment code lines are 490 before and after, identical line for line. All nine
+  function bodies are therefore byte-identical to the deployed ones, whose `md5(prosrc)` values
+  already match.
+- **What this costs, stated plainly.** The file's SHA-256 moves from `3c498627…5d036b` to
+  `2c09889e…`. The old hash remains the identity of the applied artifact and is recoverable from
+  git at `8077668`, so the evidence chain is intact but now has two hops instead of one. That is
+  the cost of a correct header, paid once.
+- **Not done:** no re-apply, no `create or replace`, no database contact of any kind in this
+  revision. The database still holds exactly the bodies applied at 06:40:51Z.

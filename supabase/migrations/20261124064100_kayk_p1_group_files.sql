@@ -1,13 +1,18 @@
 -- CityLink — 群組聊天室檔案：P1 migration 提案
 --
--- 狀態：草案，供 Role 6 exact-head 審查。**尚未套用**，且現行 head 尚無人審查。
+-- 狀態：**已於 2026-11-24 套用至 CityLink Launch**（06:40:51Z，單一交易；見
+--   docs/team/DECISIONS.md 同日「Execution record」）。本檔其後的修訂只改註解，SQL 未變；
+--   2026-11-24 的這次修訂即為一例——它是文件修訂，不是重新部署。
 -- 檔頭以下第 0 節是 fail-closed 的目標斷言：不在 CityLink Launch 上執行就會
 --   以 kayk_p1_target_out_of_scope（45K03）中止整個交易，unknown 一律拒絕。
 -- 套用需要 Adam 另行授權，並指名本檔的確切 blob。
 --
 -- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
--- Role 6 審查（2026-11-24）：無阻擋項；已補 A-1（文字欄位長度）、A-2（MIME 不一致不再靜默）、
--- A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被兩個 pending 替換同時指向。
+-- 審查記錄（可由外部核對，非本檔自我認證）：Role 6 於 2026-11-24 對 blob
+--   c4e29aa57522bfd78ab52edaa5819d2509d0888f（723 行，sha256 3c498627…5d036b）的
+--   exact-head 審查結論為無阻擋項；該審查涵蓋的設計修正為 A-1（文字欄位長度）、
+--   A-2（MIME 不一致不再靜默）、A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被
+--   兩個 pending 替換同時指向。審查的對象是那個 blob 的內容，不是本檔的這一行字。
 
 -- 套用目標（依 Adam 的 F14 決定，2026-11-23 01:50）：CityLink Launch
 --   pijslbchvstkoweslymr（capacity 文件所稱的 "Main"）。wkzclgmhrtecnpexfesr 自 F14
@@ -23,8 +28,9 @@
 --   上自動授權給 anon、authenticated 與 service_role，而本檔以 postgres 身分套用，
 --   所以只寫 public/anon/authenticated 的 revoke 會讓 service_role 的預設授權留下來
 --   （service_role 另有 BYPASSRLS）。第 4 節舊註解宣稱「不給 service_role」在真實
---   專案上並不成立，因此每個 revoke 現在都指名 service_role。Launch 是否帶著相同的
---   預設權限**尚未驗證**，需在授權套用前對該專案重讀 pg_default_acl。
+--   專案上並不成立，因此每個 revoke 現在都指名 service_role。Launch 的預設權限已於
+--   2026-11-24 套用前的 preflight 實測：schema public 的 default ACL grantees 恰為 anon、
+--   authenticated、postgres、service_role 四個，沒有第五個角色。
 --   重現（鏡射觀察到的預設權限，非指定專案）：
 --   docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql。
 --
@@ -102,10 +108,11 @@ begin;
 --     project, as 20261119085000_capacity_apply_gate.sql already records.
 --   * The next hardening step is to pin a per-cluster value — pg_control_system()
 --     .system_identifier, unique to a cluster lineage — against a literal measured by
---     one authorized read of Launch and archived in docs/team/DECISIONS.md. That read
---     has not been made, so the block currently prints the observed identifier as a
---     NOTICE (telemetry, no authority, never compared) so an authorized run records the
---     value for a later amendment.
+--     one authorized read of Launch and archived in docs/team/DECISIONS.md. That read was
+--     made on 2026-11-24 before the apply: the identifier is 7692131729119822239, and it is
+--     pinned in private.citylink_target. This block still only prints what it observes —
+--     comparison belongs to private.assert_citylink_target, which raises 45M03 on any
+--     difference and aborts the transaction. Telemetry here, enforcement there.
 --   * If a future approved migration legitimately drops one of the three markers, this
 --     block must be amended in that same change. Its failure mode is a refused apply,
 --     never a wrong-target apply, which is the intended asymmetry.
