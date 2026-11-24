@@ -36,7 +36,12 @@ class GroupFileConfigError extends Error {
 }
 
 function env(name: string): string {
-  const value = Deno.env.get(name);
+  // Trimmed on purpose. A secret pasted from a dashboard or a terminal very
+  // easily carries a trailing newline, and a newline in R2_BUCKET produces a
+  // signed URL for a bucket called "citylink-group-files\n" — which R2 answers
+  // with 400/403, and a browser reports as an unreachable host. That failure
+  // cost an hour of diagnosis; the trim makes it impossible.
+  const value = Deno.env.get(name)?.trim();
   if (!value) {
     throw new GroupFileConfigError(`missing configuration: ${name}`);
   }
