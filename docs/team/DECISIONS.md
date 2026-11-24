@@ -1173,3 +1173,59 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   are the reason the Edge version is correct.
 - **Still gated, in order:** Adam sets the four R2 secrets in the dashboard; deploy the function under its
   own authorization; build the drawer in the WebDev project; publish. Nothing here grants any of those.
+
+## 2026-11-24 17:13–17:20 — `group-file-signer` deployed to Launch (one deploy, authorized)
+
+Authorization, verbatim: "Adam, 2026-11-24: 批准部署 group-file-signer 到 pijslbchvstkoweslymr，只此一次".
+
+**Deployed.** Project `pijslbchvstkoweslymr` only. Function `group-file-signer`, id
+`87c2d055-09c8-49ec-ad93-e149c8cda91c`, version 1, status ACTIVE, `verify_jwt: true`,
+entrypoint `index.ts`, bundle `ezbr_sha256 881a5d0feb21cd6fee9dd048bd6c855281c647ecb797450f421caf5dee7316ea`.
+Four files uploaded: `index.ts`, `handler.ts`, `signing.ts`, `deno.json`. The two test
+files and the README were deliberately not uploaded.
+
+**Two failed attempts first, both mine, both harmless.** The first call sent only
+`index.ts` and `deno.json`; the second sent only `deno.json` and `signing.ts`. Each
+failed with "Entrypoint path does not exist" or "Module not found handler.ts", and each
+created nothing: no function, no version, no partial artifact. `deploy_edge_function`
+bundles *only* the files in the request, so every relative import must be uploaded with
+the entrypoint. That is now the recorded rule for this repo.
+
+**Verified against the deployed function, not against the upload.** `get_edge_function`
+returned exactly four files and the same `verify_jwt`. The four local files at `e895ec8`
+hash to the values already recorded in this log, so the deployed source is the reviewed
+source. Live probes, no secrets printed:
+
+| probe | result |
+|---|---|
+| `OPTIONS /upload-url` | 204, `access-control-allow-methods: POST, OPTIONS`, `access-control-max-age: 600` |
+| `POST /upload-url`, no token | 401 `UNAUTHORIZED_NO_AUTH_HEADER` (gateway, `verify_jwt`) |
+| `POST /upload-url`, real QA-A token, pending row `0e968640…` | 200 `{url, method: PUT, headers, expires_in: 900}`, host `b7643edca97e5edbe1d0e5359530ad11.r2.cloudflarestorage.com`, `X-Amz-Signature` present |
+| `POST /upload-url`, `file_id: "nope"` | 400 `group_files_invalid_request` |
+| `POST /upload-url`, unknown UUID | 404 `group_files_not_pending` |
+
+The 200 proves the four R2 secrets are present and correct in the function environment:
+without them the same call returns `group_files_misconfigured`. No object was uploaded;
+no pending row was confirmed.
+
+**One defect found by the smoke test, and fixed on the branch, not on the deployment.**
+`POST /download-url` on the soft-deleted row `69035965…` returned 500
+`group_files_unavailable`. The RPC itself answers `group_files_not_current`
+(PostgREST 400, P0001) — a normal answer for a deleted file. Version 1 mapped only five
+tokens, so every other deliberate token fell through to a generic 500. The SQL raises
+sixteen; the map now covers all of them and an unanticipated `group_files_*` token becomes
+400 with the token, while arbitrary Postgres text still collapses to 500.
+
+Fixed at `af416f4` on `feature/coordinator-edge-signer` (PR #66, still draft): 23 function
+tests pass, `tsc --noEmit` clean. **The live function is still version 1** — the deployed
+bytes no longer equal the branch head, and the 500 is still what a deleted file gets
+today. Redeploying is a separate decision and has not been taken.
+
+**Configuration still owed.** `SITE_ORIGIN` is not set, so the function answers
+`access-control-allow-origin: *` (observed on the 204 and on the 200). That is not a
+secret and not a fault, but the drawer should not ship against a wildcard: setting
+`SITE_ORIGIN=https://citylink-vm2mka3y.manus.space` in the function's secrets narrows it
+without a code change.
+
+Nothing else was touched: no other function, no table, no row, no site deploy, no PR
+state change, `main` still `519a69e`.
