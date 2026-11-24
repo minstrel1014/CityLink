@@ -960,3 +960,27 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   only failed when executed; a review would not have caught it.
 - **Not done:** no deployment, no R2 credentials in the repo, no Launch contact, no client wiring.
   Check 1 and the download TTL remain blocked until a deployment decision.
+## 2026-11-24 — R2 round-trip verified against the real bucket; the SQL bundle exists and excludes F-P1-1
+- **Correction to the entry above:** it said the upload-target RPC would be bundled "alongside the
+  F-P1-1 token". Adam decided on 2026-11-24 that F-P1-1 is handled by a temporary client mapping
+  first, so the token is **not** in this revision. It stays a separate later revision with its own
+  review and authorization. Anyone reading the older line should treat it as superseded on this point.
+- **R2 round-trip, run locally with the real bucket.** Credentials arrived through the connector card
+  (uid `dae6d3df-84cb-4ec9-9178-24aff0cf2067`) and were never written to a file, a commit or this log.
+  Results: presigned PUT accepted the body (`200`); a PUT with a different `Content-Type` was refused
+  (`403`), which is the live proof that `signableHeaders` binds the header and not just a unit test;
+  `HeadObject` reported the exact 29 bytes and `text/plain`; a presigned GET returned the body with
+  `content-disposition: attachment; filename="probe.txt"` and `content-type: text/plain`; the probe
+  object was deleted afterwards. This closes the "signed URLs are only unit-tested" gap, but it is a
+  server-side SDK round-trip — it does not prove a browser can reach the endpoint, and no endpoint is
+  deployed.
+- **SQL bundle built: PR #65 (draft), branch `feature/coordinator-sql-bundle-20261124`, off `main`.**
+  One file, `docs/stage6/SQL_BUNDLE_20261124_PROPOSAL.sql`, 107 lines, sha256
+  `b1760d0b128a6951284f2b0d69406385f24a781cf0f0e0a3311c727c63143cee`, commit `ed9a1dd`. It merges
+  `group_file_usage` and `group_file_upload_target` into a single transaction behind the same
+  fail-closed target guard, because both patch post-P1 gaps, both are read-only, both are
+  `authenticated`-only, and both need one Role 6 review and one authorization window. Splitting them
+  would only duplicate the review and reopen the window.
+- **Nothing was applied, no ledger row was written, nothing was promoted into `supabase/migrations/`,
+  `main` is untouched.** The three gates stand: Role 6 exact-blob review, Adam's authorization naming
+  this blob and ref, and an immediately-preceding read-only preflight.
