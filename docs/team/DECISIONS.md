@@ -481,3 +481,10 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Verification at this head:** `corepack pnpm check` exit 0; `corepack pnpm exec vitest run` 42 files / 666 tests passed. These are static and unit results only: they do not establish RLS behaviour, real R2 object behaviour, concurrency or retention at runtime.
 - **Known open point for Role 6:** the leader check in `delete_group_file` uses `study_groups.creator_id`. If leadership can be transferred under the Stage 5 authority/succession model, this must use the corresponding helper instead. This is flagged in the SQL itself.
 - **Not authorized by this record:** applying the migration, deploying the signing endpoint, Test or Main writes, signed-in QA, merge or publication. Test application needs Adam's authorization naming the exact SQL blob.
+
+## 2026-11-24 — R2 is storage only; the 8 GiB cap is application-level
+
+- **Separation of services:** the Cloudflare R2 token (`citylink-chat-r2-dev`) and bucket `citylink-group-files` are object storage only. OpenRouter's BYOK feature routes AI model calls and is unrelated to R2. Neither service can be used to configure the other.
+- **R2 has no hard storage cutoff.** Cloudflare's own limits page lists "Data storage per bucket: Unlimited"; exceeding the free tier produces billable overage rather than blocking writes. Nothing in R2 will stop an upload when a quota is reached.
+- **Therefore the 8 GiB cap is enforced by CityLink, not by Cloudflare.** `request_group_file_upload` and `replace_group_file` refuse to issue an upload before the presigned URL exists, returning `group_files_storage_limit_reached`. Any path that bypasses these RPCs — for example a leaked R2 token used directly against the S3 API — is not limited by anything. This is why the token stays server-side, remains bucket-scoped, and should be rotated if exposure is suspected.
+- **Cost controls:** an OpenRouter key can carry a spend limit on the OpenRouter side; R2 cannot be capped the same way, so cost protection there is limited to billing notifications and keeping the token out of client code.
