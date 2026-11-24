@@ -984,3 +984,38 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Nothing was applied, no ledger row was written, nothing was promoted into `supabase/migrations/`,
   `main` is untouched.** The three gates stand: Role 6 exact-blob review, Adam's authorization naming
   this blob and ref, and an immediately-preceding read-only preflight.
+## 2026-11-24 — Role 6 blocked v1 on a one-line fail-open; Adam narrowed the scope; v2 is the result
+- **Role 6 reviewed v1 (`ed9a1dd`, sha256 `b1760d0b…`) and blocked it.** Verdict per function:
+  `group_file_usage` approve with conditions, `group_file_upload_target` **block**. The blocking
+  finding: `v_row.uploaded_by <> v_actor` evaluates to NULL when `uploaded_by` is NULL, and PL/pgSQL
+  does not enter an `IF` on NULL. `uploaded_by` is `on delete set null`, so deleting a profile turns
+  their pending rows into rows whose key any signed-in caller could read by knowing the `file_id`.
+  The reviewer also noted that P1's own `confirm_group_file_upload` already uses `is distinct from`
+  for exactly this comparison — the bundle had drifted from a pattern the same codebase established.
+- **This is the second defect today that read correctly and failed only on close inspection.** The
+  first was the unbound `Content-Type`. Both were authorization-shaped, both were one word.
+- **Adam's three decisions, same hour:** a client-declared MIME type is not a security guarantee and
+  the confirm step must re-check the real object; `group_file_usage` is narrowed to the group, not
+  the deployment; and file access is restricted to eligible members of that specific group, with
+  non-members rejected outright.
+- **v2 (`3fcc260`, 139 lines, sha256 `ed30cfd3…`) applies all of it.** `is distinct from`; an explicit
+  `private.can_access_group_files(group_id)` check so a removed member cannot obtain a signed PUT even
+  for their own pending row; `group_file_usage` returns only `used_bytes`, `group_limit_bytes` and a
+  `global_limit_reached` boolean; `declared_mime` is removed from the return type. That last one had
+  to be decided now rather than later — `returns table` cannot be reshaped by `create or replace`, so
+  leaving the column in would have forced a DROP/CREATE and a re-grant in a future migration.
+- **One deliberate deviation from "group only".** The boolean exists because the 8 GiB deployment cap
+  still refuses uploads, and a refusal with no visible cause is the same failure mode as an invisible
+  quota. It exposes no figures and cannot be polled for a trend. Adam can delete one line to remove it.
+- **The signer changed the same day** (`2d4b34b`): it no longer reads the declared MIME at all. Uploads
+  are signed as `application/octet-stream`, downloads are served as `application/octet-stream` with
+  `attachment`, and two tests pin that. `tsc` clean, 663 tests pass.
+- **The quota UI changed** (`3c9419a`): the cross-group bar is gone, replaced by a plain-language
+  notice when the deployment cap is full. Its first-ever type-check found a real defect — a
+  `supabaseClient` that can be null was dereferenced without a guard — which is what an untypechecked
+  component looks like when it finally meets a compiler.
+- **The two per-function SQL drafts in PRs #63/#64 are now pointers to the bundle.** Two copies of one
+  function in two branches is how a reviewer approves one and someone applies the other.
+- **Still a draft.** Not applied, no ledger row, nothing promoted into `supabase/migrations/`, `main`
+  untouched. Role 6 now needs to re-review only B-1 against the new hash; its other findings are
+  already answered above.
