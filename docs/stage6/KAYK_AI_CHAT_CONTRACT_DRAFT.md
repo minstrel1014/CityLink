@@ -176,6 +176,8 @@ revoke all on table public.group_ai_requests from service_role;
 | 本成員今日提問數   | 10（跨所有群組，UTC 日界）  | `user_daily`  |
 | 本群組進行中請求數 | 1（`queued`／`processing`） | `in_flight`   |
 
+**本節的「UTC 日界」從 2026-11-25 第三批裁決起是 SQL 明確 pin 的，不是靠伺服器設定湊巧對上；** 理由與實測見下面 G-5 末段。
+
 **為什麼一定要在 RPC 內。** 前端再怎麼改都還是要經過這支函式，所以這是唯一無法繞過的位置；也不需要新服務。數字放在 `shared/aiRateLimit.ts`，SQL 與客戶端共用同一組常數，避免兩邊各自維護。
 
 **併發必須加鎖。** 「先數再寫」在兩個並行呼叫下會同時通過——兩邊都數到 19，然後都插入。因此 `begin_group_ai_request` 在計數前先取 `pg_advisory_xact_lock(hashtextextended(p_group_id::text, 0))`，交易結束自動釋放。沒有這把鎖，「交易式檢查」只是看起來安全。
@@ -191,6 +193,7 @@ revoke all on table public.group_ai_requests from service_role;
 - **G-3（每日計數的口徑）：沒被接手過的 `queued` 不計入配額。** 「數今天所有列」會讓 provider 故障日悄悄燒光配額——列寫進去了但從沒跑，使用者什麼都沒得到，卻要等到隔天。計數因此排除 `status = 'queued' and claimed_at is null`，計入 `processing`／`ready`／`failed`（已接手即已花費），而 in-flight 仍是未過期的 `queued`／`processing`。apply 測試實測：五條永遠沒被 claim 的 `queued` 不會把該群組推到 45N06。
   **S-5（Adam 2026-11-25 第二批裁決）：** SQL 原本寫的是**另一句話**（計入 `processing`／`ready`／`failed`，或 `created_at > now() - 120s` 的列），兩者只在「120 秒內、尚未被 claim 的 queued」上有差（Role 6 S-5）。本輪把**程式對齊到這段決定**而不是相反：每日計數現在逐字是本節的說法——今天的列計入，唯獨 `status = 'queued' and claimed_at is null` 除外。`v_stale` 因此只剩 in-flight 一個用途，由靜態測試釘住（`now() - v_stale` 在兩檔本體中恰好出現一次）。新的 apply 測試實測：十條「現在寫入、從未 claim」的 queued 不再吃掉該成員的每日配額，而把它們 `claimed_at` 填上之後同一批又開始計數。
 - **G-5（時間源）：全用交易開始的單一 `now()`。** 殭屍判定（`claimed_at < now() - interval '120 seconds'`）與 `retry_after` 的算式必須同源，否則同一次呼叫裡兩次 `now()` 就能算出「還有 -3 秒」之類的矛盾值。SQL 把 `now()` 取一次存進區域變數，所有比較與減法都用它；`retry_after` 以 `greatest(1, …)` 下限包住，且 `in_flight` 給 15 秒估計值、每日上限給到下一個 UTC 零時的秒數。
+  **TZ（Adam 2026-11-25 第三批裁決「follow suggestions」，對應第二審查者 item 4）：** 日界現在寫成 `date_trunc('day', now(), 'UTC')`，不再是 `date_trunc('day', now())`。舊寫法的「今天」依**連線端** `TimeZone` 解釋：preflight 量到 Launch 是 UTC 所以兩種寫法等值，但 session 模式的 pooler、套用者自己的 psql 環境、或日後有人改 GUC，都會讓配額重置點和 `retry_after`（同一個 `v_day_start`）一起漂移，而客戶端 `shared/aiRateLimit.ts` 用的是 `Date.UTC`、不會跟著漂移。Pin 之後兩邊是結構一致，不再依賴伺服器設定。**實測：** 把連線 `set time zone 'Etc/GMT+8'`（POSIX 記法＝UTC−8）後，十條寫在「今天 00:30 UTC」的列仍然吃掉該成員的當日配額並拋 `45N06 reason=user_daily user_today=10`；同一支測試跑在上一版 blob（`045546fd…` 之後的 `de5eb18f…`）上得到的是**成功**——那一次提問被放行了，這就是這條修改的鑑別力。靜側另有一條釘選：本檔可執行文字中不得再出現不帶時區的 `date_trunc('day', now())`。
 - **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 實作結案。
 
 ## 3. Context 預算與規則（產品行為，已定案）
@@ -494,8 +497,31 @@ Adam 2026-11-25 以一句話裁決剩下的五項：「**全部照 Role 6 建議
 
 上一輪的 `33e5589e…`／`045546fd…` 已被本版取代；Role 6 最初審的單檔 `1a4f6c84…`（788 行）同樣已被取代。本合約自己的 blob 與 sha256 記在 `docs/team/DECISIONS.md` 與 PR #67 的 body（一份檔案無法寫自己的雜湊）。
 
+**指往下一節：** 本節列出的部署 2 blob `de5eb18f…` 隨後又因 §11.8 的裁決改變一次。要送 Role 6 複查的現行 blob 以 **§11.8** 為準；本節保留為那一批的五項落點紀錄。
+
 **順便修掉的一处我自己的錯誤（不是新決定）**：部署 1 的檔頭有一段是從部署 2 抄來的，寫著「本檔是第 2 次」與「依賴部署 1 的物件」——對第 1 份檔案來說是錯的，會誤導照檔頭下指令的人。現已改為「本檔是第 1 次（建表、加欄位、未驗證約束）」，依賴那一条改寫成「本檔不依賴部署 2 的任何物件，順序只能是 1 → 2」。同一檔頭現在也列出 S-10 與「S-5／S-6／S-7／S-8 在部署 2」，讓只看一份檔案的人知道**兩檔都要跑**。
 
 **新增的行為測試（apply 套件 22 → 27）**：嚴格前綴（3,000／1,500／10 三則，只留最新一則，且舊 blob 在同一場景下留下 `turns=2`、`first_chars="tb"` 的空洞——這是改動前後各跑一次的實測，不是推論）、200 列掃描上限必須記 `dropped_context`（`200/true`）、每日配額只計已 claim 的列（未 claim 十條仍可提問；補上 `claimed_at` 後同一腳本得到 45N06 `reason=user_daily`）、4,000 鉗位要讓 `truncated` 變 true 且訊息長度恰為 4,000、`error_code` 非合約值得到 23514 `group_ai_requests_error_code_check`。靜態套件 23 → 24（S-7 的字面值釘選，含 §9 兩個 token 必須同時出現在合約裡）。
 
 **仍未裁的一項（屬第二審查者、不在 S 編號內）**：日界 `date_trunc('day', now())` 依 session timezone；他量到 Launch `TimeZone = UTC` 所以今天兩種寫法等值，建議改成 `date_trunc('day', now(), 'UTC')`。我**沒有**動它——那不在「這五條」的裁決範圍內，而擅自改 blob 正是被警告過的行為。列在此處請 Adam 一句話裁決。
+
+（上面那句的現況：Adam 已於 2026-11-25 裁決，見 §11.8。原文保留，不改寫歷史。）
+
+### 11.8 第三批裁決（2026-11-25）：日界 pin 成 UTC，部署 2 的 blob 再次改變
+
+**Adam 的原話：**「follow suggestions」——針對我上一輪回報中唯一未裁的那一項（第二審查者 item 4，非 S 編號項）。因此採他的建議：`date_trunc('day', now())` → `date_trunc('day', now(), 'UTC')`。
+
+**為什麼這值得第三次改 blob：** 舊寫法把「今天」交給**連線端**的 `TimeZone`。量測當下 Launch 的 `TimeZone = UTC`（屬第二審查者的回報），所以两条寫法現在等值；但配額重置點與 `retry_after` 都取自同一個 `v_day_start`，一旦連線經過 session 模式的 pooler、或由自帶其他時區的環境執行，兩者會一起偏移，而客戶端 `shared/aiRateLimit.ts` 用的是 `Date.UTC`、不會跟隨——兩邊就會開始講不同的「今天」。Pin 之後是不依賴設定的結構一致。詳見 §2.1 G-5 末段。
+
+**只有部署 2 改變：** 部署 1 沒有 `date_trunc`，blob 與 sha256 完全沒動。
+
+| 物件   | 現行 blob                                                         | 行數 | bytes  | sha256                                                             |
+| ------ | ----------------------------------------------------------------- | ---- | ------ | ------------------------------------------------------------------ |
+| 部署 1 | `57e4c5265da487073683436fa385a4ce79a06403`（與 §11.7 相同，未變） | 299  | 18,653 | `4effbf5d69bbf92d6275c2af1b6ca6d62dd9a2a0be6bb421ffd4d8ab5abb179d` |
+| 部署 2 | `748a87f1969a58967d6cbf297077755c274ce522`                        | 720  | 33,737 | `8e4d18910d2ece5b75901373c53c7f731a72c8c03f64059b49c42f8e06b75f19` |
+
+被取代：部署 2 的 `de5eb18f238d2c6f0f6776e47dee7e19c1eacc86`（711 行、sha256 `4f50aba0…575c`）、更早的 `045546fd…`、以及 Role 6 最初審的單檔 `1a4f6c84…`。**授權時要指名的是上表這兩列，不是任何舊值。**
+
+**測試（apply 27 → 28、static 維持 24，改的是既有那支的斷言强度）：** 新增「keeps the quota day on UTC whatever the session timezone is」——十列寫在今天 00:30 UTC，連線 `set time zone 'Etc/GMT+8'`（UTC−8），期望 45N06 `user_today=10` 且 `retry_after` 在 1..86400；同一場景再以一般 UTC 連線跑一次，結果相同。**鑑別力是量出來的不是推論的：** 把本檔換回上一版 blob 在同一 harness 重跑，該測試在 `refused()` 那一步失敗（`expected +0 not to be +0`，即那一次提問被放行），靜態側的釘選也同時失敗。完整套件：`pnpm check` 0、`pnpm test` **54 檔／824 測試**、apply 套件在 **PG 16.15** 與 **PG 17.12** 各 28/28。
+
+**本輪仍然沒有做的事：** 未連任何 Supabase 專案、未跑 preflight、未套用、未 merge、未轉 ready、未部署、未發布。Role 6 的 exact-head 複查仍未發生，五關的順序不變。

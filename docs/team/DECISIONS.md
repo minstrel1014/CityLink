@@ -1819,3 +1819,47 @@ call, no `notify pgrst`. The timezone item the second reviewer raised (`date_tru
 now())` depends on the server's `TimeZone`, measured as UTC on Launch) is **not** one of the
 five items Adam ruled, so that SQL line was left alone and is recorded as the single open
 finding awaiting one sentence from Adam.
+
+## 2026-11-25 — Adam rules the AI-chat day boundary to UTC; deploy 2 changes again, deploy 1 does not
+
+**The ruling, as given.** Adam replied to the single open item in my previous report
+(second reviewer's item 4, not an S-numbered finding) with 「follow suggestions」. The
+suggestion on the table was to replace `date_trunc('day', now())` with
+`date_trunc('day', now(), 'UTC')` in `begin_group_ai_request`. That is what was implemented.
+This is a dated decision by Adam, recorded here; it is a product/technical decision only and
+authorises no database write, migration, merge, deployment or publication.
+
+**Why it was worth a third blob.** The old expression resolves "today" against the _connecting
+session's_ `TimeZone`. The reviewer measured Launch's `TimeZone = UTC` (reported, not measured
+by me), so both forms are equal right now. But the quota reset and `retry_after` are derived
+from the same `v_day_start`, so any connection whose session zone differs — a session-mode
+pooler, the operator's own `psql` environment, or a later GUC change — moves the reset point and
+the advertised wait together, while the client `shared/aiRateLimit.ts` computes its window with
+`Date.UTC` and does not follow. After the pin the two sides agree structurally instead of by
+configuration. Stated in contract §2.1 G-5 and §11.8.
+
+**Scope of the change.** Only deploy 2
+(`docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql`) contains a `date_trunc`. Deploy 1
+is byte-identical to the blob recorded in the entry above: `57e4c5265da487073683436fa385a4ce79a06403`,
+299 lines, 18,653 bytes, sha256 `4effbf5d69bbf92d6275c2af1b6ca6d62dd9a2a0be6bb421ffd4d8ab5abb179d`.
+Deploy 2 becomes `748a87f1969a58967d6cbf297077755c274ce522`, 720 lines, 33,737 bytes,
+sha256 `8e4d18910d2ece5b75901373c53c7f731a72c8c03f64059b49c42f8e06b75f19`; it supersedes
+`de5eb18f238d2c6f0f6776e47dee7e19c1eacc86` from the entry above, which supersedes `045546fd…`,
+which superseded the single-file `1a4f6c84…`. Any authorisation must name **the deploy-1 blob
+above and this deploy-2 blob**, and nothing older.
+
+**Checks, recorded separately from claims.** One new behaviour test — "keeps the quota day on
+UTC whatever the session timezone is": ten request rows are written at today 00:30 UTC, the
+connection then runs `set time zone 'Etc/GMT+8'` (POSIX form = UTC−8) and the RPC must still
+refuse with `45N06`, `reason=user_daily`, `user_today=10`, and a `retry_after` inside 1..86400;
+the same scenario on a plain UTC connection must refuse identically. The static suite pins the
+executable form and forbids any remaining un-zoned `date_trunc('day', now())`.
+`pnpm check` exit 0; `pnpm test` 54 files / **824 tests** passed; the apply suite ran **28/28** on
+the default cluster (**PostgreSQL 16.15**) and **28/28** on the PGDG cluster at port 5433
+(**PostgreSQL 17.12**, same engine family as the 17.11 targets, not the same version).
+**Discrimination measured, not assumed:** with deploy 2 temporarily replaced by its own previous
+blob in the same harness, the new apply test failed at its first refusal assertion
+(`expected +0 not to be +0`, i.e. the shifted connection let the member ask again) and the static
+pin failed too; the file was then restored to the new blob and its sha256 re-verified.
+Local green is not applied: no Supabase project was connected, no preflight was run, nothing was
+applied, promoted, merged, deployed or published, and PR #67 stays draft.
