@@ -1,0 +1,16 @@
+-- Superseded: this function is now part of the single SQL bundle.
+--
+-- The canonical proposal is `docs/stage6/SQL_BUNDLE_20261124_PROPOSAL.sql` on
+-- branch `feature/coordinator-sql-bundle-20261124` (draft PR #65), which carries
+-- both group-file read functions in one transaction so they share one Role 6
+-- review and one authorization window. This file is kept only so the earlier
+-- commit history still resolves; do not apply it, and do not treat it as current.
+--
+-- Changes since this draft, applied in the bundle:
+--   * `declared_mime` removed from the return type (a client-supplied string is
+--     not a property of the bytes, and a returns-table shape cannot be altered
+--     later without DROP/CREATE).
+--   * ownership comparison uses `is distinct from`, so a NULL `uploaded_by`
+--     cannot fail open.
+--   * membership is required, not just ownership.
+--   * quota is group-scoped; cross-group totals are not returned.
