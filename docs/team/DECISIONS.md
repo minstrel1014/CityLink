@@ -1094,3 +1094,27 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   files that are not there.
 - **Not done, and not authorized by this sentence:** no signed-in call to either function, no QA, no
   merge, no deployment, no publication, no GitHub visibility change, `main` still `519a69e`.
+## 2026-11-24 — Signed-in smoke test of the two new functions: six scenarios, all as designed
+- **Authorized by Adam ("1 yes authorise").** Method: each call ran inside a transaction as
+  `role authenticated` with `request.jwt.claims` set to a real QA `sub`, then rolled back. That
+  exercises the real grants and the real `auth.uid()` predicate. It is **not** an HTTP/JWT transport
+  test — Eunice proved that path for P1 earlier — and this note does not claim otherwise.
+- **Fixtures (Launch, group `31e77eb7…`):** A `8954315c…` active member and uploader of the pending row;
+  B `7dfc7ddb…` removed member; C `b6bc6791…` never a member.
+- **Results:** A reads usage → `{used_bytes: 0, group_limit_bytes: 1073741824, global_limit_reached: false}`;
+  C → `group_files_no_permission` (line 10); B (removed) → `group_files_no_permission` (line 10);
+  A resolves the pending row → the real `object_key` and `original_name`; B on that same row →
+  `group_files_not_pending` (line 17); A on a **current** row → `group_files_not_pending` (line 17).
+- **The zero is correct, and I checked rather than assumed.** `used_bytes: 0` looked wrong against three
+  "current" rows totalling 87 bytes. Reading `private.group_files_bytes` showed it excludes
+  `deleted_at is not null` and rows past `retention_expires_at`. Two of those rows are soft-deleted by
+  the earlier QA delete tests and the third is past retention; the 100 MB row is `pending` and pending
+  is excluded by design. Manual re-run of the exact predicate returned 0 as well. The number agrees
+  with the data; my first reading of the data did not.
+- **What this does not cover, stated plainly:** (a) the membership branch *inside*
+  `group_file_upload_target` is unreachable in this fixture — B fails on ownership first, and
+  constructing the case needs a member re-added, a row created and the member removed, which is data
+  writing beyond this authorization; (b) `global_limit_reached = true` was never produced, because that
+  needs 8 GiB of real usage; (c) no HTTP call, so CORS and token handling remain Eunice's P1 evidence,
+  not this.
+- **Not done:** no data changed (every scenario rolled back), no merge, no deployment, `main` still `519a69e`.
