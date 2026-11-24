@@ -189,6 +189,7 @@ revoke all on table public.group_ai_requests from service_role;
 - **G-1（常數怎麼「共用」）：採字面重複 + 釘住測試。** 上一版寫「數字放在 `shared/aiRateLimit.ts`，SQL 與客戶端共用同一組常數」——這句話做不到：migration 是 checked-in 的靜態 SQL，不會去 import TypeScript 常數。三個可行做法（build 期產生 SQL、把數字放設定表、SQL 寫字面值再加一支比對測試）裡採第三個：SQL 直接寫 `20`／`10`／`1`／`120`，由 `server/stage6AiChatSqlContract.test.ts` 逐字比對 `shared/aiRateLimit.ts` 的 `AI_RATE_LIMITS` 與 SQL 中的字面值，任一邊改動另一邊不變就紅。代價如實記錄：這仍是**兩份**數字，測試只能保證一致、不能讓 SQL 動態讀取設定；改數字要同時改兩處並重跑測試。
 - **G-2（跨群組的 `user_daily`）：兩把鎖，固定順序 群組 → 成員。** 只有群組鎖時，同一個人同時在兩個群組提問會各自數到自己的群組、同時通過（兩邊都數到 9）。因此 `begin_group_ai_request` 依序取 `pg_advisory_xact_lock(hashtextextended('group:' || p_group_id::text, 0))` 再取 `pg_advisory_xact_lock(hashtextextended('user:' || v_actor::text, 0))`；順序固定，避免兩邊交叉死鎖（A 拿群組等成員、B 拿成員等群組）。鎖都是 transaction 級，交易結束自動釋放，不需要解鎖路徑。key 加 `'group:'`／`'user:'` 前綴，是為了不讓某個 uuid 的雜湊剛好撞上另一個空間的鍵。**代價：** 同一位成員在**不同**群組的並行提問會被序列化，這是精確計數的必要條件；`shared/aiRateLimit.ts` 的文件同步寫明「近似值」的說法已失效。
 - **G-3（每日計數的口徑）：沒被接手過的 `queued` 不計入配額。** 「數今天所有列」會讓 provider 故障日悄悄燒光配額——列寫進去了但從沒跑，使用者什麼都沒得到，卻要等到隔天。計數因此排除 `status = 'queued' and claimed_at is null`，計入 `processing`／`ready`／`failed`（已接手即已花費），而 in-flight 仍是未過期的 `queued`／`processing`。apply 測試實測：五條永遠沒被 claim 的 `queued` 不會把該群組推到 45N06。
+  **S-5（Adam 2026-11-25 第二批裁決）：** SQL 原本寫的是**另一句話**（計入 `processing`／`ready`／`failed`，或 `created_at > now() - 120s` 的列），兩者只在「120 秒內、尚未被 claim 的 queued」上有差（Role 6 S-5）。本輪把**程式對齊到這段決定**而不是相反：每日計數現在逐字是本節的說法——今天的列計入，唯獨 `status = 'queued' and claimed_at is null` 除外。`v_stale` 因此只剩 in-flight 一個用途，由靜態測試釘住（`now() - v_stale` 在兩檔本體中恰好出現一次）。新的 apply 測試實測：十條「現在寫入、從未 claim」的 queued 不再吃掉該成員的每日配額，而把它們 `claimed_at` 填上之後同一批又開始計數。
 - **G-5（時間源）：全用交易開始的單一 `now()`。** 殭屍判定（`claimed_at < now() - interval '120 seconds'`）與 `retry_after` 的算式必須同源，否則同一次呼叫裡兩次 `now()` 就能算出「還有 -3 秒」之類的矛盾值。SQL 把 `now()` 取一次存進區域變數，所有比較與減法都用它；`retry_after` 以 `greatest(1, …)` 下限包住，且 `in_flight` 給 15 秒估計值、每日上限給到下一個 UTC 零時的秒數。
 - **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 實作結案。
 
@@ -208,6 +209,9 @@ revoke all on table public.group_ai_requests from service_role;
 2. **最多 2 則最近的 AI 回答**，超出時從最舊的丟。
 3. **剩餘額度才給成員聊天**，取最近的部分。
 4. **任何一項被丟掉時**，回答開頭加「（本次未包含較早的對話）」。
+   **「取最近的部分」到底怎麼取（Adam 2026-11-25 第二批裁決，S-6 採 Role 6 建議）。** 規則 2 與 3 在 SQL 裡是**嚴格前綴**：由最新往舊掃，遇到第一則裝不下的訊息就停止，不會跳過它再回頭撿更舊的小訊息。理由綁在規則 4——若允許跳過去撿更舊的，留下的是**中間有空洞**的視窗，而提示說的是「未包含較早的對話」，這句話的方向就錯了（Role 6 S-6 原話）。
+   **兩個掃描上限不是產品規則。** SQL 掃 AI 回答 10 則、成員訊息 200 則，純粹為了不要在 live 表上無限回溯；命中 200 那個上限時 `dropped_context` 一樣設為 true，因為比第 200 則更舊的訊息從未檢視過（第二審查者 item 1 的兩個修法裡，採「設旗標」而非「拿掉上限」）。**已知差異：** `shared/aiChatContext.ts` 是純函式，它拿到的是呼叫端給的陣列，因此**沒有**這個掃描上限 —
+   mock 與 live 在這一條上不同，屬**未裁決**的開放項，不是本版的隱瞞。
 
 **計數方式（Role 6 C-5）。** 「CJK 與 emoji 各計 1」不能靠 JS 的 `String.length`——emoji 是 surrogate pair，`.length` 會算成 2。實作以 `Array.from(text).length`（codepoint）計數，測試以 CJK 與 emoji 覆蓋；若日後要改成 grapheme cluster（`Intl.Segmenter`），必須同時改文件與測試，不得默默分岔。字元不等於 token：4,000 + 10,000 的 CJK 對 token 約 1:1 至 1:2，屬 provider 成本而非正確性問題，記錄於此。
 
@@ -221,6 +225,7 @@ revoke all on table public.group_ai_requests from service_role;
 - 超過即截斷，附「（回答過長，已截斷）」，並在 `group_ai_requests` 記一筆（`truncated = true`）。
 - **截斷提示字串本身計入 2,500**（Role 6 C-6 的措辭），因此使用者看到的 body 不超過上限。
 - `group_chat_messages.body` 現有的 4,000 字元 CHECK **不改動**；2,500 是應用層政策，不是資料庫約束。
+- **資料庫端的鉗位也承認自己截斷（S-8，Adam 2026-11-25 第二批）：** `finish_group_ai_request` 插入訊息時用 `left(btrim(p_body), 4000)` 鉗住長度，所以 `truncated` 現在寫成 `coalesce(p_truncated, 舊值) or char_length(btrim(p_body)) > 4000`。這只會把旗標往「有截斷」的方向加，不會把呼叫端傳入的 `true` 改回 `false`。舊行為的實測證據（同一個 harness、改動前的 blob）：`finish(id, 4001 字元)` 留下 `request.truncated=false`、`message.truncated=false`、`message.len=4000`，也就是 log 宣稱未截斷而儲存的内容確實被剪過。
 
 實作位置：`shared/aiChatReply.ts`。
 
@@ -288,6 +293,7 @@ revoke all on table public.group_ai_requests from service_role;
 
 - `group_ai_context_cleared` **刪除**：清空 context 是成功路徑，回傳 `context_starts_at` 即可，不需要一個偽 token。
 - `group_ai_provider_failed` 移到**寫回路徑**：它不是 PostgreSQL token，而是 `finish_group_ai_request` 寫進 `group_ai_requests.error_code` 的值（`provider_timeout`／`provider_failed`），聊天室對使用者顯示一句普通失敗提示。列在這裡是因為它會出現在客戶端看到的 payload 中。
+  **不是開放集合（S-10，Adam 2026-11-25 第二批）：** `group_ai_requests.error_code` 現在有 CHECK `group_ai_requests_error_code_check`，只准 `null`／`provider_timeout`／`provider_failed`。約束寫在部署 1 的 `create table` 裡，建表即驗證、不掃表。要新增錯誤碼就必須同時改三處：SQL 的 CHECK、本節、以及該檔檔頭的 SQLSTATE 登記表（後兩者由靜態測試比對，第一處由 apply 測試實測 `'provider_slow'` 得到 23514）。
 - `group_ai_file_not_read` **改為旗標**而非 token：`files_used = 0` 才是判據（§6），拋錯會讓「提問仍然被回答」變成失敗。
 - `ai_chat_consent_incomplete` 保留為**僅前端** token（勾選未完成時根本不送出）。
 - 45M01／45M02／45M03／45M04 是**套用時期**的目標守衛（沿用 P1 的 `private.assert_citylink_target`），不是執行期 token。
@@ -405,6 +411,7 @@ SHA（Adam 2026-11-25 的規則亦如此要求）。所以要等 Adam 裁決後�
 | S-10 | 658                | `error_code` 是自由文字，未限制為 §9 寫的兩個正規值                                                                      | 非阻擋；建議加 CHECK 或明寫開放集合                                                           |
 
 **第二審查者的核對（屬回報，不是我在本沙盒實測）**：他宣稱對 Launch 做過唯讀目錄查詢，結果是本檔假設的依賴
+**狀態更新（兩批裁決之後）：** 上表的「待 Adam 裁決」是 Role 6 當時的原話，保留為審查紀錄，不改寫。S-1、S-2、S-3、S-4、S-9 的實作見 §11.6；S-5、S-6、S-7、S-8、S-10 的實作見 §11.7。Adam 對第二批給的是通令式裁決——「一句話裁決這五條：全部照 Role 6 建議改」（2026-11-25），因此每條的落點就是 Role 6 在該列寫的建議修法；Role 6 未指明方向的（S-5「改 SQL 或改文件」），我選了**改 SQL 對齊已核准的決定**，並在 §11.7 交代理由，請 Role 6 在複查時確認這個選擇。
 （`can_send_group_chat`、`can_read_group_chat`、`list_group_chat_messages(uuid,timestamptz,uuid,integer)`、
 `sender_name_snapshot` 與 `group_chat_messages_body_check`、`group_files` 的三個欄位）都存在；七支新函式與兩張新表
 都不存在 ⇒ 無衝突；`profiles.ai_disclosure_accepted_at` 確實尚未建立。他另外提出五點，與上表重疊：
@@ -467,3 +474,28 @@ Adam 在 2026-11-25 裁決：**S-1 選項 (a)**、**S-2 選項 (b)**、**S-3 核
 兩個 SQL 測試檔合計 **45** 個（23 靜態 + 22 行為）；整套 `corepack pnpm test` 是 54 檔／817 測試全綠。
 本檔 §11.5 那八項「Role 6 自己沒驗證的」裡，**套用到引擎 17** 這一项現在有證據：harness 已改用 PGDG PostgreSQL **17.12**
 （與 Test／Launch 的 17.11 同引擎、非同一版本）重跑一次，22 全過；同時 16.15 也跑過一次（預設叢集），兩次都綠。
+
+### 11.7 第二批裁決（S-5／S-6／S-7／S-8／S-10）已實作，兩份 blob 再度改號
+
+Adam 2026-11-25 以一句話裁決剩下的五項：「**全部照 Role 6 建議改**」（他同時說明這是「最省事」）。因此這五項沒有一項是新的產品選擇，落點如下（逐項對應 Role 6 在其審查中寫的建議）：
+
+| 項   | Role 6 的建議                                                  | 本版落點                                                                                                           |
+| ---- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| S-5  | 檔頭與程式必須同一句話（未指定改哪一側）                       | 改 **SQL**：兩個每日計數變成 §2.1 G-3 的字面實作（決定本身是 2026-11-24 已核准的，不動）                           |
+| S-6  | 裝不下就 `exit`（嚴格前綴），或改成不承諾順序的措辭            | 改 **SQL**：兩個迴圈 `exit`，措辭保留；另按第二審查者 item 1 的第二修法，命中 200 列掃描上限時設 `dropped_context` |
+| S-7  | 同批擴大釘住範圍（`4000`／`2`／`10`／`200`）                   | 改 **測試**：靜態測試新增一支，逐字釘住上述全部重複字面值與 `error_code` 的閉合集合                                |
+| S-8  | `truncated = p_truncated or char_length(btrim(p_body)) > 4000` | 改 **SQL**：照該式，前面再套 S-1 的 coalesce                                                                       |
+| S-10 | 加 CHECK（或在合約明寫開放集合）                               | 改 **SQL**：部署 1 的建表加 `group_ai_requests_error_code_check`；§9 同時改寫為「不是開放集合」                    |
+
+**新的兩份 blob（Role 6 複查請指名這兩個，舊的一律作廢）：**
+
+- 部署 1 `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql` — blob `57e4c5265da487073683436fa385a4ce79a06403`、299 行、18,653 bytes、sha256 `4effbf5d69bbf92d6275c2af1b6ca6d62dd9a2a0be6bb421ffd4d8ab5abb179d`
+- 部署 2 `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql` — blob `de5eb18f238d2c6f0f6776e47dee7e19c1eacc86`、711 行、32,724 bytes、sha256 `4f50aba080d93a7653b58ef11ec2ec65dd87f00fbbda8c1be64051e5c30e575c`
+
+上一輪的 `33e5589e…`／`045546fd…` 已被本版取代；Role 6 最初審的單檔 `1a4f6c84…`（788 行）同樣已被取代。本合約自己的 blob 與 sha256 記在 `docs/team/DECISIONS.md` 與 PR #67 的 body（一份檔案無法寫自己的雜湊）。
+
+**順便修掉的一处我自己的錯誤（不是新決定）**：部署 1 的檔頭有一段是從部署 2 抄來的，寫著「本檔是第 2 次」與「依賴部署 1 的物件」——對第 1 份檔案來說是錯的，會誤導照檔頭下指令的人。現已改為「本檔是第 1 次（建表、加欄位、未驗證約束）」，依賴那一条改寫成「本檔不依賴部署 2 的任何物件，順序只能是 1 → 2」。同一檔頭現在也列出 S-10 與「S-5／S-6／S-7／S-8 在部署 2」，讓只看一份檔案的人知道**兩檔都要跑**。
+
+**新增的行為測試（apply 套件 22 → 27）**：嚴格前綴（3,000／1,500／10 三則，只留最新一則，且舊 blob 在同一場景下留下 `turns=2`、`first_chars="tb"` 的空洞——這是改動前後各跑一次的實測，不是推論）、200 列掃描上限必須記 `dropped_context`（`200/true`）、每日配額只計已 claim 的列（未 claim 十條仍可提問；補上 `claimed_at` 後同一腳本得到 45N06 `reason=user_daily`）、4,000 鉗位要讓 `truncated` 變 true 且訊息長度恰為 4,000、`error_code` 非合約值得到 23514 `group_ai_requests_error_code_check`。靜態套件 23 → 24（S-7 的字面值釘選，含 §9 兩個 token 必須同時出現在合約裡）。
+
+**仍未裁的一項（屬第二審查者、不在 S 編號內）**：日界 `date_trunc('day', now())` 依 session timezone；他量到 Launch `TimeZone = UTC` 所以今天兩種寫法等值，建議改成 `date_trunc('day', now(), 'UTC')`。我**沒有**動它——那不在「這五條」的裁決範圍內，而擅自改 blob 正是被警告過的行為。列在此處請 Adam 一句話裁決。

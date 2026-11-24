@@ -1724,3 +1724,98 @@ on the default cluster **PostgreSQL 16.15** and, to close the harness/target gap
 targets, not the same version. Both runs: 22/22. `corepack pnpm check` exit 0; `corepack pnpm test` 54 files /
 **817 tests** passed; `corepack pnpm build` exit 0. A local green apply — on either engine — is still not an
 applied migration.
+
+## 2026-11-25 — Adam rules the remaining five AI-chat items as one batch; both blobs change again
+
+**The ruling, as given.** Adam's message of 2026-11-25 was one sentence for all five open
+items: 「一句話裁決這五條：『全部照 Role 6 建議改』（最省事，我建議這個）」. That covers S-5,
+S-6, S-7, S-8 and S-10, and nothing else. No item is a new product choice: each change below
+is the fix Role 6 itself proposed in its exact-head review. In the same message he answered
+item 4 of my previous report with 「4. the launch database」 and forwarded the coordinator's
+gate-2 output. I read that as confirming the eventual apply target is Launch
+`pijslbchvstkoweslymr`, **not** as the dated authorisation gates 4–5 require: nothing was
+connected to, preflighted or applied in this round, and the SQL that would run is now a
+different pair of blobs from the one any authorisation could have named.
+
+**Where each item landed.** S-5 (daily-count wording): Role 6 required one sentence in both
+places but did not pick a side, so I changed the **SQL** to say what the already-approved G-3
+decision says — a decision recorded 2026-11-24 should not be reworded to match code that
+drifted from it. Both counts now read `and not (q.status = 'queued' and q.claimed_at is
+null)`, and `v_stale` survives only in the in-flight test. This direction is my inference and
+is flagged for Role 6 to confirm at re-certification. S-6 (context loops): `exit` on the first
+message that does not fit, in both loops, so the kept window is a strict prefix and the notice
+「（本次未包含較早的對話）」cannot describe a gapped window. S-7 (pinned literals): test side only
+— one new static case binds every repeated literal (`4000` in four places, the file cap `2`,
+the scan windows `10`/`200`) and the closed `error_code` set, and cross-checks the two error
+tokens against the contract. S-8 (silent clamp): `truncated = coalesce(p_truncated,
+q.truncated) or char_length(btrim(coalesce(p_body, ''))) > 4000`, which can only ever add the
+flag, never remove one the caller passed. S-10 (free-text `error_code`): a CHECK in deploy 1's
+`create table`, named `group_ai_requests_error_code_check`, allowing `null`,
+`provider_timeout` and `provider_failed`; created validated on an empty table, so it costs no
+scan.
+
+**The 200-row scan cap (second reviewer item 1, same band as S-6).** He offered two fixes:
+remove the limit, or set `dropped_context` when it is reached. I kept the limit and set the
+flag, because `group_chat_messages` is a live table and an uncapped backwards scan on every
+question is a cost this proposal should not take on trust. The mock/live difference he named
+stays open: `shared/aiChatContext.ts` receives an array and therefore has no scan cap at all.
+Changing client code is outside these five rulings, so it is recorded in contract §3 instead
+of implemented.
+
+**One error of mine, corrected in the same pass.** Deploy 1's header had been copied from
+deploy 2 and said 「本檔是第 2 次」 plus a dependency on "deploy 1's objects" — wrong for the
+first file, and exactly the sort of line an operator follows while running a migration. It now
+states that this is deploy 1 of 2, that the order can only be 1 → 2, and lists S-10 here with a
+note that S-5/S-6/S-7/S-8 live in deploy 2 so both files must run. No behaviour, signature,
+grant or RLS line changed for this; it is a comment correction inside a blob that changed
+anyway.
+
+**New blob identity (supersedes everything before it).**
+
+- Deploy 1 `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql` — blob
+  `57e4c5265da487073683436fa385a4ce79a06403`, 299 lines, 18,653 bytes, sha256
+  `4effbf5d69bbf92d6275c2af1b6ca6d62dd9a2a0be6bb421ffd4d8ab5abb179d`
+- Deploy 2 `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql` — blob
+  `de5eb18f238d2c6f0f6776e47dee7e19c1eacc86`, 711 lines, 32,724 bytes, sha256
+  `4f50aba080d93a7653b58ef11ec2ec65dd87f00fbbda8c1be64051e5c30e575c`
+- Contract `docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md` — blob
+  `b574947f6917201280b8c62f54298cde97e38537`, 501 lines, 91,381 bytes, sha256
+  `4422104bb2cb538da8aaa5033b171ddafa978a29803b25ff83f9720141af6dfd`
+
+Superseded: deploy 1 `33e5589e6ee5ddd0ed88b101be42d1f1700675df` and deploy 2
+`045546fd5068cd1216f90490e8a0dac8b5e03c33` (the earlier entry the same day), and the single
+788-line `1a4f6c84441cfc6886a826c75e82cd94da734136` that Role 6 originally reviewed. Any future
+authorisation must name the two current blobs, and must name **both**.
+
+**Gate 2 (no other branch touches these objects) — evidence, not yet a coordinator statement.**
+Adam forwarded the coordinator's gate-2 file, which lists my object inventory at `ae313b2` and
+every open PR head. I additionally checked the candidate branches myself, read-only through the
+GitHub connector (`gh pr view` / `gh pr diff`, no database involved): PR #60 (server-side group
+search plus direct messages, SQL only), PR #65 (the two read-only group-file functions), PR #63
+(quota usage RPC) and PR #64 (P2 signing endpoints) each add **zero** lines mentioning
+`group_chat_messages`, `group_ai_context`, `group_ai_requests`, `author_kind`, `ai_request_id`,
+`ai_disclosure_accepted_at` or any of the eight functions. PR #66 is an Edge Function with no
+SQL objects; PR #59 is the P1 group-files line, which this proposal only reads. That supports
+gate 2 for the work visible in this repository, but it cannot see unpushed work in somebody's
+own sandbox, so the coordinator's own confirmation remains the record — and gate 2 is not apply
+authorisation.
+
+**Evidence for this round.** `server/stage6AiChatMigrationApplies.test.ts` grew 22 → **27** and
+`server/stage6AiChatSqlContract.test.ts` 23 → **24**. The five new behaviour cases are the five
+claims, and each was additionally run against the **previous** blob in the same local harness to
+prove it discriminates rather than merely passing: before S-6 the newest/middle/oldest window
+returned `turns=2` with first characters `tb` (a hole in the middle); before S-5 ten
+never-claimed queued rows refused the next question with `45N06 … user_today=10`; before S-8 a
+4,001-character answer logged `truncated=false` while storing a 4,000-character body.
+`corepack pnpm check` exit 0; `corepack pnpm test` 54 files / **823 tests** passed; the apply
+suite passed 27/27 on the default cluster (**PostgreSQL 16.15**) and again 27/27 on the PGDG
+cluster at port 5433 (**PostgreSQL 17.12**), the same engine family as the 17.11 targets, not
+the same version. A local green apply — on either engine — is still not an applied migration.
+
+**Not done, deliberately.** Nothing was applied anywhere; no Supabase project was connected; no
+preflight was run, because Adam's own window rule voids preflight evidence taken earlier; no
+merge, no "Ready for review", no deployment, no publication, no signed-in QA, no real provider
+call, no `notify pgrst`. The timezone item the second reviewer raised (`date_trunc('day',
+now())` depends on the server's `TimeZone`, measured as UTC on Launch) is **not** one of the
+five items Adam ruled, so that SQL line was left alone and is recorded as the single open
+finding awaiting one sentence from Adam.
