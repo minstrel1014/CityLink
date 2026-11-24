@@ -2,7 +2,7 @@
 
 - **日期：** 2026-11-24（Role 6 審查後修訂，見第 11 節）
 - **分支：** `feature/kayk-ai-analysis`
-- **狀態：** 草案。**不是 migration、未套用、不構成實作授權。** Role 6 已於 2026-11-24 對前一版（`bd60b5c`，blob `73c9297`）做過 exact-head 審查，本版是其修訂；B-1、B-2、C-3、C-4 仍需 Adam 裁決（第 11 節）。
+- **狀態：** 草案。**不是 migration、未套用、不構成實作授權。** Role 6 已於 2026-11-24 對前一版（`bd60b5c`，blob `73c9297`）做過 exact-head 審查，本版是其修訂；B-1、B-2、C-3、C-4 已由 Adam 於 2026-11-24 裁決（第 11 節）。
 - **取代：** `KAYK_AI_PLANS_JOBS_CONTRACT_DELTA.md`（共用分析計畫，已因設計變更作廢）。舊檔保留作歷史，不刪除。
 - **上層文件：** `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md` 第 2、6、9、11、12 章仍然有效；第 3、4 章關於 `group_analysis_plans` 的部分作廢。
 
@@ -103,12 +103,12 @@ grant select, insert, update on table public.group_ai_requests to service_role;
 
 **改為兩段，寫回只在 `service_role`。**
 
-| 函式                                | 執行身分              | 輸入                                                                                                                                                      | 回傳                                                                                | 行為                                                                                                                                                                                                                                                                                       |
-| ----------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `begin_group_ai_request`            | `authenticated`       | `p_group_id uuid, p_question text, p_file_ids uuid[], p_idempotency_key uuid`                                                                             | `request_id uuid, question text, turns jsonb, files jsonb, dropped_context boolean` | 驗證提問者是 `active` 成員且群組未 `abandoned`；驗證每個 `p_file_ids` 屬於本群組、`status='current'`、`retention_expires_at > now()`、最多 2 個；依第 3 節規則組 context；插入 `group_ai_requests`（`status='queued'`，同 key 重送回傳既有列）。**不寫訊息、不回傳 body。**                |
-| `finish_group_ai_request`           | **僅 `service_role`** | `p_request_id uuid, p_body text, p_truncated boolean, p_dropped_context boolean, p_chat_chars int, p_file_chars int, p_files_used int, p_error_code text` | `message_id uuid`                                                                   | 更新 request 列（`ready`／`failed`、`finished_at`）；成功時插入 `group_chat_messages`（`author_kind='ai'`、`sender_id=null`、`sender_name_snapshot='CityLink AI'`、`ai_request_id`、`truncated`）。`revoke all ... from public, anon, authenticated`，只 `grant execute to service_role`。 |
-| `clear_group_ai_context`            | `authenticated`       | `p_group_id uuid`                                                                                                                                         | `context_starts_at timestamptz`                                                     | 任何成員可執行；只 `update ... set context_starts_at = now()`，不動任何訊息。                                                                                                                                                                                                              |
-| `list_group_chat_messages_ai`（新） | `authenticated`       | 與 `list_group_chat_messages` 相同簽章                                                                                                                    | 既有四個欄位 + `author_kind text, truncated boolean`                                | 新增的讀取函式，見下。                                                                                                                                                                                                                                                                     |
+| 函式                                | 執行身分              | 輸入                                                                                                                                                      | 回傳                                                                                | 行為                                                                                                                                                                                                                                                                                              |
+| ----------------------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `begin_group_ai_request`            | `authenticated`       | `p_group_id uuid, p_question text, p_file_ids uuid[], p_idempotency_key uuid`                                                                             | `request_id uuid, question text, turns jsonb, files jsonb, dropped_context boolean` | 驗證提問者是 `active` 成員且群組未 `abandoned`；驗證每個 `p_file_ids` 屬於本群組、`status='current'`、`retention_expires_at > now()`、最多 2 個；先做限流檢查（見下）；依第 3 節規則組 context；插入 `group_ai_requests`（`status='queued'`，同 key 重送回傳既有列）。**不寫訊息、不回傳 body。** |
+| `finish_group_ai_request`           | **僅 `service_role`** | `p_request_id uuid, p_body text, p_truncated boolean, p_dropped_context boolean, p_chat_chars int, p_file_chars int, p_files_used int, p_error_code text` | `message_id uuid`                                                                   | 更新 request 列（`ready`／`failed`、`finished_at`）；成功時插入 `group_chat_messages`（`author_kind='ai'`、`sender_id=null`、`sender_name_snapshot='CityLink AI'`、`ai_request_id`、`truncated`）。`revoke all ... from public, anon, authenticated`，只 `grant execute to service_role`。        |
+| `clear_group_ai_context`            | `authenticated`       | `p_group_id uuid`                                                                                                                                         | `context_starts_at timestamptz`                                                     | 任何成員可執行；只 `update ... set context_starts_at = now()`，不動任何訊息。                                                                                                                                                                                                                     |
+| `list_group_chat_messages_ai`（新） | `authenticated`       | 與 `list_group_chat_messages` 相同簽章                                                                                                                    | 既有四個欄位 + `author_kind text, truncated boolean`                                | 新增的讀取函式，見下。                                                                                                                                                                                                                                                                            |
 
 全部 `security definer`、`set search_path to ''`、actor 取自 `auth.uid()`；除 `finish_group_ai_request` 外 `revoke all ... from public, anon` 後 `grant execute to authenticated`。
 
@@ -117,6 +117,24 @@ grant select, insert, update on table public.group_ai_requests to service_role;
 **provider 呼叫不在資料庫內。** `begin_group_ai_request` 只做權限、資格、context 組裝與排隊；伺服器（Edge Function 或 Express，形狀已是 `server/ai/chat/answerQuestion.ts`）呼叫 OpenRouter／DeepSeek，再以 `service_role` 呼叫 `finish_group_ai_request` 寫回。資料庫不持有 key。
 
 **trigger 現況。** `group_chat_messages` 上沒有任何 trigger（該 migration 的三個 trigger 全在 `group_recruitment_posts`），所以插入 AI 列不會被成員資格 trigger 擋下。這一點 Role 6 要求寫進契約，已記錄。
+
+### 2.1 限流：在 RPC 內、交易式（Adam 2026-11-24 決定）
+
+在 `begin_group_ai_request` 寫入 request 列**之前**，於同一個交易內數三件事，任一超限即 `raise exception` 帶 `group_ai_rate_limited` 與 `retry_after`（秒）：
+
+| 檢查               | 上限                        | 拒絕原因      |
+| ------------------ | --------------------------- | ------------- |
+| 本群組今日提問數   | 20（UTC 日界）              | `group_daily` |
+| 本成員今日提問數   | 10（跨所有群組，UTC 日界）  | `user_daily`  |
+| 本群組進行中請求數 | 1（`queued`／`processing`） | `in_flight`   |
+
+**為什麼一定要在 RPC 內。** 前端再怎麼改都還是要經過這支函式，所以這是唯一無法繞過的位置；也不需要新服務。數字放在 `shared/aiRateLimit.ts`，SQL 與客戶端共用同一組常數，避免兩邊各自維護。
+
+**併發必須加鎖。** 「先數再寫」在兩個並行呼叫下會同時通過——兩邊都數到 19，然後都插入。因此 `begin_group_ai_request` 在計數前先取 `pg_advisory_xact_lock(hashtextextended(p_group_id::text, 0))`，交易結束自動釋放。沒有這把鎖，「交易式檢查」只是看起來安全。
+
+**in-flight 不會被殭屍請求卡住。** `queued`／`processing` 超過 120 秒視為死亡、不計入 in-flight，否則伺服器一崩，該群組就卡到隔天。`retry_after` 對 `in_flight` 是「等這次跑完」的估計值（例如 15 秒），對每日上限則是到下一個 UTC 零時的秒數，且永不小於 1——不讓 UI 說出「0 秒後重試」。
+
+**這是成本控制，不是安全邊界。** 20／10／1 是產品選擇，可由 Adam 隨時調整；真正的安全邊界仍是 `finish_group_ai_request` 只給 `service_role`。
 
 ## 3. Context 預算與規則（產品行為，已定案）
 
@@ -182,39 +200,40 @@ grant select, insert, update on table public.group_ai_requests to service_role;
 
 ## 9. 錯誤 token
 
-| token                        | 觸發條件                                  |
-| ---------------------------- | ----------------------------------------- |
-| `group_ai_no_permission`     | 非成員、或非 `active` 成員嘗試提問        |
-| `group_ai_group_abandoned`   | 群組已 `abandoned`                        |
-| `group_ai_context_cleared`   | 成功清空 context（非錯誤，回傳用）        |
-| `group_ai_file_not_eligible` | 選取的檔案非本群組、非 `current` 或已過期 |
-| `group_ai_too_many_files`    | 選取超過 2 個                             |
-| `group_ai_question_empty`    | 提問空白                                  |
-| `group_ai_provider_failed`   | provider 回錯或逾時                       |
-| `ai_chat_consent_incomplete` | 客戶端同意未完成（僅前端）                |
+| token                        | 觸發條件                                       |
+| ---------------------------- | ---------------------------------------------- |
+| `group_ai_no_permission`     | 非成員、或非 `active` 成員嘗試提問             |
+| `group_ai_group_abandoned`   | 群組已 `abandoned`                             |
+| `group_ai_context_cleared`   | 成功清空 context（非錯誤，回傳用）             |
+| `group_ai_file_not_eligible` | 選取的檔案非本群組、非 `current` 或已過期      |
+| `group_ai_too_many_files`    | 選取超過 2 個                                  |
+| `group_ai_question_empty`    | 提問空白                                       |
+| `group_ai_provider_failed`   | provider 回錯或逾時                            |
+| `group_ai_rate_limited`      | 超出每日或 in-flight 上限；附 `retry_after` 秒 |
+| `ai_chat_consent_incomplete` | 客戶端同意未完成（僅前端）                     |
 
 ## 10. 不在本草案範圍
 
 - 任何 SQL 檔或 migration；schema 變更需 Role 6 exact-head 審查與 Adam 指名授權。
 - provider 實作與 key（後續獨立指派）。
 - 既有 `group_analysis_plans` / `group_analysis_jobs` 的處置：不刪、不改，只停用。
-- 速率限制的實作（落點待 Adam 決定，見第 11 節 C-4）。
-- 清空 context 的防濫用機制（待 Adam 決定，見第 11 節 C-3）。
+- 速率限制的 SQL 實作本身（設計已定案於 §2.1，尚未寫成 migration）。
+- 清空 context 的防濫用機制：Adam 已確認不做，維持任何成員可清空。
 
 ## 11. Role 6 審查處置（2026-11-24，對 `bd60b5c` / blob `73c9297`）
 
-| 項  | 內容摘要                                                           | 處置                                                                                                                                                                                    |
-| --- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B-1 | 寫入路徑自相矛盾；任何成員可偽造 AI 訊息；log 表停在 `queued`      | **已改寫**：拆成 `begin_group_ai_request`（authenticated）與 `finish_group_ai_request`（僅 `service_role`）；`group_ai_requests` 不再 revoke `service_role`。**待 Adam 確認**這個形狀。 |
-| B-2 | `RETURNS TABLE` 加欄位不是 additive，需 DROP+CREATE                | **已改寫**：新增 `list_group_chat_messages_ai`，舊函式一字不動（沿用 `_capacity` 先例）。**待 Adam 確認**命名。                                                                         |
-| C-1 | `ai_request_id` 只有註解、沒有約束                                 | **已修**：外鍵 + `group_chat_messages_ai_request_only_for_ai`。                                                                                                                         |
-| C-2 | 名稱 CHECK 只約束一半，成員可用 display name 冒充                  | **已修**：文件明定前端一律以 `author_kind` 渲染，並列為 P2 驗收項；CHECK 的 drop/recreate 成本已記錄。                                                                                  |
-| C-3 | 任何成員可反覆清空共享 context，無頻率限制、無稽核                 | **已記錄為共享重置風險**；三種緩解都會改產品行為，列 Adam 待決。                                                                                                                        |
-| C-4 | 無冪等鍵、無速率限制                                               | **冪等已修**（`idempotency_key` + unique）；**速率限制落點待 Adam 決定**。                                                                                                              |
-| C-5 | 字元 ≠ token；emoji 與 `.length` 不一致                            | **已修**：文件寫明以 `Array.from().length` 計數，並保留改為 `Intl.Segmenter` 時必須同步改測試的規定。                                                                                   |
-| C-6 | 「提示字元計入 2,500」語意不明                                     | **已修**：改寫為「截斷提示字串本身計入 2,500」。                                                                                                                                        |
-| C-7 | 標題說兩句、清單五項                                               | **已修**：改寫為五項，第 1、4 項逐字強制，其餘包含比對。                                                                                                                                |
-| C-8 | `group_ai_requests` cascade 與 `group_chat_messages` restrict 相反 | **已修**：改為 `on delete restrict`。                                                                                                                                                   |
-| —   | `group_chat_messages` 無 trigger，插入 AI 列不會被擋               | **已記錄**於第 2 節。                                                                                                                                                                   |
+| 項  | 內容摘要                                                           | 處置                                                                                                                                                                                                                    |
+| --- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B-1 | 寫入路徑自相矛盾；任何成員可偽造 AI 訊息；log 表停在 `queued`      | **已改寫**：拆成 `begin_group_ai_request`（authenticated）與 `finish_group_ai_request`（僅 `service_role`）；`group_ai_requests` 不再 revoke `service_role`。**已由 Adam 2026-11-24 批准**（寫回只經 `service_role`）。 |
+| B-2 | `RETURNS TABLE` 加欄位不是 additive，需 DROP+CREATE                | **已改寫**：新增 `list_group_chat_messages_ai`，舊函式一字不動（沿用 `_capacity` 先例）。**已由 Adam 2026-11-24 批准**（新增 `list_group_chat_messages_ai`，舊函式不動）。                                              |
+| C-1 | `ai_request_id` 只有註解、沒有約束                                 | **已修**：外鍵 + `group_chat_messages_ai_request_only_for_ai`。                                                                                                                                                         |
+| C-2 | 名稱 CHECK 只約束一半，成員可用 display name 冒充                  | **已修**：文件明定前端一律以 `author_kind` 渲染，並列為 P2 驗收項；CHECK 的 drop/recreate 成本已記錄。                                                                                                                  |
+| C-3 | 任何成員可反覆清空共享 context，無頻率限制、無稽核                 | **Adam 2026-11-24 確認維持原設計**：任何成員可清空，不加頻率限制、不加稽核。文件明寫這是共享重置。                                                                                                                      |
+| C-4 | 無冪等鍵、無速率限制                                               | **冪等已修**（`idempotency_key` + unique）；**限流已定案**：RPC 內交易式檢查，見 §2.1（`group_ai_rate_limited` + `retry_after`）。                                                                                      |
+| C-5 | 字元 ≠ token；emoji 與 `.length` 不一致                            | **已修**：文件寫明以 `Array.from().length` 計數，並保留改為 `Intl.Segmenter` 時必須同步改測試的規定。                                                                                                                   |
+| C-6 | 「提示字元計入 2,500」語意不明                                     | **已修**：改寫為「截斷提示字串本身計入 2,500」。                                                                                                                                                                        |
+| C-7 | 標題說兩句、清單五項                                               | **已修**：改寫為五項，第 1、4 項逐字強制，其餘包含比對。                                                                                                                                                                |
+| C-8 | `group_ai_requests` cascade 與 `group_chat_messages` restrict 相反 | **已修**：改為 `on delete restrict`。                                                                                                                                                                                   |
+| —   | `group_chat_messages` 無 trigger，插入 AI 列不會被擋               | **已記錄**於第 2 節。                                                                                                                                                                                                   |
 
 Role 6 的審查對象是 `bd60b5c`（163 行、blob `73c9297`）；本版在其後修改了 §6（抽屜方向、`files={[]}` 限制）與 §1–§4、§7、§11。**因此需要一次 focused 複查**，範圍如 Role 6 自己所述：§1.3 的 revoke、§2 的兩段式 RPC、§2 的讀取函式，另加本節。
