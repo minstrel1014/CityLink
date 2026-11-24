@@ -902,3 +902,20 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   because a report that omits its own misfires is not evidence.
 - **Not done:** no DDL, no schema or grant change, no cleanup or row deletion, no PR state change,
   no merge, no deployment. The QA authorization is spent; a real-byte rerun needs its own.
+
+## 2026-11-24 — F-P1-1 disposition: client-side mapping now, named token only in a future revision
+- **Decided by Adam, 2026-11-24.** The duplicate-replacement guard keeps working through the unique
+  index `group_files_one_pending_replacement_idx`; the client maps `23505` plus that constraint name
+  to a user-facing message. No new SQL blob, no Role 6 review, no authorization cycle.
+- **Recorded as temporary, in the place a client author will actually read it.** §11 of the
+  technical contract now carries a dated note stating that this is a client mapping and not the
+  final contract, and that a future SQL revision should raise a named token with the index kept as
+  the race backstop. Without that note the mapping would quietly become permanent, which is how
+  the superseded §5 caused today's earlier mistake.
+- **Why not fix it in SQL now.** A named token means a pre-check inside `replace_group_file`, which
+  means a new blob, a fresh exact-head review, a new authorization and a new apply — the full P1
+  cycle, for a message. The cost is out of proportion to the defect, and the index still enforces
+  the rule correctly in the meantime.
+- **Residual risk, stated.** The UI is coupled to an index name. If a future migration renames that
+  index, the mapping silently degrades to a generic error. That is acceptable only because the note
+  above exists and names the dependency.

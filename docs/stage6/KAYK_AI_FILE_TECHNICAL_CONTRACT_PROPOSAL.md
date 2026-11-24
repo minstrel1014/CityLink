@@ -107,6 +107,7 @@
 ## 11. 錯誤 token（草案）
 
 沿用 repo 現有穩定 token 慣例，前端以 token 對應訊息，不以訊息文字比對。建議集合：`group_files_no_permission`、`group_files_upload_too_large`、`group_files_upload_unconfirmed`、`group_files_not_current`、`group_files_not_uploader`、`group_analysis_plan_conflict`、`group_files_group_abandoned`。完整清單待實作前定稿。
+**2026-11-24 補充（F-P1-1）：** 同一檔案的第二個 pending 替換目前由唯一索引 `group_files_one_pending_replacement_idx` 擋下，沒有對應 token，客戶端收到的是 `23505` 與 constraint 名稱。在下次 SQL 修訂之前，客戶端以「`23505` + `group_files_one_pending_replacement_idx`」對應一則使用者訊息。這是**暫時的客戶端映射**，不是最終契約：一旦有 SQL 修訂，應改為具名 token，索引保留作為競態後備。
 
 ## 12. 測試矩陣
 
