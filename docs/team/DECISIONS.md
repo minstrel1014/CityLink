@@ -857,3 +857,48 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   signer exists. Those stay blocked rather than counted, and Adam has directed that the signer be
   built only after the P1 authorisation/behaviour checks (2-7) are reviewed.
 - **Not done:** no SQL change, no database contact, no behaviour change, no PR state change.
+
+## 2026-11-24 — P1 behaviour QA on Launch: checks 2-7 pass, check 1 blocked, one real finding
+- **Evidence class first.** Real Supabase Auth password sign-ins over HTTPS for A, B and C, RPC calls
+  with genuine user bearer tokens through PostgREST, tokens held in shell variables only, cluster
+  re-checked as `7692131729119822239` immediately before the first write. No simulated claims, no
+  `set_config`, no role switching, no browser. The Prototype was not connected, read or written.
+  Run by Eunice under the 2026-11-24 QA authorization; the applying task did not run it.
+- **Results.** Check 2 pending invisibility PASS. Check 3 non-member boundary PASS — C received no
+  rows and was refused on upload, download and delete with `group_files_no_permission`. Check 4
+  immediate removal PASS, and this is the one that mattered: after A removed B, B's file list came
+  back empty and download was refused with `group_files_no_permission`, while
+  `get_group_chat_access` still reported `can_read: true`. File access does not inherit chat access.
+  Check 5 uploader-only replacement PASS, including the second-pending-replacement guard. Check 6
+  uploader/leader delete and the declared-size boundary PASS — `104857600` accepted, `104857601`
+  refused with `group_files_upload_too_large`. Check 7 lazy expiry PASS — after the permitted UPDATE
+  the row vanished from the list and download returned `group_files_expired`. Check 1 BLOCKED: the
+  upload happy path needs the P2 signing endpoint, which does not exist.
+- **What the passes are worth.** They exercise database authorization and status logic with real
+  identities. They do not exercise transport: the current rows were phantom confirmations with no
+  stored object, so byte accounting, real object metadata, the 300-second download TTL and
+  revoked-link behaviour remain untested. Those are gaps, not passes.
+- **New finding F-P1-1 — the duplicate-replacement guard has no error surface.** The second pending
+  replacement was correctly refused, but by the unique index, so the client saw a raw
+  `23505` with `duplicate key value violates unique constraint
+  "group_files_one_pending_replacement_idx"`. §11 of the contract says clients map tokens, never
+  message text, and no token exists for this case — the SQL raises fifteen named exceptions and this
+  is not one of them. A token-mapping client therefore falls through to a generic error. Two ways
+  out: map `23505` plus that constraint name in the client, which couples the UI to an index name,
+  or add a pre-check that raises a named token while keeping the index as the race backstop, which
+  means a new blob, a fresh Role 6 review and a new authorization. **Not decided.** Static review
+  called the index a strength; nobody asked what the user sees.
+- **New finding F-P1-2 — quota is unmeasurable from a client.** No public RPC exposes byte totals,
+  and `private.group_files_bytes` is granted to nobody, so the 8 GiB global and 1 GiB per-group
+  limits cannot be observed at the public surface and were not measured. Whether the UI should show
+  usage is a product question, not a defect.
+- **Retained data, and one thing not to do with it.** Group `31e77eb7-fdd5-46b4-8593-98ce4c180305`
+  (`QA-P1-20261124-1519`), its memberships, and the pending and phantom rows stay on Launch as
+  authorized. One of those rows is a pending upload declared at `104857600` bytes; it is excluded
+  from quota while pending, so it must never be confirmed — confirming it would charge 100 MB
+  against the quota for a file that does not exist.
+- **One failed statement, disclosed.** An attempted expiry UPDATE with invalid syntax failed with
+  `42601` before execution and changed no row; the corrected scoped UPDATE then succeeded. Recorded
+  because a report that omits its own misfires is not evidence.
+- **Not done:** no DDL, no schema or grant change, no cleanup or row deletion, no PR state change,
+  no merge, no deployment. The QA authorization is spent; a real-byte rerun needs its own.
