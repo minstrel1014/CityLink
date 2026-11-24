@@ -919,3 +919,24 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Residual risk, stated.** The UI is coupled to an index name. If a future migration renames that
   index, the mapping silently degrades to a generic error. That is acceptable only because the note
   above exists and names the dependency.
+
+## 2026-11-24 — P2 signer settled: canonical server/, credentials exist, no deployment yet
+- **Decided by Adam, 2026-11-24.** The signing endpoint lives in the canonical repo's `server/`
+  (Express/tRPC), not the WebDev site repo — the site repo is outside GitHub and therefore cannot
+  be reviewed, which matters more than usual for an endpoint that signs credentials.
+- **Credentials.** R2 credentials exist. Their values are not recorded here, not requested in chat
+  and not committed; local work reads them from the server environment. This entry records only
+  that they exist and where they come from, which is the part a future reader needs.
+- **Deployment is out of scope.** The work stops at locally tested, not deployed. Stated
+  consequence: check 1 on Launch, and therefore the 300-second download TTL and revoked-link
+  behaviour, remain blocked until a separate deployment decision. Nothing in this entry authorizes
+  a deployment, and nothing here is a release step.
+- **Sequencing agreed the same day.** The group-files client page is built after P2, not before —
+  a page that can list and download but not upload would be a half-feature. The quota usage RPC
+  (`docs/stage6/QUOTA_USAGE_RPC_PROPOSAL.sql`, F-P1-2) is **bundled with the next SQL revision**
+  rather than reviewed on its own, so the duplicate-replacement token owed by F-P1-1 and this
+  read-only function arrive in one blob, one Role 6 review and one authorization. Nothing about
+  either is applied.
+- **Client work in flight.** `feature/coordinator-quota-usage-ui` carries the usage card and its
+  typed fetch, branched from `main`, pushed as a draft. It is a component without a page until the
+  group-files page exists, and it has not been type-checked in this environment.

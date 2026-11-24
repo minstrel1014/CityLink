@@ -51,16 +51,18 @@ the P1 SQL. If resumable upload is ever wanted it becomes its own scope.
 4. Authorization: a removed member's download-url call is refused by the RPC, not by the endpoint.
 5. Negative: expired or tampered presigned URL is rejected by R2.
 
-## Decisions this scope needs from Adam
+## Decisions, settled by Adam on 2026-11-24
 
-1. **Where it lives.** The canonical repo's `server/` (Express/tRPC, alongside the existing
-   scaffolding) is the natural home and keeps it in review. The alternative is the separate WebDev
-   site repo, which is not in GitHub and therefore not reviewable the same way.
-2. **R2 credentials.** Do they exist yet, and are they going into the server environment or a
-   secret store?
-3. **Whether deployment is in scope now.** Building and testing locally needs no deployment;
-   check 1 on Launch does, because the browser must reach the endpoint. Deployment is currently
-   outside every authorization, so this is a separate decision.
+1. **Where it lives: the canonical repo's `server/`.** Express/tRPC, in GitHub, reviewable like
+   everything else. The WebDev site repo was rejected for exactly the reason it was offered — it is
+   not in GitHub, so a signer living there could not be reviewed the same way, and this endpoint
+   signs credentials.
+2. **R2 credentials exist.** They are not recorded here, not requested in chat, and not committed.
+   Local work reads them from the server environment; the unit and integration tests below can run
+   against a scratch bucket without any Launch involvement.
+3. **Deployment is out of scope.** Work stops at "tested locally, not deployed". The consequence is
+   explicit: check 1 on Launch stays blocked until a separate deployment decision, because the
+   browser must reach a deployed endpoint to complete a real upload.
 
 ## What this unblocks
 
