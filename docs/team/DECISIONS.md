@@ -521,3 +521,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Consequence:** the blob was amended to SHA-256 `82d6870b283c4e67bb25cbcd2dfe5cb5007bedce5f6931a0d2679a80f3f87a38`, so **Adam's authorization no longer matches what is on the branch and nothing was written to Test.** A new authorization naming the new blob, plus Role 6's re-check of the revoke change, are required before any apply.
 - **Still open after any apply:** the seven live behaviour checks, including that a removed member loses access immediately. The `supabase_migrations.schema_migrations` ledger in Test holds 7 versions, the latest being `20261118082247` / `stage6_people_page_naming`, so Test trails the checked-in migration set; nothing in this blob references the absent ones. That ledger row is also where a future apply would be recorded.
 - **Not exercised:** no write of any kind to Test or Main, no deployment, no merge, no publication.
+
+## 2026-11-24 — R2 bucket CORS verified without credentials
+
+- Adam supplied the three allowlisted origins and this task confirmed them by unsigned `OPTIONS` preflight against the bucket endpoint, which needs no key: `http://localhost:5173`, `http://localhost:3000` and `https://citylink-vm2mka3y.manus.space` each return `204 No Content` with `Access-Control-Allow-Origin` echoed and `Access-Control-Allow-Methods: GET, PUT, HEAD`; 5173 additionally received `Access-Control-Allow-Headers: content-type` and `Access-Control-Max-Age: 3600`.
+- Two negative controls - a foreign origin and a non-allowlisted `*.manus.space` preview host - return `403 Forbidden` with no CORS headers, so the configuration is an exact-origin list rather than a wildcard, which is the behaviour the design requires for Preview URLs.
+- The R2 Account ID remains referenced only as `R2_ACCOUNT_ID` and is deliberately not written into the repository.
