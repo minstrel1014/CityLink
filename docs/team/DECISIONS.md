@@ -1019,3 +1019,34 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Still a draft.** Not applied, no ledger row, nothing promoted into `supabase/migrations/`, `main`
   untouched. Role 6 now needs to re-review only B-1 against the new hash; its other findings are
   already answered above.
+## 2026-11-24 — Role 6 approves v2; Launch preflight is green; the approved blob is frozen
+- **Role 6 re-reviewed `3fcc260` / `ed30cfd3…` and approved it.** B-1 **closed**, verified across all
+  four NULL/non-NULL combinations of `uploaded_by` versus `v_actor`. The new membership check is
+  correct and does not move the hole: a removed member hits the ownership-and-status gate first and
+  the membership gate second, so "your row expired" and "you are no longer a member" are
+  indistinguishable to them. The reviewer also confirmed the 136-line diff contains exactly three
+  code changes — jsonb output, return type, and the guard — and nothing else moved.
+- **Adam approved keeping `global_limit_reached`.** Role 6's own assessment: v1's exact cross-group
+  byte totals were a usable side channel; a single threshold bit is not. Residual: an observer can
+  see the bit flap near 8 GiB. Accepted at this scale.
+- **Read-only Launch preflight run and passed, all eight checks.** cluster `7692131729119822239`;
+  marker exists and `private.assert_citylink_target('pijslbchvstkoweslymr')` returns clean; **neither
+  function exists yet**, so `create or replace` cannot hit 42P13; both limit constants still appear
+  in both P1 write functions (2 each), so the N-4 drift check is currently clean; **zero rows have
+  `uploaded_by is null`**, so B-1 was not reachable on this database today — it was a latent
+  fail-open, not an active exposure. This answers Role 6's unverified items 2, 3 and 4.
+- **The approved blob is now frozen.** Role 6 noted that v2 lost the sentence "屆時需自行取得審查與
+  授權，不得順手夾帶進本檔" from the F-P1-1 paragraph. Correcting it would change the sha256 and
+  void the approval that was just issued against `ed30cfd3…`, so the file is **not** edited. The
+  missing clause is recorded here and in the PR instead: any future F-P1-1 token requires its own
+  review and authorization and must not ride along with another revision. A one-line comment is not
+  worth invalidating an approval.
+- **P2 condition implemented and live-verified** (`df5f6dd`). With `declared_mime` gone, `original_name`
+  is the only client-controlled string the RPC returns; the database only trims it and caps its
+  length, so a quote or CR/LF in a filename would have been header injection. `Content-Disposition`
+  is now an ASCII fallback plus RFC 5987 `filename*=UTF-8''…`. Verified against the real bucket with
+  an uploaded object: ASCII name returned `attachment; filename="probe.txt"; filename*=UTF-8''probe.txt`,
+  and `報告 2026.pdf` returned `filename="__ 2026.pdf"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%202026.pdf`,
+  both `200`, both `application/octet-stream`, object deleted afterwards. 665 tests pass.
+- **Not done:** the bundle is still not applied. Applying needs Adam's authorization naming this blob,
+  this ref and this window; nothing about a Role 6 approval or a green preflight grants it.
