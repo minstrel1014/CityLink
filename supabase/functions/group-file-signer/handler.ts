@@ -15,14 +15,46 @@
 
 export const GROUP_FILE_CONTENT_TYPE = "application/octet-stream";
 
-/** Tokens the P1 SQL raises deliberately. Anything else is not the caller's business. */
+/**
+ * Tokens the SQL raises deliberately, and the status each one becomes.
+ *
+ * The list is not decoration. The first deploy mapped five tokens, so
+ * `group_files_not_current` — the ordinary answer for a file that has been
+ * deleted — fell through to `group_files_unavailable` / 500 and told the drawer
+ * the service was broken. Every raise site in the P1 and read-function SQL is
+ * represented here; `DOMAIN_TOKEN` is the backstop for one added later.
+ */
 const TOKEN_STATUS: Record<string, number> = {
+  // identity and authorisation
   group_files_unauthenticated: 401,
   group_files_no_permission: 403,
-  group_files_not_pending: 404,
+  group_files_not_uploader: 403,
+  // the row itself
   group_files_not_found: 404,
+  group_files_not_pending: 404,
+  group_files_not_current: 404,
   group_files_expired: 410,
+  group_files_retention_window_closed: 410,
+  // the request
+  group_files_name_required: 400,
+  group_files_upload_too_large: 413,
+  group_files_size_mismatch: 409,
+  // capacity
+  group_files_storage_limit_reached: 409,
+  group_files_group_limit_reached: 409,
+  group_files_too_many_pending: 429,
+  // term resolution
+  group_files_term_missing: 409,
+  group_files_term_code_unrecognised: 409,
 };
+
+/**
+ * A token this endpoint did not anticipate, but unmistakably one of ours:
+ * lowercase words and underscores, nothing else. Returning 400 with the token
+ * is still honest — it describes the caller's request — while an arbitrary
+ * Postgres message (spaces, a table name, a value) stays behind a generic 500.
+ */
+const DOMAIN_TOKEN = /^group_files_[a-z][a-z0-9_]{0,40}$/;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -60,14 +92,13 @@ export type SignerDeps = {
 
 export function statusForToken(message: string | undefined): number {
   if (!message) return 500;
-  return TOKEN_STATUS[message.trim()] ?? 500;
+  const token = message.trim();
+  const mapped = TOKEN_STATUS[token];
+  if (mapped) return mapped;
+  return DOMAIN_TOKEN.test(token) ? 400 : 500;
 }
 
-function json(
-  body: unknown,
-  status: number,
-  config: SignerConfig
-): Response {
+function json(body: unknown, status: number, config: SignerConfig): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -158,7 +189,9 @@ export async function handleRequest(
         return json(
           {
             error:
-              status === 500 ? "group_files_unavailable" : error.message?.trim(),
+              status === 500
+                ? "group_files_unavailable"
+                : error.message?.trim(),
           },
           status,
           config
