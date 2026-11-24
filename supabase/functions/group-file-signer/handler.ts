@@ -216,7 +216,13 @@ export async function handleRequest(
       200,
       config
     );
-  } catch {
+  } catch (error) {
+    // A missing secret is a deployment fault, and it is worth naming as such:
+    // "misconfigured" tells an operator to look at the environment without
+    // telling a caller which variable is absent. Everything else stays generic.
+    if ((error as { name?: string })?.name === "GroupFileConfigError") {
+      return json({ error: "group_files_misconfigured" }, 500, config);
+    }
     // A presigning failure is ours, not the caller's: say nothing specific.
     return json({ error: "group_files_unavailable" }, 500, config);
   }

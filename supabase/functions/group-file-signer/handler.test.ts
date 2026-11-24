@@ -153,6 +153,26 @@ describe("handleRequest — upload", () => {
   });
 });
 
+describe("handleRequest — misconfiguration", () => {
+  it("names a missing secret as misconfigured, not as a generic failure", async () => {
+    const error = new Error("missing configuration: R2_BUCKET");
+    error.name = "GroupFileConfigError";
+    const res = await handleRequest(
+      post("upload-url", { file_id: fileId }),
+      deps({
+        callRpc: async () => {
+          throw error;
+        },
+      })
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body).toEqual({ error: "group_files_misconfigured" });
+    // The variable name must not reach the caller.
+    expect(JSON.stringify(body)).not.toContain("R2_BUCKET");
+  });
+});
+
 describe("handleRequest — download", () => {
   it("returns a GET carrying the original filename", async () => {
     const presignDownload = vi.fn(async () => "https://r2.example/download");

@@ -13,6 +13,7 @@
  * caller's own JWT, so `auth.uid()` is the real user and P1's predicates decide.
  */
 import { createClient } from "@supabase/supabase-js";
+import type { S3Client } from "@aws-sdk/client-s3";
 import { handleRequest, type SignerDeps } from "./handler.ts";
 import {
   GROUP_FILE_CONTENT_TYPE,
@@ -21,27 +22,47 @@ import {
   presignUpload,
 } from "./signing.ts";
 
+/**
+ * Configuration is read lazily, on first use, not at module load.
+ *
+ * A missing secret must not take down the whole function: the CORS preflight
+ * has to keep working so the browser gets a real error instead of a network
+ * failure, and an operator needs a readable signal. So a missing variable
+ * raises `GroupFileConfigError`, which the handler reports as
+ * `group_files_misconfigured` — the variable name never leaves the server.
+ */
+class GroupFileConfigError extends Error {
+  override name = "GroupFileConfigError";
+}
+
 function env(name: string): string {
   const value = Deno.env.get(name);
   if (!value) {
-    // Name only — never the value, never a guess at one.
-    throw new Error(`missing configuration: ${name}`);
+    throw new GroupFileConfigError(`missing configuration: ${name}`);
   }
   return value;
 }
 
-const r2 = createR2Client({
-  endpoint: env("R2_ENDPOINT"),
-  bucket: env("R2_BUCKET"),
-  accessKeyId: env("R2_ACCESS_KEY_ID"),
-  secretAccessKey: env("R2_SECRET_ACCESS_KEY"),
-});
+type Resources = { r2: S3Client; bucket: string; url: string; anonKey: string };
+let cached: Resources | null = null;
 
-// SUPABASE_URL and SUPABASE_ANON_KEY are injected into every Edge Function by
-// the platform, so they are not secrets Adam has to set.
-const supabaseUrl = env("SUPABASE_URL");
-const supabaseAnonKey = env("SUPABASE_ANON_KEY");
-const bucket = env("R2_BUCKET");
+function resources(): Resources {
+  if (cached) return cached;
+  const bucket = env("R2_BUCKET");
+  cached = {
+    r2: createR2Client({
+      endpoint: env("R2_ENDPOINT"),
+      bucket,
+      accessKeyId: env("R2_ACCESS_KEY_ID"),
+      secretAccessKey: env("R2_SECRET_ACCESS_KEY"),
+    }),
+    bucket,
+    // Injected into every Edge Function by the platform, not secrets to set.
+    url: env("SUPABASE_URL"),
+    anonKey: env("SUPABASE_ANON_KEY"),
+  };
+  return cached;
+}
 
 const deps: SignerDeps = {
   config: () => ({
@@ -52,7 +73,8 @@ const deps: SignerDeps = {
   async callRpc(token, fn, args) {
     // A client per call, scoped to the caller's token: no session is persisted
     // and no shared identity can leak between requests.
-    const client = createClient(supabaseUrl, supabaseAnonKey, {
+    const { url, anonKey } = resources();
+    const client = createClient(url, anonKey, {
       global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -60,6 +82,7 @@ const deps: SignerDeps = {
     return { data, error };
   },
   async presignUpload({ objectKey, expiresIn }) {
+    const { r2, bucket } = resources();
     return await presignUpload({
       client: r2,
       bucket,
@@ -69,6 +92,7 @@ const deps: SignerDeps = {
     });
   },
   async presignDownload({ objectKey, fileName, expiresIn }) {
+    const { r2, bucket } = resources();
     return await presignDownload({
       client: r2,
       bucket,
