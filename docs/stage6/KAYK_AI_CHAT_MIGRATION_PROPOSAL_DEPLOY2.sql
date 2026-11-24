@@ -38,6 +38,7 @@
 --   TZ       日界 pin 成 UTC：v_day_start := date_trunc('day', now(), 'UTC')。這不是一個 S 編號
 --            項，是第二審查者的 item 4；Adam 2026-11-25 以「follow suggestions」裁決照建議改。
 --            本輪只有本檔的 blob 改變——部署 1 沒有任何 date_trunc，因此仍是它原本的 blob。
+--   E1       一則 request 對一則 AI 訊息改由資料庫強制：group_chat_messages_ai_request 改為 unique partial index（名稱與 partial 條件都不變），get_group_ai_request_status 的 left join 因此不可能回傳多列。
 --
 -- 套用目標（唯一；依 Adam 的 F14 決定 2026-11-23 01:50 與其 2026-11-25 規則）：
 --   CityLink Launch ref pijslbchvstkoweslymr。Prototype wkzclgmhrtecnpexfesr 依 F14 凍結、
@@ -118,7 +119,7 @@ end
 $kayk_ai_validate$;
 
 -- finish 的冪等回傳要能找到既有訊息（F-3、N-5）。
-create index if not exists group_chat_messages_ai_request
+create unique index if not exists group_chat_messages_ai_request
   on public.group_chat_messages (ai_request_id)
   where ai_request_id is not null;
 

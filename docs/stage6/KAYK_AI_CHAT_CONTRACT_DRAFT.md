@@ -35,7 +35,7 @@ alter table public.group_chat_messages
 --                                               references public.group_ai_requests (id) on delete set null
 
 -- 之後逐條 `validate constraint`（SQL §3.1，刻意獨立成段，可拆成第二次部署）
-create index if not exists group_chat_messages_ai_request
+create unique index if not exists group_chat_messages_ai_request
   on public.group_chat_messages (ai_request_id)
   where ai_request_id is not null;
 ```
@@ -46,7 +46,7 @@ create index if not exists group_chat_messages_ai_request
 
 **為什麼一定要 `author_kind`。** `sender_id` 在帳號刪除時因 `ON DELETE SET NULL` 變成 NULL，所以「`sender_id is null`」同時代表「AI」與「已刪除帳號」。單靠 NULL 無法區分，前端會把已刪除帳號的舊訊息標成 CityLink AI，等於替產品說出它沒說過的話。`author_kind` 讓兩者分開，而 `group_chat_messages_ai_has_no_sender` 只是把「AI 沒有 profile」寫成約束，不是用來辨識 AI。
 
-**`ai_request_id` 的約束（Role 6 C-1）。** 上一版只在註解寫「只對 AI 有值」，那不是約束。現在有兩道：外鍵指向 `group_ai_requests`（`on delete set null`，避免刪 log 時連帶刪訊息），以及 `group_chat_messages_ai_request_only_for_ai` 擋掉「member 訊息帶 `ai_request_id`」。AI 訊息帶 NULL 仍可能，代表「這則 AI 回答找不到對應 request」——那是資料修復情境，不是常態，不另加 NOT NULL 約束，否則匯入歷史資料會卡住。
+**`ai_request_id` 的約束（Role 6 C-1）。** 上一版只在註解寫「只對 AI 有值」，那不是約束。現在有兩道：外鍵指向 `group_ai_requests`（`on delete set null`，避免刪 log 時連帶刪訊息），以及 `group_chat_messages_ai_request_only_for_ai` 擋掉「member 訊息帶 `ai_request_id`」。AI 訊息帶 NULL 仍可能，代表「這則 AI 回答找不到對應 request」——那是資料修復情境，不是常態，不另加 NOT NULL 約束，否則匯入歷史資料會卡住。 **唯一性**另外由 `group_chat_messages_ai_request` 這個 **unique** partial index 強制：一則 request 最多對應一則 AI 訊息，`get_group_ai_request_status` 的 `left join` 因此不可能回傳多列。
 
 **名字不是身分（Role 6 C-2）。** `group_chat_messages_ai_name` 只保證「AI 訊息一定叫這個名字」，**不保證「叫這個名字的一定是 AI」**：現行發送 RPC 會把 `profiles.display_name` 複製成 `sender_name_snapshot`，任何把 display name 設成 `CityLink AI` 的成員，其訊息在只看名字的 UI 上就是一條 AI 訊息。約束無法從根本解決（那會變成全域限制 display name）。**因此前端一律以 `author_kind` 決定渲染，永不憑 `sender_name_snapshot` 判斷是否為 AI**，並列為 P2 驗收項。這也是 `author_kind` 存在的第二個理由。
 
@@ -193,6 +193,7 @@ revoke all on table public.group_ai_requests from service_role;
 - **G-3（每日計數的口徑）：沒被接手過的 `queued` 不計入配額。** 「數今天所有列」會讓 provider 故障日悄悄燒光配額——列寫進去了但從沒跑，使用者什麼都沒得到，卻要等到隔天。計數因此排除 `status = 'queued' and claimed_at is null`，計入 `processing`／`ready`／`failed`（已接手即已花費），而 in-flight 仍是未過期的 `queued`／`processing`。apply 測試實測：五條永遠沒被 claim 的 `queued` 不會把該群組推到 45N06。
   **S-5（Adam 2026-11-25 第二批裁決）：** SQL 原本寫的是**另一句話**（計入 `processing`／`ready`／`failed`，或 `created_at > now() - 120s` 的列），兩者只在「120 秒內、尚未被 claim 的 queued」上有差（Role 6 S-5）。本輪把**程式對齊到這段決定**而不是相反：每日計數現在逐字是本節的說法——今天的列計入，唯獨 `status = 'queued' and claimed_at is null` 除外。`v_stale` 因此只剩 in-flight 一個用途，由靜態測試釘住（`now() - v_stale` 在兩檔本體中恰好出現一次）。新的 apply 測試實測：十條「現在寫入、從未 claim」的 queued 不再吃掉該成員的每日配額，而把它們 `claimed_at` 填上之後同一批又開始計數。
 - **G-5（時間源）：全用交易開始的單一 `now()`。** 殭屍判定（`claimed_at < now() - interval '120 seconds'`）與 `retry_after` 的算式必須同源，否則同一次呼叫裡兩次 `now()` 就能算出「還有 -3 秒」之類的矛盾值。SQL 把 `now()` 取一次存進區域變數，所有比較與減法都用它；`retry_after` 以 `greatest(1, …)` 下限包住，且 `in_flight` 給 15 秒估計值、每日上限給到下一個 UTC 零時的秒數。
+  **操作性定義（Adam 2026-11-25 第三批裁決 (b)：不改程式，改這半句）：**「進行中」一律以 **`created_at`** 起算，即 `status in ('queued','processing') and created_at > now() - interval '120 seconds'`，也就是部署 2 第 352 行的寫法。本節出現的 `claimed_at` 式子只用於每日配額「從未被人接手就不計入」那個排除條件（第 340／346 行）。兩者只在「某列在佇列裡待超過 120 秒才被接手」時不同，那種情況下**以 `created_at` 這句為準**。
   **TZ（Adam 2026-11-25 第三批裁決「follow suggestions」，對應第二審查者 item 4）：** 日界現在寫成 `date_trunc('day', now(), 'UTC')`，不再是 `date_trunc('day', now())`。舊寫法的「今天」依**連線端** `TimeZone` 解釋：preflight 量到 Launch 是 UTC 所以兩種寫法等值，但 session 模式的 pooler、套用者自己的 psql 環境、或日後有人改 GUC，都會讓配額重置點和 `retry_after`（同一個 `v_day_start`）一起漂移，而客戶端 `shared/aiRateLimit.ts` 用的是 `Date.UTC`、不會跟著漂移。Pin 之後兩邊是結構一致，不再依賴伺服器設定。**實測：** 把連線 `set time zone 'Etc/GMT+8'`（POSIX 記法＝UTC−8）後，十條寫在「今天 00:30 UTC」的列仍然吃掉該成員的當日配額並拋 `45N06 reason=user_daily user_today=10`；同一支測試跑在上一版 blob（`045546fd…` 之後的 `de5eb18f…`）上得到的是**成功**——那一次提問被放行了，這就是這條修改的鑑別力。靜側另有一條釘選：本檔可執行文字中不得再出現不帶時區的 `date_trunc('day', now())`。
 - **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 實作結案。
 

@@ -439,7 +439,7 @@ describe("ai chat migration proposal, statically", () => {
   it("indexes the idempotent lookup finish needs", () => {
     // N-5: the replay path reads group_chat_messages by ai_request_id.
     expect(code).toContain(
-      "create index if not exists group_chat_messages_ai_request"
+      "create unique index if not exists group_chat_messages_ai_request"
     );
     expect(code).toContain("where ai_request_id is not null");
   });
