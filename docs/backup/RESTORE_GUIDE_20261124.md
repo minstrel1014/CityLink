@@ -54,8 +54,10 @@ These need a separate action and cannot be exported from inside a task:
    `VITE_SUPABASE_PUBLISHABLE_KEY`. They are injected by the platform at build time;
    they are deliberately **not** written into this bundle. On a rebuild, set them
    again from the Supabase Dashboard (Project Settings → API). Never commit them.
-5. **The Test database** `wkzclgmhrtecnpexfesr`. It is intentionally untouched and
-   intentionally not exported.
+5. **The frozen Prototype** `wkzclgmhrtecnpexfesr` (called Test before the 2026-11-22
+   rename; do not migrate). It is intentionally untouched and intentionally not
+   exported. It is not a writable target and never was one after F14 — see
+   `docs/team/DB_TARGETS.md`.
 
 ---
 

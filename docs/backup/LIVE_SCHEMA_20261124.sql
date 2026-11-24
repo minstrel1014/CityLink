@@ -1,5 +1,5 @@
 -- CityLink live schema dump (structure only, no rows, no secrets)
--- project pijslbchvstkoweslymr, generated 2026-11-23 17:53:23.609107+00
+-- project pijslbchvstkoweslymr (CityLink Launch), generated 2026-11-23 17:53:23.609107+00
 
 -- ===== TABLES =====
 create table if not exists public.academic_terms (id uuid not null default gen_random_uuid(), code text not null, starts_on date, ends_on date, created_at timestamp with time zone not null default now());
