@@ -18,6 +18,13 @@ import { describe, expect, it } from "vitest";
  *
  * The stub schema in server/fixtures is a stand-in, not the CityLink schema, so
  * a pass proves the SQL applies and is idempotent, not that behaviour is correct.
+ *
+ * Engine parity: both Supabase targets run PostgreSQL 17 (Test 17.11.0.011, Main
+ * 17.11.0.003) and the repo's earlier SQL evidence was produced on a local 17.12
+ * harness, so this test reports the server version it ran against and requires at
+ * least 16. A 16 result is weaker evidence, not a failure; the recorded run for
+ * PR #59 used 17.12 from the PGDG suite on a unix-socket-only cluster, matching the
+ * no-TCP-listener hygiene of that earlier harness.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -46,9 +53,14 @@ function serverAvailable(): boolean {
 }
 
 const available = serverAvailable();
+const serverVersion = available
+  ? psql(baseUri, ["-tAc", "show server_version"]).trim()
+  : "";
+const serverMajor = Number(serverVersion.split(".")[0]);
 
 describe.skipIf(!available)("group files migration proposal applies", () => {
-  it("applies cleanly, twice, against a stub schema", () => {
+  it(`applies cleanly, twice, against a stub schema (PostgreSQL ${serverVersion})`, () => {
+    expect(serverMajor).toBeGreaterThanOrEqual(16);
     const database = `citylink_p1_${process.pid}_${Date.now()}`;
     psql(baseUri, ["-c", `create database ${database}`]);
 
