@@ -1,0 +1,723 @@
+-- CityLink — 群組聊天室檔案：P1 migration 提案
+--
+-- 狀態：草案，供 Role 6 exact-head 審查。**尚未套用**，且現行 head 尚無人審查。
+-- 檔頭以下第 0 節是 fail-closed 的目標斷言：不在 CityLink Launch 上執行就會
+--   以 kayk_p1_target_out_of_scope（45K03）中止整個交易，unknown 一律拒絕。
+-- 套用需要 Adam 另行授權，並指名本檔的確切 blob。
+--
+-- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
+-- Role 6 審查（2026-11-24）：無阻擋項；已補 A-1（文字欄位長度）、A-2（MIME 不一致不再靜默）、
+-- A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被兩個 pending 替換同時指向。
+
+-- 套用目標（依 Adam 的 F14 決定，2026-11-23 01:50）：CityLink Launch
+--   pijslbchvstkoweslymr（capacity 文件所稱的 "Main"）。wkzclgmhrtecnpexfesr 自 F14
+--   起是**凍結的 Prototype**，明文不得 migrate，capacity gate 以
+--   group_capacity_gate_target_out_of_scope（45003）拒絕它。證據見
+--   docs/capacity-successor/CAPACITY_SUCCESSOR_MIGRATION_PACKAGE_ROLE6_20261122.md
+--   §4.1、§4.2、§11.5 與 CAPACITY_SUCCESSOR_PREFLIGHT_CHECKLIST_20261122.md 第 29 行。
+--
+-- 2026-11-24 的 catalog 讀取是在 wkzclgmhrtecnpexfesr 上做的，所以那些 preflight
+--   **對套用而言作廢**（目標錯誤，不是失敗、也不是證據），只保留為該 Prototype 當時
+--   狀態的記錄。對本檔有意義的是 K-1 這個機制：Supabase 專案的
+--   ALTER DEFAULT PRIVILEGES FOR ROLE postgres 會在新建的 table／function／sequence
+--   上自動授權給 anon、authenticated 與 service_role，而本檔以 postgres 身分套用，
+--   所以只寫 public/anon/authenticated 的 revoke 會讓 service_role 的預設授權留下來
+--   （service_role 另有 BYPASSRLS）。第 4 節舊註解宣稱「不給 service_role」在真實
+--   專案上並不成立，因此每個 revoke 現在都指名 service_role。Launch 是否帶著相同的
+--   預設權限**尚未驗證**，需在授權套用前對該專案重讀 pg_default_acl。
+--   重現（鏡射觀察到的預設權限，非指定專案）：
+--   docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql。
+--
+-- 已套用的決定：300 秒 presigned TTL、日曆月 5 個月保留、8 GiB 全域上限、
+--   替換限現行版本上傳者（R6）、刪除允許上傳者或 leader（R6）、lazy expiry、不做掃描。
+--
+-- 刻意不用 private.can_read_group_chat：該 predicate 允許 left 與 removed，
+-- 而檔案的產品規則是被移除者立即失去權限。此差異是刻意的，不可「統一」。
+
+begin;
+
+-- ===========================================================================
+-- Section 0 — fail-closed target assertion (added 2026-11-24, Adam-approved)
+-- ===========================================================================
+-- 預期目標：CityLink Launch，Supabase ref `pijslbchvstkoweslymr`。它是 F14 之後
+--   唯一可套用對象（`docs/team/DB_TARGETS.md` 與 `docs/team/DECISIONS.md` 的
+--   2026-11-24 F14 條目）。`wkzclgmhrtecnpexfesr` 是**凍結的 Prototype**，本檔
+--   在任何情況下都不應該在它上面執行。
+--
+-- WHY THIS EXISTS. On 2026-11-24 a continuity task read a pre-F14 document, believed
+--   the frozen Prototype was a disposable Test database, and prepared to apply this
+--   file there. The capacity line cannot be walked into that mistake:
+--   20261119085000_capacity_apply_gate.sql refuses the wrong ref with
+--   group_capacity_gate_target_out_of_scope (SQLSTATE 45003). This file is a
+--   standalone migration and had no equivalent, so the only thing standing between it
+--   and the wrong project was the operator's attention. This block closes that gap.
+--
+-- WHY IT IS NOT A REMINDER. There is no current_setting(), no GUC, no psql variable
+--   and nothing else an operator fills in: every check below is a read of pg_catalog,
+--   and the expected values are compiled into this reviewed file. A guard that asked
+--   the applier "are you sure you mean Launch?" would have passed on 2026-11-24,
+--   because the applier was sure.
+--
+-- THE EVIDENCE — three capacity-era objects, each created by
+--   supabase/migrations/20261119090000_group_hard_max.sql, which docs/team/DECISIONS.md
+--   records as applied to CityLink Launch at 08:38:53Z on 2026-11-23:
+--     * column public.study_groups.max_members
+--     * private.group_removal_context
+--     * the three _capacity read functions in schema public
+--   Why this discriminates: the same record shows Launch's migration ledger moving
+--   from 7 rows to 11 in that session, while the 2026-11-24 read of the Prototype
+--   found 7 rows ending at 20261118082247 — the Prototype never received S3, and after
+--   F14 it must not. The objects are therefore absent there and present on Launch, and
+--   nothing on this branch drops them.
+--
+-- FAIL-CLOSED SEMANTICS. Unknown is never a pass, matching the capacity contract:
+--     kayk_p1_prerequisite_missing        45K01  not a CityLink database at all
+--     kayk_p1_target_evidence_unreadable  45K02  the catalog could not be consulted
+--     kayk_p1_target_out_of_scope         45K03  readable, and the Launch markers are absent
+--   The SQLSTATEs are this file's own and are deliberately NOT 45003, so a log line
+--   says which line of work refused. Each raise aborts the transaction.
+--
+--   Placement is load-bearing: this block sits INSIDE the file's own `begin;`
+--   transaction. When it raises, that transaction is aborted, so every statement that
+--   follows in this file fails with 25P02 until a rollback, and the final `commit;`
+--   becomes a rollback. The file therefore cannot be half-applied even by a runner that
+--   ignores errors and does not set ON_ERROR_STOP. Do not move it above `begin;`.
+--
+-- HOW TO RUN THIS CORRECTLY, ON LAUNCH. Under a written Adam authorization recorded in
+--   docs/team/DECISIONS.md naming this ref, the commit head and this blob:
+--     psql "$LAUNCH_URI" -v ON_ERROR_STOP=1 -f docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql
+--   Expect the NOTICE kayk_p1_target_verified ... first, then the DDL. A Supabase CLI
+--   apply (supabase db push) against the Launch project passes the same block. If you
+--   see 45K03, STOP: you are pointed at a project that is not Launch, and that is the
+--   refusal working — do not edit the block to make it pass.
+--
+-- LIMITS OF THIS ASSERTION, read before trusting it:
+--   * It proves history, not identity: "this cluster received the capacity apply that
+--     only Launch was authorized to receive". A point-in-time restore or branch clone
+--     made from Launch after 2026-11-23 08:48Z carries the same three markers and WOULD
+--     pass, and so would a project where someone recreates those objects by hand. That
+--     is the residual false-pass surface; it is bounded to copies of Launch, but it is
+--     not zero.
+--   * A database name cannot help: current_database() is `postgres` on every Supabase
+--     project, as 20261119085000_capacity_apply_gate.sql already records.
+--   * The next hardening step is to pin a per-cluster value — pg_control_system()
+--     .system_identifier, unique to a cluster lineage — against a literal measured by
+--     one authorized read of Launch and archived in docs/team/DECISIONS.md. That read
+--     has not been made, so the block currently prints the observed identifier as a
+--     NOTICE (telemetry, no authority, never compared) so an authorized run records the
+--     value for a later amendment.
+--   * If a future approved migration legitimately drops one of the three markers, this
+--     block must be amended in that same change. Its failure mode is a refused apply,
+--     never a wrong-target apply, which is the intended asymmetry.
+
+do $kayk_p1_target$
+declare
+  v_missing text[] := '{}';
+  v_capacity_functions integer := 0;
+  v_max_members boolean := false;
+  v_removal_context boolean := false;
+  v_evidence_ok boolean := false;
+  v_evidence_error text := '';
+  v_system_identifier text := 'unreadable';
+begin
+  -- Layer 1: is this a CityLink database at all? Each object here is a dependency
+  -- the statements below already assume, so a miss is also a schema defect.
+  if to_regclass('public.profiles') is null then
+    v_missing := array_append(v_missing, 'public.profiles');
+  end if;
+  if to_regclass('public.academic_terms') is null then
+    v_missing := array_append(v_missing, 'public.academic_terms');
+  end if;
+  if to_regclass('public.courses') is null then
+    v_missing := array_append(v_missing, 'public.courses');
+  end if;
+  if to_regclass('public.study_groups') is null then
+    v_missing := array_append(v_missing, 'public.study_groups');
+  end if;
+  if to_regclass('public.group_memberships') is null then
+    v_missing := array_append(v_missing, 'public.group_memberships');
+  end if;
+  if to_regprocedure('private.is_active_group_member(uuid,uuid)') is null then
+    v_missing := array_append(v_missing, 'private.is_active_group_member(uuid,uuid)');
+  end if;
+
+  if v_missing <> '{}' then
+    raise exception 'kayk_p1_prerequisite_missing this is not a CityLink database, absent=%',
+      array_to_string(v_missing, ',')
+      using errcode = '45K01';
+  end if;
+
+  -- Layer 2: the Launch-only evidence. Read-only catalog queries; any unexpected
+  -- failure becomes a refusal, never a pass.
+  begin
+    select count(*)
+      into v_capacity_functions
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname in (
+         'list_course_group_summaries_capacity',
+         'list_current_term_course_groups_capacity',
+         'list_group_recruitment_posts_capacity'
+       );
+
+    select exists (
+      select 1
+        from pg_catalog.pg_attribute a
+       where a.attrelid = 'public.study_groups'::regclass
+         and a.attname = 'max_members'
+         and a.attnum > 0
+         and not a.attisdropped
+    )
+      into v_max_members;
+
+    v_removal_context := to_regclass('private.group_removal_context') is not null;
+    v_evidence_ok := true;
+  exception
+    when others then
+      get stacked diagnostics v_evidence_error = message_text;
+      v_evidence_ok := false;
+  end;
+
+  if not v_evidence_ok then
+    raise exception 'kayk_p1_target_evidence_unreadable cannot decide whether ref=pijslbchvstkoweslymr error=%',
+      v_evidence_error
+      using errcode = '45K02';
+  end if;
+
+  if v_capacity_functions < 3
+     or v_max_members is not true
+     or v_removal_context is not true then
+    raise exception 'kayk_p1_target_out_of_scope ref=pijslbchvstkoweslymr requires the capacity-era markers and they are not all here: capacity_functions=% max_members=% group_removal_context=% (this looks like the frozen Prototype, another project, or a pre-capacity copy — do not apply here)',
+      v_capacity_functions, v_max_members, v_removal_context
+      using errcode = '45K03';
+  end if;
+
+  -- Telemetry only: records which cluster answered. Not compared to anything, so it
+  -- cannot fail the run, and it cannot be forged into a pass either.
+  begin
+    select system_identifier::text
+      into v_system_identifier
+      from pg_catalog.pg_control_system();
+  exception
+    when others then
+      v_system_identifier := 'unreadable';
+  end;
+
+  raise notice 'kayk_p1_target_verified capacity_functions=% max_members=true group_removal_context=true system_identifier=% current_database=%',
+    v_capacity_functions, v_system_identifier, current_database();
+end
+$kayk_p1_target$;
+
+-- ---------------------------------------------------------------------------
+-- 1. 資料表
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.group_files (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.study_groups (id) on delete cascade,
+  object_key text not null unique,
+  original_name text not null check (char_length(original_name) between 1 and 255),
+  declared_mime text check (declared_mime is null or char_length(declared_mime) <= 255),
+  detected_mime text check (detected_mime is null or char_length(detected_mime) <= 255),
+  byte_size bigint not null check (byte_size > 0 and byte_size <= 104857600),
+  content_hash text check (content_hash is null or char_length(content_hash) <= 128),
+  mime_mismatch boolean not null default false,
+  uploaded_by uuid references public.profiles (id) on delete set null,
+  replaces_file_id uuid references public.group_files (id) on delete set null,
+  status text not null default 'pending' check (status in ('pending', 'current')),
+  analysis_status text not null default 'not_requested'
+    check (analysis_status in ('not_requested', 'processing', 'ready', 'unsupported_format', 'failed')),
+  retention_expires_at timestamptz not null,
+  retention_basis text not null check (retention_basis in ('term_start', 'derived')),
+  created_at timestamptz not null default now(),
+  confirmed_at timestamptz,
+  deleted_at timestamptz
+);
+
+create index if not exists group_files_group_current_idx
+  on public.group_files (group_id, created_at desc)
+  where status = 'current' and deleted_at is null;
+
+create index if not exists group_files_pending_idx
+  on public.group_files (uploaded_by, created_at desc)
+  where status = 'pending';
+
+create unique index if not exists group_files_one_pending_replacement_idx
+  on public.group_files (replaces_file_id)
+  where replaces_file_id is not null and status = 'pending';
+
+create table if not exists public.group_analysis_plans (
+  group_id uuid primary key references public.study_groups (id) on delete cascade,
+  content jsonb not null default '{}'::jsonb,
+  revision bigint not null default 1,
+  updated_by uuid references public.profiles (id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.group_analysis_jobs (
+  id uuid primary key default gen_random_uuid(),
+  group_id uuid not null references public.study_groups (id) on delete cascade,
+  file_id uuid not null references public.group_files (id) on delete cascade,
+  status text not null default 'queued'
+    check (status in ('queued', 'processing', 'ready', 'failed')),
+  error_code text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table public.group_files enable row level security;
+alter table public.group_analysis_plans enable row level security;
+alter table public.group_analysis_jobs enable row level security;
+
+-- 不建立任何 policy：唯一入口是 SECURITY DEFINER RPC。即使端點出錯也讀不到表。
+revoke all on table public.group_files from public, anon, authenticated, service_role;
+revoke all on table public.group_analysis_plans from public, anon, authenticated, service_role;
+revoke all on table public.group_analysis_jobs from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 2. private helpers
+-- ---------------------------------------------------------------------------
+
+-- 保留期：starts_on 有值就用它；否則由 term code 推導。
+-- 現行 term code 格式為 'YYYY-Fall'（見 20261102090000 的 seed），Spring 同理。
+-- 無法辨識的格式一律拋錯，不猜測日期。
+create or replace function private.group_file_retention_expiry(p_term_id uuid)
+returns table (expires_at timestamptz, basis text)
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $function$
+declare
+  v_starts_on date;
+  v_code text;
+  v_start date;
+  v_basis text;
+begin
+  select t.starts_on, t.code into v_starts_on, v_code
+  from public.academic_terms t
+  where t.id = p_term_id;
+
+  if v_code is null then
+    raise exception 'group_files_term_missing';
+  end if;
+
+  if v_starts_on is not null then
+    v_basis := 'term_start';
+    v_start := v_starts_on;
+  else
+    v_basis := 'derived';
+    if v_code ~ '^[0-9]{4}-Fall$' then
+      v_start := make_date(substring(v_code from 1 for 4)::int, 9, 1);
+    elsif v_code ~ '^[0-9]{4}-Spring$' then
+      v_start := make_date(substring(v_code from 1 for 4)::int, 1, 10);
+    else
+      raise exception 'group_files_term_code_unrecognised';
+    end if;
+  end if;
+
+  -- 五個月後的同一日 23:59:59（Asia/Hong_Kong）
+  return query
+    select (((v_start + interval '5 months')::date + time '23:59:59')
+      at time zone 'Asia/Hong_Kong'), v_basis;
+end;
+$function$;
+
+-- 檔案存取 predicate：active-only，且群組不得為 abandoned。
+-- active-only 的實作在 private.is_active_group_member 內（membership_status = 'active'）；
+-- 此處刻意不呼叫 private.can_read_group_chat。
+create or replace function private.can_access_group_files(p_group_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select p_group_id is not null
+    and auth.uid() is not null
+    and exists (
+      select 1
+      from public.study_groups g
+      where g.id = p_group_id
+        and g.status <> 'abandoned'
+    )
+    and private.is_active_group_member(p_group_id, auth.uid());
+$function$;
+
+create or replace function private.group_files_bytes(p_group_id uuid)
+returns bigint
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select coalesce(sum(f.byte_size), 0)
+  from public.group_files f
+  where f.status = 'current'
+    and f.deleted_at is null
+    and f.retention_expires_at > now()
+    and (p_group_id is null or f.group_id = p_group_id);
+$function$;
+
+revoke all on function private.group_file_retention_expiry(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.can_access_group_files(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.group_files_bytes(uuid) from public, anon, authenticated, service_role;
+
+-- ---------------------------------------------------------------------------
+-- 3. RPC
+-- ---------------------------------------------------------------------------
+
+-- 8 GiB 全域上限、1 GiB 每群組上限（皆為 GiB，非 GB）。
+-- 軟上限：併發請求可能同時通過；DB 統計不含未確認的孤兒物件。
+
+create or replace function public.request_group_file_upload(
+  p_group_id uuid,
+  p_original_name text,
+  p_declared_mime text,
+  p_byte_size bigint
+)
+returns table (file_id uuid, object_key text)
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_actor uuid := auth.uid();
+  v_id uuid := gen_random_uuid();
+  v_term_id uuid;
+  v_expires timestamptz;
+  v_basis text;
+  v_pending integer;
+  v_key text;
+begin
+  if v_actor is null or not private.can_access_group_files(p_group_id) then
+    raise exception 'group_files_no_permission';
+  end if;
+
+  if p_byte_size is null or p_byte_size <= 0 or p_byte_size > 104857600 then
+    raise exception 'group_files_upload_too_large';
+  end if;
+
+  if p_original_name is null or char_length(btrim(p_original_name)) = 0 then
+    raise exception 'group_files_name_required';
+  end if;
+
+  select g.term_id into v_term_id
+  from public.study_groups g
+  where g.id = p_group_id;
+
+  select e.expires_at, e.basis into v_expires, v_basis
+  from private.group_file_retention_expiry(v_term_id) e;
+
+  if v_expires <= now() then
+    raise exception 'group_files_retention_window_closed';
+  end if;
+
+  if private.group_files_bytes(null) + p_byte_size > 8589934592 then
+    raise exception 'group_files_storage_limit_reached';
+  end if;
+
+  if private.group_files_bytes(p_group_id) + p_byte_size > 1073741824 then
+    raise exception 'group_files_group_limit_reached';
+  end if;
+
+  select count(*) into v_pending
+  from public.group_files f
+  where f.group_id = p_group_id
+    and f.uploaded_by = v_actor
+    and f.status = 'pending';
+
+  if v_pending >= 5 then
+    raise exception 'group_files_too_many_pending';
+  end if;
+
+  v_key := 'groups/' || p_group_id::text || '/' || v_id::text;
+
+  insert into public.group_files (
+    id, group_id, object_key, original_name, declared_mime,
+    byte_size, uploaded_by, status, retention_expires_at, retention_basis
+  ) values (
+    v_id, p_group_id, v_key, btrim(p_original_name), p_declared_mime,
+    p_byte_size, v_actor, 'pending', v_expires, v_basis
+  );
+
+  return query select v_id, v_key;
+end;
+$function$;
+
+-- 以 HeadObject 的實測值確認；不符即拒絕，不盲目放行。
+create or replace function public.confirm_group_file_upload(
+  p_file_id uuid,
+  p_byte_size bigint,
+  p_detected_mime text
+)
+returns table (replaced_object_key text)
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_actor uuid := auth.uid();
+  v_row public.group_files;
+  v_old public.group_files;
+begin
+  select * into v_row from public.group_files where id = p_file_id for update;
+
+  if not found then
+    raise exception 'group_files_not_found';
+  end if;
+
+  if v_row.uploaded_by is distinct from v_actor then
+    raise exception 'group_files_not_uploader';
+  end if;
+
+  if v_row.status <> 'pending' then
+    raise exception 'group_files_not_pending';
+  end if;
+
+  if not private.can_access_group_files(v_row.group_id) then
+    raise exception 'group_files_no_permission';
+  end if;
+
+  if p_byte_size is null or p_byte_size <= 0 or p_byte_size > 104857600 then
+    raise exception 'group_files_upload_too_large';
+  end if;
+
+  if p_byte_size <> v_row.byte_size then
+    raise exception 'group_files_size_mismatch';
+  end if;
+
+  update public.group_files
+  set status = 'current',
+      detected_mime = coalesce(p_detected_mime, declared_mime),
+      mime_mismatch = (
+        p_detected_mime is not null
+        and declared_mime is not null
+        and lower(btrim(p_detected_mime)) <> lower(btrim(declared_mime))
+      ),
+      confirmed_at = now()
+  where id = p_file_id;
+
+  if v_row.replaces_file_id is not null then
+    select * into v_old from public.group_files
+    where id = v_row.replaces_file_id and deleted_at is null
+    for update;
+
+    if found then
+      update public.group_files set deleted_at = now() where id = v_old.id;
+      return query select v_old.object_key;
+      return;
+    end if;
+  end if;
+
+  return query select null::text;
+end;
+$function$;
+
+create or replace function public.list_group_files(p_group_id uuid)
+returns table (
+  id uuid,
+  original_name text,
+  declared_mime text,
+  detected_mime text,
+  byte_size bigint,
+  uploaded_by uuid,
+  analysis_status text,
+  retention_expires_at timestamptz,
+  created_at timestamptz
+)
+language sql
+stable
+security definer
+set search_path to ''
+as $function$
+  select f.id, f.original_name, f.declared_mime, f.detected_mime, f.byte_size,
+         f.uploaded_by, f.analysis_status, f.retention_expires_at, f.created_at
+  from public.group_files f
+  where f.group_id = p_group_id
+    and f.status = 'current'
+    and f.deleted_at is null
+    and f.retention_expires_at > now()
+    and private.can_access_group_files(p_group_id)
+  order by f.created_at desc;
+$function$;
+
+-- 回傳 object_key 供簽名端點使用；RPC 本身不簽名、不回傳 URL。
+create or replace function public.request_group_file_download(p_file_id uuid)
+returns table (object_key text, original_name text, detected_mime text)
+language plpgsql
+stable
+security definer
+set search_path to ''
+as $function$
+declare
+  v_row public.group_files;
+begin
+  select * into v_row from public.group_files where id = p_file_id;
+
+  if not found then
+    raise exception 'group_files_not_found';
+  end if;
+
+  if not private.can_access_group_files(v_row.group_id) then
+    raise exception 'group_files_no_permission';
+  end if;
+
+  if v_row.status <> 'current' or v_row.deleted_at is not null then
+    raise exception 'group_files_not_current';
+  end if;
+
+  if v_row.retention_expires_at <= now() then
+    raise exception 'group_files_expired';
+  end if;
+
+  return query select v_row.object_key, v_row.original_name, v_row.detected_mime;
+end;
+$function$;
+
+-- R6：只有現行版本的上傳者可以替換。leader 可以刪除，但不得無聲覆寫他人內容。
+-- 新檔先建立為 pending，確認成功後才把舊檔標記刪除，避免上傳失敗造成資料遺失。
+create or replace function public.replace_group_file(
+  p_file_id uuid,
+  p_original_name text,
+  p_declared_mime text,
+  p_byte_size bigint
+)
+returns table (file_id uuid, object_key text)
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_actor uuid := auth.uid();
+  v_old public.group_files;
+  v_id uuid := gen_random_uuid();
+  v_key text;
+  v_expires timestamptz;
+  v_basis text;
+  v_term_id uuid;
+begin
+  select * into v_old from public.group_files where id = p_file_id for update;
+
+  if not found then
+    raise exception 'group_files_not_found';
+  end if;
+
+  if v_old.status <> 'current' or v_old.deleted_at is not null then
+    raise exception 'group_files_not_current';
+  end if;
+
+  if not private.can_access_group_files(v_old.group_id) then
+    raise exception 'group_files_no_permission';
+  end if;
+
+  if v_old.uploaded_by is distinct from v_actor then
+    raise exception 'group_files_not_uploader';
+  end if;
+
+  if p_byte_size is null or p_byte_size <= 0 or p_byte_size > 104857600 then
+    raise exception 'group_files_upload_too_large';
+  end if;
+
+  if p_original_name is null or char_length(btrim(p_original_name)) = 0 then
+    raise exception 'group_files_name_required';
+  end if;
+
+  select g.term_id into v_term_id from public.study_groups g where g.id = v_old.group_id;
+
+  select e.expires_at, e.basis into v_expires, v_basis
+  from private.group_file_retention_expiry(v_term_id) e;
+
+  if v_expires <= now() then
+    raise exception 'group_files_retention_window_closed';
+  end if;
+
+  if private.group_files_bytes(null) + p_byte_size > 8589934592 then
+    raise exception 'group_files_storage_limit_reached';
+  end if;
+
+  if private.group_files_bytes(v_old.group_id) + p_byte_size > 1073741824 then
+    raise exception 'group_files_group_limit_reached';
+  end if;
+
+  v_key := 'groups/' || v_old.group_id::text || '/' || v_id::text;
+
+  insert into public.group_files (
+    id, group_id, object_key, original_name, declared_mime,
+    byte_size, uploaded_by, replaces_file_id, status,
+    retention_expires_at, retention_basis
+  ) values (
+    v_id, v_old.group_id, v_key, btrim(p_original_name), p_declared_mime,
+    p_byte_size, v_actor, v_old.id, 'pending', v_expires, v_basis
+  );
+
+  return query select v_id, v_key;
+end;
+$function$;
+
+-- R6：上傳者本人或群組 leader 可以刪除。
+-- 已核對 Stage 5 authority/succession 模型（20261114163512）：repo 沒有獨立的
+-- leader 欄位，leader 就是 study_groups.creator_id；succession 會直接把該欄位
+-- 改寫成最早加入的現任成員，因此 creator_id = auth.uid() 就是現任 leader 判定，
+-- 與 public.review_group_join_request 的既有寫法一致。
+create or replace function public.delete_group_file(p_file_id uuid)
+returns table (object_key text)
+language plpgsql
+security definer
+set search_path to ''
+as $function$
+declare
+  v_actor uuid := auth.uid();
+  v_row public.group_files;
+  v_is_leader boolean;
+begin
+  select * into v_row from public.group_files where id = p_file_id for update;
+
+  if not found then
+    raise exception 'group_files_not_found';
+  end if;
+
+  if not private.can_access_group_files(v_row.group_id) then
+    raise exception 'group_files_no_permission';
+  end if;
+
+  if v_row.deleted_at is not null then
+    raise exception 'group_files_not_current';
+  end if;
+
+  select exists (
+    select 1 from public.study_groups g
+    where g.id = v_row.group_id and g.creator_id = v_actor
+  ) into v_is_leader;
+
+  if v_row.uploaded_by is distinct from v_actor and not v_is_leader then
+    raise exception 'group_files_not_uploader';
+  end if;
+
+  update public.group_files set deleted_at = now() where id = p_file_id;
+
+  return query select v_row.object_key;
+end;
+$function$;
+
+-- ---------------------------------------------------------------------------
+-- 4. 權限：只給 authenticated；anon、service_role、public 全部明確 revoke
+-- ---------------------------------------------------------------------------
+
+revoke all on function public.request_group_file_upload(uuid, text, text, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.confirm_group_file_upload(uuid, bigint, text) from public, anon, authenticated, service_role;
+revoke all on function public.list_group_files(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.request_group_file_download(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.replace_group_file(uuid, text, text, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.delete_group_file(uuid) from public, anon, authenticated, service_role;
+
+grant execute on function public.request_group_file_upload(uuid, text, text, bigint) to authenticated;
+grant execute on function public.confirm_group_file_upload(uuid, bigint, text) to authenticated;
+grant execute on function public.list_group_files(uuid) to authenticated;
+grant execute on function public.request_group_file_download(uuid) to authenticated;
+grant execute on function public.replace_group_file(uuid, text, text, bigint) to authenticated;
+grant execute on function public.delete_group_file(uuid) to authenticated;
+
+commit;
