@@ -1,25 +1,28 @@
 import { supabaseClient } from "./supabaseClient";
 
 /**
- * Usage figures for a group's file storage.
+ * Usage figures for one group's file storage.
  *
- * The server is the authority for every number here, including the limits: this
- * module deliberately does not carry its own copies of 1 GiB / 8 GiB, because a
- * client-side constant that drifts from the guard produces the worst outcome —
- * a UI that says there is room while the upload is refused.
+ * Deliberately group-scoped: the RPC does not return other groups' bytes, and
+ * this module does not ask for them. The server is the authority for every
+ * number here, including the limit — a client-side copy of 1 GiB that drifts
+ * from the guard produces the worst outcome, a UI that says there is room while
+ * the upload is refused.
+ *
+ * `globalLimitReached` is a boolean, not a figure: the platform also has an
+ * 8 GiB cap shared by every group, and an upload refused for that reason would
+ * otherwise be inexplicable. It says only whether that cap is already reached.
  */
 export type GroupFileUsage = {
   usedBytes: number;
   groupLimitBytes: number;
-  globalUsedBytes: number;
-  globalLimitBytes: number;
+  globalLimitReached: boolean;
 };
 
 type GroupFileUsageRow = {
   used_bytes?: number | string | null;
   group_limit_bytes?: number | string | null;
-  global_used_bytes?: number | string | null;
-  global_limit_bytes?: number | string | null;
+  global_limit_reached?: boolean | null;
 };
 
 function toSafeNumber(value: number | string | null | undefined): number {
@@ -28,14 +31,19 @@ function toSafeNumber(value: number | string | null | undefined): number {
 }
 
 /**
- * Reads `public.group_file_usage`, a read-only RPC that returns the current
- * group's usage, the current group limit, and the same two figures globally.
+ * Reads `public.group_file_usage`, a read-only RPC that returns this group's
+ * usage and limit, plus whether the platform-wide cap is already reached.
  * Throws on a missing session or a refused call; callers render the error state
  * rather than inventing zeros, because zero usage is a claim, not an absence.
  */
 export async function fetchGroupFileUsage(
   groupId: string
 ): Promise<GroupFileUsage> {
+  // The client is null when the deployment has no Supabase configuration. That
+  // is not "zero usage" and must not be rendered as one.
+  if (supabaseClient === null) {
+    throw new Error("File storage is not configured on this deployment.");
+  }
   const {
     data: { user },
     error: authError,
@@ -65,8 +73,7 @@ export async function fetchGroupFileUsage(
   return {
     usedBytes: toSafeNumber(row.used_bytes),
     groupLimitBytes: toSafeNumber(row.group_limit_bytes),
-    globalUsedBytes: toSafeNumber(row.global_used_bytes),
-    globalLimitBytes: toSafeNumber(row.global_limit_bytes),
+    globalLimitReached: row.global_limit_reached === true,
   };
 }
 

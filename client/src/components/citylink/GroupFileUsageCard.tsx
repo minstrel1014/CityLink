@@ -94,11 +94,13 @@ export function GroupFileUsageCard({ groupId }: { groupId: string }) {
             used={state.usage.usedBytes}
             limit={state.usage.groupLimitBytes}
           />
-          <UsageBar
-            label="All groups on this deployment"
-            used={state.usage.globalUsedBytes}
-            limit={state.usage.globalLimitBytes}
-          />
+          {state.usage.globalLimitReached ? (
+            <p className="text-xs text-amber-700 dark:text-amber-400">
+              This group has room, but the deployment-wide storage cap is full.
+              Uploads will be refused until space is freed elsewhere. This is
+              not a problem with your group.
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Pending uploads are not counted until they are confirmed.
           </p>
