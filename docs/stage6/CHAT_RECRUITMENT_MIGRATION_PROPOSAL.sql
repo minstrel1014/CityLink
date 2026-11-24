@@ -1,7 +1,9 @@
 -- PROPOSAL ONLY — NOT A MIGRATION; DO NOT APPLY TO ANY DATABASE.
 -- Revision 2, 2026-11-17, reflecting explicit lead decisions from Adam.
--- Target for a future, separately approved migration: disposable CityLink Test
--- ref wkzclgmhrtecnpexfesr only. Never apply to Supabase Main.
+-- HISTORICAL (2026-11-17 wording; corrected 2026-11-24). `wkzclgmhrtecnpexfesr` is the
+-- frozen CityLink Prototype (do not migrate), not a writable Test project. The only
+-- authorised target is CityLink Launch `pijslbchvstkoweslymr`, read-only until release;
+-- see docs/team/DB_TARGETS.md. Do not reuse this header as a target template.
 -- This proposal has not been applied. Role 6 and Roy must review the SQL and
 -- tests; Adam must separately approve any application to Test.
 -- Preserves the existing broad profiles policy. New member-list RPCs use the
