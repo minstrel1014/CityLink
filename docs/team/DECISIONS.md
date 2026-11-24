@@ -1384,3 +1384,44 @@ recorded hashes, and `index.html` references only those two.
 **The chat picker is the `/group-chat` route** (`App.tsx`), which lists the groups a student can open a
 chat in; "View My Courses" also appears there (`GroupChatPicker.tsx:67`) and on the My Group page
 (`AuthenticatedMyGroup.tsx:660`). Only the chat header was in scope for the earlier removal.
+
+## 2026-11-24 19:42-19:56 — the upload failure was two CORS gates, and only one is ours
+
+Adam reported the same sentence again — "Your browser could not reach file storage" — after the newline
+fix, so it was reproduced in a real browser instead of inferred.
+
+**What the browser showed.** Signed in as QA-A on the published origin: the signer answered `200` and
+the PUT to R2 answered `200`. Signed in on the project Preview origin
+(`8328-…sg2.manus.computer`, the surface the Dashboard opens with a "Temporary preview" banner): the
+signer answered `200`, and the PUT threw `TypeError: Failed to fetch`.
+
+**Why.** The bucket has its own CORS rule, separate from the function's, and it lists only
+`https://citylink-vm2mka3y.manus.space`. A preflight from the Preview origin gets `403` with no
+`Access-Control-Allow-Origin`; the PUT itself still returns `200`, and the browser discards the
+response because no origin was allowed. The client sees a thrown fetch, which is the sentence Adam
+read. The R2 token is denied on CORS operations (`AccessDenied`), so this rule cannot be changed from
+here — it is Adam's Cloudflare account.
+
+**What was fixed here.** The signer now resolves the request origin instead of comparing it to one
+string: `SITE_ORIGIN` may hold a comma-separated list, `*.manus.space` and `*.manus.computer` are
+accepted by pattern, localhost is accepted for development, and an unrecognised origin gets no CORS
+header at all. This is not a weakening of authorization: every request carries the caller's own JWT,
+the function sets no cookies and reads no ambient credentials, so the token is the authority and CORS
+only decides who may read a response. Deployed as version 5 (`ezbr_sha256 1c2f0520…`); 27 function
+tests pass, including the Preview origin, an untrusted origin and the list form.
+
+**The client now names the hop.** A signing request that never reaches the function says "file
+service"; a bucket that refuses the upload says "file storage". Both log their detail to the console.
+A signing failure is retried once after `refreshSession()`, because an expired token is rejected before
+CORS headers are attached and therefore arrives as a network error rather than a `401`.
+
+**Chat sizing, second pass.** Bubbles are `min(52%, 520px)` — 84% under 720px, where half a phone's
+width would break words — and the conversation is a fixed `clamp(520px, 76vh, 900px)` window
+(420–700px on phones) rather than a min/max range, so it holds its shape like a messenger. Published
+`f5dc80c`, live build `e2300ba0c73c5d5a`, both assets verified against the marker.
+
+**Where "View My Courses" lives.** Both are the breadcrumb above the page title, not an action button:
+`GroupChatPicker.tsx:67` and `AuthenticatedMyGroup.tsx:660`, each
+`<Link href="/my-courses" className="back-link">View My Courses</Link>`. The My Group page also has a
+"My Courses" link at `:89` and the phrase in copy at `:710`. Removing the breadcrumbs would remove the
+only way back to the course list from those two pages, so nothing was changed.
