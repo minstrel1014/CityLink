@@ -836,3 +836,24 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   the cost of a correct header, paid once.
 - **Not done:** no re-apply, no `create or replace`, no database contact of any kind in this
   revision. The database still holds exactly the bodies applied at 06:40:51Z.
+
+## 2026-11-24 — Documentation revision, second file: the contract's superseded storage section
+- **Same one-off amendment as the P1 header revision, authorized by Adam on 2026-11-24.** This is
+  the second and last file in that amendment; it is documentation only.
+- **What changed.** §5 of `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md` gains a dated note under its
+  existing superseded banner: the signing endpoint is the **P2 deployment dependency**, it lives
+  outside the database because `postgres` has no SigV4 tool, `request_group_file_upload` returns
+  only `file_id` with `object_key` as display output, and an environment carrying P1 but no signer
+  cannot complete a real upload. Design boundary, not defect.
+- **Why it was needed, stated as the failure it was.** On 2026-11-24 this coordinator wrote a QA
+  assignment from the *body* of §5 — the Supabase Storage text — and told the QA owner that
+  `request_group_file_upload` returns a signed upload target. It does not. The QA run stopped on
+  that false premise after creating a permitted group and one pending row, and the blocker was
+  reported correctly. The superseded banner sits directly above the section and was not read; a
+  warning that only appears above a body is evidently not enough, which is why the note now sits
+  inside the body.
+- **Recorded consequence for P1 alone.** Any check that needs bytes in storage — the upload happy
+  path, and therefore the 300-second TTL and revoked-link behaviour — cannot pass before the P2
+  signer exists. Those stay blocked rather than counted, and Adam has directed that the signer be
+  built only after the P1 authorisation/behaviour checks (2-7) are reviewed.
+- **Not done:** no SQL change, no database contact, no behaviour change, no PR state change.

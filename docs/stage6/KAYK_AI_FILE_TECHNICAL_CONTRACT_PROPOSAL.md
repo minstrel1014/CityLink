@@ -62,6 +62,7 @@
 ## 5. 儲存與連結
 
 > **本節已由 Adam 的儲存決定取代。** 不再使用 Supabase Storage bucket 與 `storage.objects` policy；改為 Cloudflare R2 私有 bucket，下載以原生 presigned URL 簽發 300 秒有效，無需代理。實作細節見 `KAYK_R2_ADAPTER_DESIGN.md` 第 4、5 節。以下原文保留作為歷史記錄。
+> **補充（2026-11-24，同一次文件修訂）：** 簽名端點是 P2 的部署依賴，不在資料庫內。`postgres` 沒有 SigV4 簽名工具，因此 `request_group_file_upload` 只回 `file_id`（`object_key` 僅供顯示，且簽名時不得接受用戶端傳入的 key），不產生任何 URL。任何只套用 P1、尚未部署簽名端點的環境，都無法完成一次真實上傳——這是設計邊界，不是缺陷；上傳與下載的行為驗證必須等 P2 端點存在。端點契約見 `KAYK_R2_ADAPTER_DESIGN.md` §4 第 48–51 行。
 
 單一私有 bucket；`storage.objects` 的 select／insert policy 使用同一個 predicate 並綁定路徑前綴，物件路徑必須以該 `group_id` 開頭，確保繞過前端直呼 Storage API 也取不到他組物件。不使用 public bucket，不使用 `getPublicUrl`。下載一律「先驗證、再換短效簽名 URL」，清單回應不夾帶 URL。
 
