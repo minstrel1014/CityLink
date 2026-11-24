@@ -5,7 +5,7 @@
 - **分支：** `feature/kayk-ai-project-room-files`
 - **狀態：** 設計文件，供 Role 6 與 Adam 審查。**不是實作、不是 migration、不是部署授權。**
 - **取代：** `KAYK_DRIVE_ADAPTER_DESIGN.md`（Google Drive 路線）。Adam 2026-11-24 改選 Cloudflare R2。
-- **已知資源：** bucket `citylink-group-files`；R2 API token 已建立（只限該 bucket、Object Read & Write）；CORS **尚未設定**；Account ID 待提供。
+- **已知資源：** bucket `citylink-group-files`；R2 API token 已建立（只限該 bucket、Object Read & Write）；Account ID 已提供（不寫入 repo，以 `R2_ACCOUNT_ID` 環境變數注入）；CORS 允許 `https://citylink-vm2mka3y.manus.space`、`http://localhost:5173`、`http://localhost:3000`；Preview 網址每次不同，不列入白名單。
 
 ## 1. 為什麼 R2 比 Drive 適合
 
@@ -120,9 +120,9 @@ Role 6 對本文件做了一次唯讀靜態審查（全文見 `KAYK_ROLE6_REVIEW
 | R2  | 簽名不得接受用戶端給的 `object_key`          | 已改：端點只收 `file_id`，key 由資料庫回傳                                |
 | R3  | `confirm` 無參數可核對                       | 已改：`confirm_group_file_upload(p_file_id, p_byte_size, p_content_type)` |
 | R4  | predicate 必須 active-only                   | 已明訂，並補上刪除需另判 `uploaded_by`                                    |
-| R5  | 保留期 4 個月 vs 5 個月                      | **待 Adam 裁決**；repo 現行記錄為 5 個月                                  |
-| R6  | 「任何成員可替換」與「只有上傳者可刪除」衝突 | **待 Adam 裁決**；替換 RPC 暫不定稿                                       |
+| R5  | 保留期 4 個月 vs 5 個月                      | 已定案：**5 個月**；4 個月屬已廢除的版本歷史規則，標為 superseded         |
+| R6  | 「任何成員可替換」與「只有上傳者可刪除」衝突 | 已定案：替換限現行版本上傳者；leader 可刪除但不得無聲覆寫                 |
 | R7  | 配額為軟上限且統計會漂移                     | 已記錄於第 6 節                                                           |
 | R8  | `starts_on` 從未由任何 migration 填入        | 已記錄：推導規則是實質產品規則，且到期日是快照                            |
 
-R5 與 R6 未定案前，P1 可以先寫資料表、predicate、上傳／確認／下載／刪除與清單，`replace_group_file` 與保留期常數暫不實作。
+R5 與 R6 均已定案，P1 的 SQL 提案（`KAYK_FILE_AI_MIGRATION_PROPOSAL.sql`）已包含全部六個 RPC 與保留期計算，並以 `server/stage6GroupFilesSqlContract.test.ts` 的九個靜態測試守住權限姿態。**尚未套用。**

@@ -5,6 +5,8 @@
 
 ---
 
+> **後續處理（2026-11-24）：** 本檔原文保留，不修改。其中 R5（保留期 4 個月）已被 Adam 2026-11-23 的五個月決定取代，該句標為 superseded，不再是有效規則；R6 已定案為「替換限現行版本上傳者，leader 可刪除但不得無聲覆寫」。R1 至 R4 已在設計與 P1 SQL 中修正。
+
 # Role 6 審查：群組聊天室檔案 — Cloudflare R2 adapter 設計
 
 **收到：** 2026-11-24 01:38，附件 `CityLink群組聊天室檔案：CloudflareR2adapter設計.md`（Kayk，branch `feature/kayk-ai-project-room-files`，狀態：設計文件）。
