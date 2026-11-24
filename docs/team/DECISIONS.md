@@ -940,3 +940,23 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Client work in flight.** `feature/coordinator-quota-usage-ui` carries the usage card and its
   typed fetch, branched from `main`, pushed as a draft. It is a component without a page until the
   group-files page exists, and it has not been type-checked in this environment.
+
+## 2026-11-24 — P2 signer built locally: the design assumed an RPC that does not exist
+- **Built on `feature/coordinator-p2-signer`, draft PR #64, not deployed.** Two POST endpoints take
+  only a `file_id`, verify the caller's JWT, call the P1 RPC as that user and presign an R2 URL.
+  `tsc --noEmit` clean; 661 tests pass in 42 files, four of them new.
+- **Finding: no RPC returns the `object_key` of a pending row.** The adapter design says the endpoint
+  resolves the key by calling an RPC as the user, but `request_group_file_download` raises
+  `group_files_not_current` for anything not current, and the other five RPCs are write paths or
+  return a key only when they create the row. Without a read RPC the endpoint would have to use a
+  service-role key, which the design forbids. `docs/stage6/GROUP_FILE_UPLOAD_TARGET_RPC_PROPOSAL.sql`
+  adds the missing read, scoped to the caller's own pending row and returning one token for
+  not-found, not-yours and not-pending so it cannot be used to probe for other people's files.
+  Bundled with the next SQL revision alongside the F-P1-1 token and `group_file_usage`.
+- **Finding: `Content-Type` was not actually bound.** The first `presignUpload` put `ContentType` on
+  the command but the presigner signs only `host` unless `signableHeaders` names the header, so the
+  URL would have accepted any content type — the exact hole the rule exists to close. A test
+  asserting `X-Amz-SignedHeaders` caught it. Worth recording because the code read correctly and
+  only failed when executed; a review would not have caught it.
+- **Not done:** no deployment, no R2 credentials in the repo, no Launch contact, no client wiring.
+  Check 1 and the download TTL remain blocked until a deployment decision.
