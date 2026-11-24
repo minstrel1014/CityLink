@@ -5,6 +5,10 @@
 - **狀態：** 草案。**不是 migration、未套用、未經 Role 6 審查、不構成實作授權。**
 - **上層文件：** `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md` 第 3、4、11 章。本文件只補它沒寫的兩張表，不改已定案的部分。
 
+> **VOID — 因 2026-11-24 設計變更而作廢。** 群組 AI 已由「每組一份共用分析計畫」改為「聊天室內的共用 AI 對話」，
+> 見 `KAYK_AI_CHAT_CONTRACT_DRAFT.md` 與 `docs/team/DECISIONS.md` 同日條目。本文件保留作歷史，不再代表現行設計；
+> `group_analysis_plans` 與 `group_analysis_jobs` 已套用於 Launch，不刪除、不改動，只停用。
+
 ## 0. 這份增補為什麼存在
 
 P1 已建立 `public.group_analysis_plans` 與 `public.group_analysis_jobs`，但**沒有任何 RPC 讀寫它們**。兩張表啟用了 RLS、零政策、並對 `public, anon, authenticated, service_role` 全部 revoke，所以現況是：任何角色都無法透過 PostgREST 直接讀寫，唯一合法的存取路徑是新的 `SECURITY DEFINER` RPC。若沒有這層 RPC，兩張表就是死資料。

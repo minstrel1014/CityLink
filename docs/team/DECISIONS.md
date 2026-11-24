@@ -748,6 +748,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   identities.
 
 ## 2026-11-24 — Execution record: the Launch write window actually ran, and it took three writes
+
 - **What was executed, and by whom.** This coordinator task, under the authorization entry directly
   above. Two artifacts, in the fixed order, each in its own transaction: the target marker at
   `06:37:44Z`, then the guarded P1 blob at `06:40:51Z`. Target: `pijslbchvstkoweslymr`. The
@@ -761,7 +762,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   no name collision for the three tables, three helpers or six RPCs. Both local files hashed to the
   values the authorization names — marker `c71657d9…e94f51d`, P1 `3c498627…5d036b`.
 - **Step 1 — marker.** `private.citylink_target` created with one row (`project_ref =
-  pijslbchvstkoweslymr`, `system_identifier = 7692131729119822239`, `declared_by = Adam`), and
+pijslbchvstkoweslymr`, `system_identifier = 7692131729119822239`, `declared_by = Adam`), and
   `private.assert_citylink_target('pijslbchvstkoweslymr')` called once inside the same transaction
   and returned cleanly. All privileges are false for `anon`, `authenticated` and `service_role`, on
   both the table and the function.
@@ -816,6 +817,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   writes.
 
 ## 2026-11-24 — Documentation revision of the applied P1 file: comments only, no redeployment
+
 - **Authorized by Adam, 2026-11-24:** fix Role 6's three documentary defects and the stale "draft,
   not applied" status line, in one bounded amendment, as a one-off rather than a habit.
 - **What changed.** Four comment blocks in `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql` and its
@@ -838,6 +840,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   revision. The database still holds exactly the bodies applied at 06:40:51Z.
 
 ## 2026-11-24 — Documentation revision, second file: the contract's superseded storage section
+
 - **Same one-off amendment as the P1 header revision, authorized by Adam on 2026-11-24.** This is
   the second and last file in that amendment; it is documentation only.
 - **What changed.** §5 of `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md` gains a dated note under its
@@ -846,7 +849,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   only `file_id` with `object_key` as display output, and an environment carrying P1 but no signer
   cannot complete a real upload. Design boundary, not defect.
 - **Why it was needed, stated as the failure it was.** On 2026-11-24 this coordinator wrote a QA
-  assignment from the *body* of §5 — the Supabase Storage text — and told the QA owner that
+  assignment from the _body_ of §5 — the Supabase Storage text — and told the QA owner that
   `request_group_file_upload` returns a signed upload target. It does not. The QA run stopped on
   that false premise after creating a permitted group and one pending row, and the blocker was
   reported correctly. The superseded banner sits directly above the section and was not read; a
@@ -859,6 +862,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Not done:** no SQL change, no database contact, no behaviour change, no PR state change.
 
 ## 2026-11-24 — P1 behaviour QA on Launch: checks 2-7 pass, check 1 blocked, one real finding
+
 - **Evidence class first.** Real Supabase Auth password sign-ins over HTTPS for A, B and C, RPC calls
   with genuine user bearer tokens through PostgREST, tokens held in shell variables only, cluster
   re-checked as `7692131729119822239` immediately before the first write. No simulated claims, no
@@ -881,7 +885,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **New finding F-P1-1 — the duplicate-replacement guard has no error surface.** The second pending
   replacement was correctly refused, but by the unique index, so the client saw a raw
   `23505` with `duplicate key value violates unique constraint
-  "group_files_one_pending_replacement_idx"`. §11 of the contract says clients map tokens, never
+"group_files_one_pending_replacement_idx"`. §11 of the contract says clients map tokens, never
   message text, and no token exists for this case — the SQL raises fifteen named exceptions and this
   is not one of them. A token-mapping client therefore falls through to a generic error. Two ways
   out: map `23505` plus that constraint name in the client, which couples the UI to an index name,
@@ -904,6 +908,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   no merge, no deployment. The QA authorization is spent; a real-byte rerun needs its own.
 
 ## 2026-11-24 — F-P1-1 disposition: client-side mapping now, named token only in a future revision
+
 - **Decided by Adam, 2026-11-24.** The duplicate-replacement guard keeps working through the unique
   index `group_files_one_pending_replacement_idx`; the client maps `23505` plus that constraint name
   to a user-facing message. No new SQL blob, no Role 6 review, no authorization cycle.
@@ -921,6 +926,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   above exists and names the dependency.
 
 ## 2026-11-24 — P2 signer settled: canonical server/, credentials exist, no deployment yet
+
 - **Decided by Adam, 2026-11-24.** The signing endpoint lives in the canonical repo's `server/`
   (Express/tRPC), not the WebDev site repo — the site repo is outside GitHub and therefore cannot
   be reviewed, which matters more than usual for an endpoint that signs credentials.
@@ -942,6 +948,7 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   group-files page exists, and it has not been type-checked in this environment.
 
 ## 2026-11-24 — P2 signer built locally: the design assumed an RPC that does not exist
+
 - **Built on `feature/coordinator-p2-signer`, draft PR #64, not deployed.** Two POST endpoints take
   only a `file_id`, verify the caller's JWT, call the P1 RPC as that user and presign an R2 URL.
   `tsc --noEmit` clean; 661 tests pass in 42 files, four of them new.
@@ -960,7 +967,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   only failed when executed; a review would not have caught it.
 - **Not done:** no deployment, no R2 credentials in the repo, no Launch contact, no client wiring.
   Check 1 and the download TTL remain blocked until a deployment decision.
+
 ## 2026-11-24 — R2 round-trip verified against the real bucket; the SQL bundle exists and excludes F-P1-1
+
 - **Correction to the entry above:** it said the upload-target RPC would be bundled "alongside the
   F-P1-1 token". Adam decided on 2026-11-24 that F-P1-1 is handled by a temporary client mapping
   first, so the token is **not** in this revision. It stays a separate later revision with its own
@@ -984,7 +993,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Nothing was applied, no ledger row was written, nothing was promoted into `supabase/migrations/`,
   `main` is untouched.** The three gates stand: Role 6 exact-blob review, Adam's authorization naming
   this blob and ref, and an immediately-preceding read-only preflight.
+
 ## 2026-11-24 — Role 6 blocked v1 on a one-line fail-open; Adam narrowed the scope; v2 is the result
+
 - **Role 6 reviewed v1 (`ed9a1dd`, sha256 `b1760d0b…`) and blocked it.** Verdict per function:
   `group_file_usage` approve with conditions, `group_file_upload_target` **block**. The blocking
   finding: `v_row.uploaded_by <> v_actor` evaluates to NULL when `uploaded_by` is NULL, and PL/pgSQL
@@ -1019,7 +1030,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Still a draft.** Not applied, no ledger row, nothing promoted into `supabase/migrations/`, `main`
   untouched. Role 6 now needs to re-review only B-1 against the new hash; its other findings are
   already answered above.
+
 ## 2026-11-24 — Role 6 approves v2; Launch preflight is green; the approved blob is frozen
+
 - **Role 6 re-reviewed `3fcc260` / `ed30cfd3…` and approved it.** B-1 **closed**, verified across all
   four NULL/non-NULL combinations of `uploaded_by` versus `v_actor`. The new membership check is
   correct and does not move the hole: a removed member hits the ownership-and-status gate first and
@@ -1050,7 +1063,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   both `200`, both `application/octet-stream`, object deleted afterwards. 665 tests pass.
 - **Not done:** the bundle is still not applied. Applying needs Adam's authorization naming this blob,
   this ref and this window; nothing about a Role 6 approval or a green preflight grants it.
+
 ## 2026-11-24 — AUTHORIZATION: apply the two-function bundle to Launch, then promote it
+
 **Adam's authorization, verbatim:**
 
 > Adam, 2026-11-24: 批准在單一窗口內套用 ed30cfd3852602b01aa01116e50749fc2ba8f25a0b3ff985e880f3604fcf61a0（commit 3fcc260，139 行）到 Launch pijslbchvstkoweslymr，單一交易、一次、ON_ERROR_STOP=1。套用後原樣 promote 進 supabase/migrations/ 並補一筆 ledger 紀錄。除此之外一律不做
@@ -1070,12 +1085,14 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Promotion shape (Adam, item 2 approved):** identical to P1 — byte-identical copy into
   `supabase/migrations/`, ledger row added separately, and the file is not edited to record its own
   applied state. Status lives in this log, not in the migration.
+
 ## 2026-11-24 08:22Z — APPLIED: the two read functions are on Launch, verified by md5
+
 - **Applied once, one transaction, under Adam's authorization.** Preflight immediately before the
   write: cluster `7692131729119822239`, marker assert clean, neither function present, ledger 12 rows,
   0 rows with `uploaded_by is null`.
 - **Verification is byte-level, not "no error appeared".** Both bodies match the md5 computed locally
-  from the approved blob *before* the write: `group_file_usage` 597 chars `1cf9b13792e2954e88ca2a7b295af774`,
+  from the approved blob _before_ the write: `group_file_usage` 597 chars `1cf9b13792e2954e88ca2a7b295af774`,
   `group_file_upload_target` 939 chars `7b3145cbd61cfaf092c8207b9b51a904`. Both are `stable`,
   `security definer`, `search_path=""`, owned by `postgres`, with the expected return shapes.
 - **Grants are exactly as designed:** `anon` false, `authenticated` true, `service_role` false, for both.
@@ -1094,7 +1111,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   files that are not there.
 - **Not done, and not authorized by this sentence:** no signed-in call to either function, no QA, no
   merge, no deployment, no publication, no GitHub visibility change, `main` still `519a69e`.
+
 ## 2026-11-24 — Signed-in smoke test of the two new functions: six scenarios, all as designed
+
 - **Authorized by Adam ("1 yes authorise").** Method: each call ran inside a transaction as
   `role authenticated` with `request.jwt.claims` set to a real QA `sub`, then rolled back. That
   exercises the real grants and the real `auth.uid()` predicate. It is **not** an HTTP/JWT transport
@@ -1111,15 +1130,18 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   the earlier QA delete tests and the third is past retention; the 100 MB row is `pending` and pending
   is excluded by design. Manual re-run of the exact predicate returned 0 as well. The number agrees
   with the data; my first reading of the data did not.
-- **What this does not cover, stated plainly:** (a) the membership branch *inside*
+- **What this does not cover, stated plainly:** (a) the membership branch _inside_
   `group_file_upload_target` is unreachable in this fixture — B fails on ownership first, and
   constructing the case needs a member re-added, a row created and the member removed, which is data
   writing beyond this authorization; (b) `global_limit_reached = true` was never produced, because that
   needs 8 GiB of real usage; (c) no HTTP call, so CORS and token handling remain Eunice's P1 evidence,
   not this.
 - **Not done:** no data changed (every scenario rolled back), no merge, no deployment, `main` still `519a69e`.
+
 ## 2026-11-24 — Adam sets the deployment shape: Edge Function signer, drawer UI, open uploads, demo site
+
 **Six decisions, from Adam via Side Chat, and one finding that corrects an assumption of mine.**
+
 - **Deploy: yes.** The file feature is to be deployed rather than left local-only.
 - **Target: the published demo site** `citylink-vm2mka3y.manus.space` (WebDev project `Vm2mKA3YornoSGba8WBzse`),
   explicitly **not** the Prototype `wkzclgmhrtecnpexfesr`.
@@ -1150,7 +1172,9 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Still not authorized by any of this:** implementing the function, deploying it, changing the site,
   publishing it, or setting secrets on Adam's behalf. He named the shape, not the window. Plan:
   `docs/stage6/P2_EDGE_FUNCTION_AND_DRAWER_PLAN.md`.
+
 ## 2026-11-24 — Edge Function implemented (PR #66), not deployed; the Express signer becomes reference only
+
 - **Adam authorized creating `supabase/functions/group-file-signer/` with two POST routes, no deploy, no
   secrets, no site change.** Implemented exactly that: `upload-url` and `download-url`, body `{ file_id }`
   only, caller's JWT forwarded to PostgREST, no service-role key anywhere.
@@ -1166,8 +1190,8 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
   point, because it has already been wrong once.
 - **Unknown database messages are never echoed.** Only deliberate tokens map to 401/403/404/410; anything
   else becomes `group_files_unavailable`. An echoed message would make the endpoint an oracle.
-- **`vitest.config.ts` gained `supabase/functions/**/*.test.ts`** — a test-scope change, not a toolchain or
-  lockfile change. `tsc` scope is untouched, so the Deno file cannot break `pnpm check`.
+- **`vitest.config.ts` gained `supabase/functions/**/\*.test.ts`** — a test-scope change, not a toolchain or
+lockfile change. `tsc`scope is untouched, so the Deno file cannot break`pnpm check`.
 - **PR #64 (Express signer) is now reference only.** It cannot be deployed to an Edge runtime, and keeping
   two signers "live" would invite someone to ship the wrong one. Its tests and its `Content-Type` lesson
   are the reason the Edge version is correct.
@@ -1188,7 +1212,7 @@ files and the README were deliberately not uploaded.
 `index.ts` and `deno.json`; the second sent only `deno.json` and `signing.ts`. Each
 failed with "Entrypoint path does not exist" or "Module not found handler.ts", and each
 created nothing: no function, no version, no partial artifact. `deploy_edge_function`
-bundles *only* the files in the request, so every relative import must be uploaded with
+bundles _only_ the files in the request, so every relative import must be uploaded with
 the entrypoint. That is now the recorded rule for this repo.
 
 **Verified against the deployed function, not against the upload.** `get_edge_function`
@@ -1196,13 +1220,13 @@ returned exactly four files and the same `verify_jwt`. The four local files at `
 hash to the values already recorded in this log, so the deployed source is the reviewed
 source. Live probes, no secrets printed:
 
-| probe | result |
-|---|---|
-| `OPTIONS /upload-url` | 204, `access-control-allow-methods: POST, OPTIONS`, `access-control-max-age: 600` |
-| `POST /upload-url`, no token | 401 `UNAUTHORIZED_NO_AUTH_HEADER` (gateway, `verify_jwt`) |
+| probe                                                        | result                                                                                                                                          |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPTIONS /upload-url`                                        | 204, `access-control-allow-methods: POST, OPTIONS`, `access-control-max-age: 600`                                                               |
+| `POST /upload-url`, no token                                 | 401 `UNAUTHORIZED_NO_AUTH_HEADER` (gateway, `verify_jwt`)                                                                                       |
 | `POST /upload-url`, real QA-A token, pending row `0e968640…` | 200 `{url, method: PUT, headers, expires_in: 900}`, host `b7643edca97e5edbe1d0e5359530ad11.r2.cloudflarestorage.com`, `X-Amz-Signature` present |
-| `POST /upload-url`, `file_id: "nope"` | 400 `group_files_invalid_request` |
-| `POST /upload-url`, unknown UUID | 404 `group_files_not_pending` |
+| `POST /upload-url`, `file_id: "nope"`                        | 400 `group_files_invalid_request`                                                                                                               |
+| `POST /upload-url`, unknown UUID                             | 404 `group_files_not_pending`                                                                                                                   |
 
 The 200 proves the four R2 secrets are present and correct in the function environment:
 without them the same call returns `group_files_misconfigured`. No object was uploaded;
@@ -1240,7 +1264,7 @@ version 2, ACTIVE, `verify_jwt: true`, bundle `ezbr_sha256 51d2196d06644e1e5c8e7
 
 Two things went wrong first, both mine, both recorded because they will recur:
 
-1. Updating an existing function fails with *"import map path does not exist"* unless
+1. Updating an existing function fails with _"import map path does not exist"_ unless
    `import_map_path` is passed explicitly. The stored value from version 1 points at version 1's
    temporary source directory, which no longer exists. Passing `import_map_path: "deno.json"`
    resolves it relative to the new source directory.
@@ -1251,14 +1275,14 @@ Two things went wrong first, both mine, both recorded because they will recur:
 
 **Verified live after the redeploy**, same probes as version 1 plus the defect case:
 
-| probe | result |
-|---|---|
-| `OPTIONS /upload-url` | 204, `access-control-allow-origin: *` (`SITE_ORIGIN` still unset) |
-| `POST /upload-url`, no token | 401 at the gateway |
-| `POST /upload-url`, QA-A token, pending row | 200 signed PUT URL, R2 host, TTL 900 |
-| `POST /download-url`, soft-deleted row | **404 `group_files_not_current`** — was 500 before the fix |
-| `POST /download-url`, unknown row | 404 `group_files_not_found` |
-| `POST /upload-url`, unknown UUID | 404 `group_files_not_pending` |
+| probe                                       | result                                                            |
+| ------------------------------------------- | ----------------------------------------------------------------- |
+| `OPTIONS /upload-url`                       | 204, `access-control-allow-origin: *` (`SITE_ORIGIN` still unset) |
+| `POST /upload-url`, no token                | 401 at the gateway                                                |
+| `POST /upload-url`, QA-A token, pending row | 200 signed PUT URL, R2 host, TTL 900                              |
+| `POST /download-url`, soft-deleted row      | **404 `group_files_not_current`** — was 500 before the fix        |
+| `POST /download-url`, unknown row           | 404 `group_files_not_found`                                       |
+| `POST /upload-url`, unknown UUID            | 404 `group_files_not_pending`                                     |
 
 **`SITE_ORIGIN` is still not set.** Approval was given, but no tool available to the coordinator
 can write function secrets: the Supabase MCP exposes deploy/read only, and no access token exists
@@ -1427,6 +1451,7 @@ width would break words — and the conversation is a fixed `clamp(520px, 76vh, 
 only way back to the course list from those two pages, so nothing was changed.
 
 ## 2026-11-24 20:00-20:36 — the chat names itself, and the breadcrumbs go
+
 Adam asked whether everyone can reach a group chat, and asked for three UI changes: remove the two
 breadcrumbs, add a way from the chat back to its group, and leave the bubble size alone ("the bubble is
 fine now").
@@ -1438,7 +1463,7 @@ additionally requires `active` and a group that is not abandoned. Verified again
 rather than read from SQL: QA-C (`citylink.qa4…`, a student with no membership in the QA group) called
 `get_group_chat_access` and `list_group_chat_messages` and both returned
 `P0001 not authorized to read this group chat`. Adam was reading the old notice, which opened with what
-members *can* do and only mentioned restriction afterwards. The notice now opens with the restriction:
+members _can_ do and only mentioned restriction afterwards. The notice now opens with the restriction:
 "Only members of this group can open this chat, and the server checks that on every request — a pending
 invitation or join request does not grant access."
 
@@ -1471,3 +1496,36 @@ and said to leave the Manus Preview as it is. The cause is unchanged and outside
 R2 bucket's own CORS rule lists only the published origin, and the token cannot edit it. The signer's
 origin resolution (version 5) is committed as `eccd7bd` on `feature/coordinator-edge-signer` (PR #66,
 draft) so the deployed code has a reviewable source; nothing was deployed or merged in this round.
+
+## 2026-11-24 — Design change: the shared analysis plan becomes a shared AI conversation in the group chat
+
+- **Decided by Adam, 2026-11-24.** The group AI is no longer "one shared analysis plan per group". It is one
+  shared AI conversation inside the group chat. The AI is not a member; it participates as if it were one.
+  Its answers are chat messages with `author_kind = 'ai'`, `sender_id` NULL and
+  `sender_name_snapshot = 'CityLink AI'`, visible to the whole group. Each group chat is its own session.
+- **Entry point.** A button beside Files in the chat toolbar opens a drawer that slides in from above. Opening
+  it sends nothing; a question is sent only by an explicit action after consent.
+- **Why a new column rather than "sender_id is null".** `group_chat_messages.sender_id` is
+  `ON DELETE SET NULL`, so a deleted account's messages also have a NULL sender. Without `author_kind`, the
+  client would render a deleted member's words as CityLink AI. `author_kind in ('member','ai')` separates the
+  two; the NULL sender is a consequence, not the test.
+- **Answer length.** Target 1,200-1,500 characters, hard cap 2,500. Over the cap the answer is cut, the notice
+  "（回答過長，已截斷）" is appended, and a log entry is written. The existing 4,000-character CHECK on
+  `group_chat_messages.body` is unchanged; 2,500 is an application policy, not a database constraint.
+- **Budgets, in characters and not words.** Chat history 4,000; selected file text 10,000 in total; at most two
+  files per question.
+- **Context rules, in priority order.** (a) the question is always kept; (b) at most the two most recent AI
+  answers, oldest dropped first; (c) the remaining budget goes to member messages, most recent first; (d) when
+  anything is dropped, the answer opens with "（本次未包含較早的對話）".
+- **Clearing context.** Any member may do it. It moves `context_starts_at` and nothing else; no message is
+  deleted, so a member cannot destroy another member's words by clearing.
+- **Retention.** Permanent. A member's questions and the AI's answers stay after that member leaves or is removed.
+- **File scope.** Only this group's files, `status = 'current'`, and `retention_expires_at` not passed.
+- **Void, not deleted.** The shared-plan design recorded earlier - `group_analysis_plans`,
+  `group_analysis_jobs` and `docs/stage6/KAYK_AI_PLANS_JOBS_CONTRACT_DELTA.md` - is void because of this change.
+  Both tables are already applied on Launch. Per Adam they are **not dropped and not altered**; they are simply
+  left unused, with no RPC reading or writing them.
+- **What survives the change.** The extraction module, the provider boundary, the consent pattern and their
+  tests stay; only the plan-shaped request and response are replaced. The new proposal is
+  `docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md` - a draft, not applied, and requiring Role 6 exact-head review
+  and a named authorization before any SQL exists.
