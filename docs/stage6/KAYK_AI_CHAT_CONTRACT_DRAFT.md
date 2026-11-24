@@ -2,7 +2,8 @@
 
 - **日期：** 2026-11-24（Role 6 審查後修訂，見第 11 節）
 - **分支：** `feature/kayk-ai-analysis`
-- **狀態：** 草案。**不是 migration、未套用、不構成實作授權。** Role 6 已於 2026-11-24 對前一版（`bd60b5c`，blob `73c9297`）做過 exact-head 審查，本版是其修訂；B-1、B-2、C-3、C-4 已由 Adam 於 2026-11-24 裁決（第 11 節）。
+- **狀態：** 草案。**未套用、不構成實作、migration、signed-in QA、merge、部署或發布授權。** Role 6 已做過三輪唯讀審查（完整 blob OID 與 sha256 見 §11）：第一輪 `73c9297732a4ceb87a3c2f6893aa10c734148be5`、第二輪 `bdb31785989507f593120d61bbffa21df68b1bf6`、第三輪 `aa93a5f543efea4b8add0bd65e8482b0a7b8d566`（commit `352e88b`）。B-1、B-2、C-3、C-4、F-11、F-12 已由 Adam 於 2026-11-24 裁決（§11）。
+- **SQL 提案已寫出（未套用）：** `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql`。本節與第 2 節是該檔的設計說明；兩者若有出入，**以 SQL 檔為準**，並在本輪的 blob-level exact-head 審查中提出。
 - **取代：** `KAYK_AI_PLANS_JOBS_CONTRACT_DELTA.md`（共用分析計畫，已因設計變更作廢）。舊檔保留作歷史，不刪除。
 - **上層文件：** `KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md` 第 2、6、9、11、12 章仍然有效；第 3、4 章關於 `group_analysis_plans` 的部分作廢。
 
@@ -19,21 +20,29 @@ AI 由「每組一份共用分析計畫」改為「聊天室內的共用 AI 對�
 ### 1.1 `public.group_chat_messages` 三個新欄位
 
 ```sql
+-- 欄位與約束分開下（Role 6 N-4，已採納）
 alter table public.group_chat_messages
-  add column author_kind text not null default 'member'
-    check (author_kind in ('member', 'ai')),
-  add column ai_request_id uuid
-    references public.group_ai_requests (id) on delete set null,
-  add column truncated boolean not null default false;
+  add column if not exists author_kind text not null default 'member',
+  add column if not exists ai_request_id uuid,
+  add column if not exists truncated boolean not null default false;
 
-alter table public.group_chat_messages
-  add constraint group_chat_messages_ai_has_no_sender
-    check (author_kind <> 'ai' or sender_id is null),
-  add constraint group_chat_messages_ai_name
-    check (author_kind <> 'ai' or sender_name_snapshot = 'CityLink AI'),
-  add constraint group_chat_messages_ai_request_only_for_ai
-    check (author_kind = 'ai' or ai_request_id is null);
+-- 五條約束各自 `add constraint … not valid`：只改目錄，不掃表。
+--   group_chat_messages_author_kind             check (author_kind in ('member', 'ai'))
+--   group_chat_messages_ai_has_no_sender        check (author_kind <> 'ai' or sender_id is null)
+--   group_chat_messages_ai_name                 check (author_kind <> 'ai' or sender_name_snapshot = 'CityLink AI')
+--   group_chat_messages_ai_request_only_for_ai  check (author_kind = 'ai' or ai_request_id is null)
+--   group_chat_messages_ai_request_fkey         foreign key (ai_request_id)
+--                                               references public.group_ai_requests (id) on delete set null
+
+-- 之後逐條 `validate constraint`（SQL §3.1，刻意獨立成段，可拆成第二次部署）
+create index if not exists group_chat_messages_ai_request
+  on public.group_chat_messages (ai_request_id)
+  where ai_request_id is not null;
 ```
+
+**為什麼要拆（Role 6 N-4）。** `add column` 與 `check` 寫在同一條 `alter table` 裡，PostgreSQL 會在 **ACCESS EXCLUSIVE** 下全表掃描 `group_chat_messages`——那是一張 live 表（檔案功能已上線、聊天持續成長），掃描期間整個群組聊天室連讀取都被擋住。拆開之後：加欄位（PG11+ 的 `not null default` 不重寫表格）與 `add constraint … not valid` 只動目錄；`validate constraint` 只需 **SHARE UPDATE EXCLUSIVE**，寫入仍可進行。本檔是單交易（`begin`／`commit`），鎖仍持有到 commit，所以**要真正縮短鎖住時間，套用者應把 §3.1 拆成第二次部署**——這一節刻意把它獨立出來就是為了可拆。preflight 必須記錄實際數字（行數、`pg_total_relation_size`、鎖等待），而不是假設「應該很快」。**未套用前無法給出這些數字，本檔也沒有給。**
+
+**索引（Role 6 N-5）。** `finish_group_ai_request` 的冪等路徑要能以 `ai_request_id` 找到既有訊息，沒索引就是掃表；因此加 **partial index**（`where ai_request_id is not null`）——一般成員訊息永遠是 NULL，全值索引只是在長尾巴。
 
 **為什麼一定要 `author_kind`。** `sender_id` 在帳號刪除時因 `ON DELETE SET NULL` 變成 NULL，所以「`sender_id is null`」同時代表「AI」與「已刪除帳號」。單靠 NULL 無法區分，前端會把已刪除帳號的舊訊息標成 CityLink AI，等於替產品說出它沒說過的話。`author_kind` 讓兩者分開，而 `group_chat_messages_ai_has_no_sender` 只是把「AI 沒有 profile」寫成約束，不是用來辨識 AI。
 
@@ -59,6 +68,8 @@ revoke all on table public.group_ai_context from service_role;
 
 **清空 context 只移動 `context_starts_at`，不刪除任何訊息。** 任何成員都可以執行，包含剛加入的成員；這一條是產品行為，不是權限細節。
 
+**那一列從哪來（Role 6 N-1）。** 上一版只有 `clear_group_ai_context` 的 `update`，但沒有任何地方**插入**這列——從未被清空的群組就沒有列，`update` 影響 0 列，靜靜失敗。SQL 採兩個做法並用：`clear_group_ai_context` 改用 `insert … on conflict (group_id) do update`（第一次清空就建立該列，並記 `updated_by`），`begin_group_ai_request` 則以 `coalesce((select context_starts_at …), to_timestamp(0))` 取 context 下界——**沒有列等於「從頭就有 context」**，這是產品語意而不是補救預設值。apply 測試實測：從未清空的群組確實無該列，且 `begin` 仍正常運作。
+
 **這是共享狀態的破壞性操作（Role 6 C-3）。** 新加入者可以反覆清空，讓 AI 對話對所有人失去上下文，成本為零；`updated_by`／`updated_at` 只保留最後一次，沒有歷史。三種緩解（伺服器端頻率限制、append-only 稽核、限定 leader）都會改變產品行為，**Adam 於 2026-11-24 確認維持原設計**：任何成員可清空，不加頻率限制、不加稽核。文件明寫：這是任何成員都可反覆觸發的共享重置。
 
 ### 1.3 `public.group_ai_requests`（提問與 log）
@@ -70,15 +81,18 @@ create table public.group_ai_requests (
   asked_by uuid references public.profiles (id) on delete set null,
   idempotency_key uuid not null,
   question text not null check (char_length(btrim(question)) between 1 and 4000),
-  file_ids uuid[] not null default '{}',
+  file_ids uuid[] not null default '{}'
+    check (coalesce(array_length(file_ids, 1), 0) <= 2),
+  turns jsonb not null default '[]'::jsonb,
+  files jsonb not null default '[]'::jsonb,
   status text not null default 'queued'
     check (status in ('queued', 'processing', 'ready', 'failed')),
   error_code text,
   dropped_context boolean not null default false,
   truncated boolean not null default false,
-  chat_chars integer not null default 0,
-  file_chars integer not null default 0,
-  files_used integer not null default 0,
+  chat_chars integer not null default 0 check (chat_chars >= 0),
+  file_chars integer not null default 0 check (file_chars >= 0),
+  files_used integer not null default 0 check (files_used between 0 and 2),
   created_at timestamptz not null default now(),
   claimed_at timestamptz,
   finished_at timestamptz,
@@ -86,6 +100,8 @@ create table public.group_ai_requests (
 );
 create index group_ai_requests_group_recent
   on public.group_ai_requests (group_id, created_at desc);
+create index group_ai_requests_asked_by_recent
+  on public.group_ai_requests (asked_by, created_at desc);
 alter table public.group_ai_requests enable row level security;
 revoke all on table public.group_ai_requests from public, anon, authenticated;
 revoke all on table public.group_ai_requests from service_role;
@@ -93,9 +109,11 @@ revoke all on table public.group_ai_requests from service_role;
 
 這張表是「同時記一筆 log」的落點：截斷、丟棄 context、用了幾個檔案與多少字元，都留在這裡，而不是只寫進伺服器日誌。`ai_request_id` 由訊息指向它，於是「這則回答為什麼被截斷」可以事後回答。
 
+**`turns` 與 `files` 是實際欄位（本版更正）。** 前兩版只在 `begin` 的回傳型別裡出現這兩個名字，表上沒有對應欄位，於是「重放」只能重新組裝——而聊天在長大，重放就會拿到**不同的** context。SQL 現在把組裝好的 context snapshot （`turns jsonb`、`files jsonb`，含每則訊息的 author/字元數）與排序後的 `file_ids` 一起插入該列，冪等重放回傳的是**存進去的同一份 snapshot**，逐字不變。代價寫清楚：context 文字存在這张表裡，與 `group_chat_messages.body` 有重複；這是 log 表的既定用途（§1.3 標題），保留期同 §5（永久）。`file_ids` 的陣列長度另有 CHECK ≤ 2（Role 6 §1.3 備註：只靠 RPC 與 UI 驗，日後任何直接 insert 的路徑就能塞第三個檔案）。
+
 **表權限全部收回，包含 `service_role`（Role 6 F-1）。** 上一版給 `service_role` `select, insert, update`，理由是「否則 log 永遠停在 `queued`」。那個理由對，但解法錯：`finish_group_ai_request` 是 `security definer`、owner 是 `postgres`，函式內部用的是 **owner 的權限**，呼叫者只需要 `EXECUTE`。多給表權限等於讓伺服器可以**繞過 RPC 直接寫**，而 B-1 要建立的性質正是「AI 寫入只有一個閘門」：直接寫可以把 request 標成 `ready`、填上 `finished_at`，**卻不插入對應的聊天訊息**——log 說答過了，聊天室裡什麼都沒有，沒有任何約束抓得到這種不一致。同一份設計裡 §1.2 對 `group_ai_context` revoke `service_role`、這裡卻 grant，本身就是訊號。**兩張表都只由 definer RPC 寫，兩張都不給表權限。**
 
-**冪等要比對內容，不能只比 key（Role 6 F-2）。** 只靠「同 key 回傳既有列」，客戶端用同一把 key 問不同問題時會拿到舊的 `question`／`turns`／`files`，伺服器照舊 context 回答，使用者卻以為在問新問題——冪等就變成釘選舊答案。因此 `begin_group_ai_request` 在遇到既有 key 時**比對 `question` 與排序後的 `file_ids`**：相同才回傳既有列（含 `turns`／`files`），不同則拋 `group_ai_idempotency_conflict`，要求換一把 key。
+**冪等要比對內容，不能只比 key（Role 6 F-2）。** 只靠「同 key 回傳既有列」，客戶端用同一把 key 問不同問題時會拿到舊的 `question`／`turns`／`files`，伺服器照舊 context 回答，使用者卻以為在問新問題——冪等就變成釘選舊答案。因此 `begin_group_ai_request` 在遇到既有 key 時**比對 `question` 與排序後的 `file_ids`**：相同才回傳既有列（`turns`／`files` 取自該列的 snapshot，不是重新組裝），不同則拋 `group_ai_idempotency_conflict`（45N07），要求換一把 key。比對用的是**排序後**的 `file_ids`（同一組檔案換順序不算不同請求），儲存也存排序後的結果——兩邊不一致的話重試就永遠對不上。
 
 **unique 不含 `asked_by`（同一項）。** `asked_by` 是 `on delete set null`，而 unique 約束把 NULL 視為互不相同，profile 刪除後去重會悄悄失效。改為 `unique (group_id, idempotency_key)`：key 是客戶端每問一次產生一把的 UUID，群組內唯一已足夠，且不依賴一個會變成 NULL 的欄位。
 
@@ -121,7 +139,19 @@ revoke all on table public.group_ai_requests from service_role;
 | `clear_group_ai_context`            | `authenticated`       | `p_group_id uuid`                                                                                                                                         | `context_starts_at timestamptz`                                                     | 任何成員可執行；只 `update ... set context_starts_at = now()`，不動任何訊息。                                                                                                                                                                                                                                                                       |
 | `list_group_chat_messages_ai`（新） | `authenticated`       | 與 `list_group_chat_messages` 相同簽章                                                                                                                    | 既有四個欄位 + `author_kind text, truncated boolean`                                | 委派給共用的 private helper，見下。                                                                                                                                                                                                                                                                                                                 |
 
-`begin`、`clear`、`list_group_chat_messages_ai` 皆 `security definer`、`set search_path to ''`、actor 取自 `auth.uid()`，`revoke all ... from public, anon` 後 `grant execute to authenticated`。`claim` 與 `finish` 只 `grant execute to service_role`。
+**逐支函式的授權（Role 6 R-2 要求，取代上一版那一句摘要）。** 上一版只對 `begin`／`clear`／`list_group_chat_messages_ai` 寫了 revoke，`claim` 與 `finish` 完全沒有——而 PostgreSQL 對新函式預設授與 **PUBLIC** `EXECUTE`，`authenticated` 是 PUBLIC 的成員。照那段字面寫出來的 migration 會讓**任何登入者**直接呼叫 `finish_group_ai_request`，自己插入一條 `author_kind='ai'`、署名 CityLink AI 的訊息，正好把 Adam 批准 B-1 時要建立的性質（AI 寫入只有一個閘門）重新打開。同一版也沒寫 `claim`／`finish` 是 `security definer`：表權限已全數 revoke，security invoker 版本在 `update`／`insert` 時會 permission denied，照文件寫不出能動的 SQL。因此本節改成逐支列出，且 SQL §8 一律「先 revoke 全部（指名 `public, anon, authenticated, service_role`）再 grant」：
+
+| 函式（簽章）                                                                             | 執行身分           | `set search_path = ''` | revoke 對象                                 | grant `EXECUTE` 給    | actor 來源               |
+| ---------------------------------------------------------------------------------------- | ------------------ | ---------------------- | ------------------------------------------- | --------------------- | ------------------------ |
+| `private.list_group_chat_messages_page(uuid,timestamptz,uuid,integer)`                   | `security definer` | 是                     | `public, anon, authenticated, service_role` | **無人**              | 內部委派，不對外         |
+| `public.list_group_chat_messages_ai(uuid,timestamptz,uuid,integer)`                      | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`             |
+| `public.begin_group_ai_request(uuid,text,uuid[],uuid)`                                   | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`             |
+| `public.clear_group_ai_context(uuid)`                                                    | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`             |
+| `public.accept_ai_disclosure()`                                                          | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`             |
+| `public.claim_group_ai_request(uuid)`                                                    | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`（F-4） |
+| `public.finish_group_ai_request(uuid,text,boolean,boolean,integer,integer,integer,text)` | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`（F-4） |
+
+三個重點：(1) **revoke 一定指名 `service_role`**——Supabase 的 `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` 會把新物件自動授與 `anon`／`authenticated`／`service_role`（P1 preflight 實測過預設權限的存在），只寫 `from public, anon` 等於留下一條沒有人授權過卻確實存在的路徑；(2) 表（`group_ai_context`／`group_ai_requests`）**不授任何權限給任何角色**，寫入只透過上表的 definer 函式；(3) `private` 那支 helper 不給任何人 `EXECUTE`，只由兩支 public definer 函式委派。**apply 測試實測**：`set role authenticated` 呼叫 `claim`／`finish` 得到 `permission denied`，`set role service_role` 能 claim+finish 但對兩張表仍是 permission denied。
 
 **`finish` 不看 `auth.uid()`（Role 6 F-4）。** `service_role` 呼叫時 `auth.uid()` 是 NULL；若照「actor 取自 `auth.uid()`」的字面在 `finish` 裡加一句 actor 檢查，這支 RPC 會永遠失敗。它的授權依據是**request 列的存在與狀態**，加上 `EXECUTE` 只給 `service_role`；不查提問者身分，也不比對任何使用者。
 
@@ -134,6 +164,32 @@ revoke all on table public.group_ai_requests from service_role;
 **provider 呼叫不在資料庫內。** `begin_group_ai_request` 只做權限、資格、context 組裝與排隊；伺服器（Edge Function 或 Express，形狀已是 `server/ai/chat/answerQuestion.ts`）先 `claim`、呼叫 OpenRouter／DeepSeek、再以 `service_role` 呼叫 `finish_group_ai_request` 寫回。資料庫不持有 key。
 
 **trigger 現況。** `group_chat_messages` 上沒有任何 trigger（該 migration 的三個 trigger 全在 `group_recruitment_posts`），所以插入 AI 列不會被成員資格 trigger 擋下。這一點 Role 6 要求寫進契約，已記錄。
+
+### 2.1 限流：在 RPC 內、交易式（Adam 2026-11-24 決定）
+
+在 `begin_group_ai_request` 寫入 request 列**之前**，於同一個交易內數三件事，任一超限即 `raise exception` 帶 `group_ai_rate_limited` 與 `retry_after`（秒）：
+
+| 檢查               | 上限                        | 拒絕原因      |
+| ------------------ | --------------------------- | ------------- |
+| 本群組今日提問數   | 20（UTC 日界）              | `group_daily` |
+| 本成員今日提問數   | 10（跨所有群組，UTC 日界）  | `user_daily`  |
+| 本群組進行中請求數 | 1（`queued`／`processing`） | `in_flight`   |
+
+**為什麼一定要在 RPC 內。** 前端再怎麼改都還是要經過這支函式，所以這是唯一無法繞過的位置；也不需要新服務。數字放在 `shared/aiRateLimit.ts`，SQL 與客戶端共用同一組常數，避免兩邊各自維護。
+
+**併發必須加鎖。** 「先數再寫」在兩個並行呼叫下會同時通過——兩邊都數到 19，然後都插入。因此 `begin_group_ai_request` 在計數前先取 `pg_advisory_xact_lock(hashtextextended(p_group_id::text, 0))`，交易結束自動釋放。沒有這把鎖，「交易式檢查」只是看起來安全。
+
+**in-flight 不會被殭屍請求卡住。** `queued`／`processing` 超過 120 秒視為死亡、不計入 in-flight，否則伺服器一崩，該群組就卡到隔天。`retry_after` 對 `in_flight` 是「等這次跑完」的估計值（例如 15 秒），對每日上限則是到下一個 UTC 零時的秒數，且永不小於 1——不讓 UI 說出「0 秒後重試」。
+
+**這是成本控制，不是安全邊界。** 20／10／1 是產品選擇，可由 Adam 隨時調整；真正的安全邊界仍是 `finish_group_ai_request` 只給 `service_role`。
+
+**§2.1 的四個實作決定（Role 6 R-1 要求的 G-1／G-2／G-3／G-5，本輪定案）。**
+
+- **G-1（常數怎麼「共用」）：採字面重複 + 釘住測試。** 上一版寫「數字放在 `shared/aiRateLimit.ts`，SQL 與客戶端共用同一組常數」——這句話做不到：migration 是 checked-in 的靜態 SQL，不會去 import TypeScript 常數。三個可行做法（build 期產生 SQL、把數字放設定表、SQL 寫字面值再加一支比對測試）裡採第三個：SQL 直接寫 `20`／`10`／`1`／`120`，由 `server/stage6AiChatSqlContract.test.ts` 逐字比對 `shared/aiRateLimit.ts` 的 `AI_RATE_LIMITS` 與 SQL 中的字面值，任一邊改動另一邊不變就紅。代價如實記錄：這仍是**兩份**數字，測試只能保證一致、不能讓 SQL 動態讀取設定；改數字要同時改兩處並重跑測試。
+- **G-2（跨群組的 `user_daily`）：兩把鎖，固定順序 群組 → 成員。** 只有群組鎖時，同一個人同時在兩個群組提問會各自數到自己的群組、同時通過（兩邊都數到 9）。因此 `begin_group_ai_request` 依序取 `pg_advisory_xact_lock(hashtextextended('group:' || p_group_id::text, 0))` 再取 `pg_advisory_xact_lock(hashtextextended('user:' || v_actor::text, 0))`；順序固定，避免兩邊交叉死鎖（A 拿群組等成員、B 拿成員等群組）。鎖都是 transaction 級，交易結束自動釋放，不需要解鎖路徑。key 加 `'group:'`／`'user:'` 前綴，是為了不讓某個 uuid 的雜湊剛好撞上另一個空間的鍵。**代價：** 同一位成員在**不同**群組的並行提問會被序列化，這是精確計數的必要條件；`shared/aiRateLimit.ts` 的文件同步寫明「近似值」的說法已失效。
+- **G-3（每日計數的口徑）：沒被接手過的 `queued` 不計入配額。** 「數今天所有列」會讓 provider 故障日悄悄燒光配額——列寫進去了但從沒跑，使用者什麼都沒得到，卻要等到隔天。計數因此排除 `status = 'queued' and claimed_at is null`，計入 `processing`／`ready`／`failed`（已接手即已花費），而 in-flight 仍是未過期的 `queued`／`processing`。apply 測試實測：五條永遠沒被 claim 的 `queued` 不會把該群組推到 45N06。
+- **G-5（時間源）：全用交易開始的單一 `now()`。** 殭屍判定（`claimed_at < now() - interval '120 seconds'`）與 `retry_after` 的算式必須同源，否則同一次呼叫裡兩次 `now()` 就能算出「還有 -3 秒」之類的矛盾值。SQL 把 `now()` 取一次存進區域變數，所有比較與減法都用它；`retry_after` 以 `greatest(1, …)` 下限包住，且 `in_flight` 給 15 秒估計值、每日上限給到下一個 UTC 零時的秒數。
+- **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 實作結案。
 
 ## 3. Context 預算與規則（產品行為，已定案）
 
@@ -181,7 +237,8 @@ revoke all on table public.group_ai_requests from service_role;
 - 實作位置：`client/src/components/citylink/GroupAiDrawer.tsx`（純前端，接 `shared/aiChatMockReply.ts` 的 mock）。
 - **檔案清單已接上（2026-11-24）。** 群組檔案功能已在 Launch 上線，`GroupChatPage.tsx` 以 `list_group_files(p_group_id)` 取得清單（該函式本身已過濾 `status='current'`、`deleted_at is null`、`retention_expires_at > now()` 與存取權），傳入 drawer 後再經 `isFileEligible` 二次過濾。清單讀取失敗不會擋住聊天：drawer 顯示「檔案清單暫時無法載入」，而不是假裝沒有檔案。
 - **檔案文字由伺服器擷取，不在瀏覽器。** 前端只持有 `id`、檔名與到期日；`SelectableFile.text` 因此是 optional，缺文字時以 0 字元計入預算，而不是報錯。真正的文字擷取與 10,000 字元上限在伺服器（`server/ai/extraction/**`）與 provider 邊界（`server/ai/chat/answerQuestion.ts`）執行。
-- **選了檔案卻沒有文字時要說出來（Role 6 F-8）。** 檔案可能 `unsupported_format`、擷取失敗，或文字為空。規則 4 的提示只覆蓋「對話被丟掉」，不覆蓋「你選的檔案其實沒被讀到」。客戶端**無法事先知道**哪個檔案沒有文字（文字只在伺服器擷取），所以這個判斷只能由伺服器做：`begin` 回傳的 `files` 為空、或缺少某個 `p_file_ids` 時，回傳 `group_ai_file_not_read`，回答開頭另加「（部分選取檔案沒有可讀文字）」，drawer 據此顯示。這是新增的揭露，不改動 Adam 定案的三句提示。
+- **選了檔案卻沒有文字時要說出來（Role 6 F-8）。** 檔案可能 `unsupported_format`、擷取失敗，或文字為空。規則 4 的提示只覆蓋「對話被丟掉」，不覆蓋「你選的檔案其實沒被讀到」。客戶端**無法事先知道**哪個檔案沒有文字（文字只在伺服器擷取），所以這個判斷只能由伺服器做：`finish_group_ai_request` 收到 `p_files_used = 0`（或明顯少於 `file_ids` 的長度）時，回答開頭另加「（部分選取檔案沒有可讀文字）」，drawer 據此顯示。這是新增的揭露，不改動 Adam 定案的三句提示。
+- **兩個提示同時出現時的順序（Role 6 N-6）。** 「（本次未包含較早的對話）」與「（部分選取檔案沒有可讀文字）」可能都適用——例如-budget 已滿、又選了一個掃不出文字的檔案。定案：**context 提示在前、檔案提示在後**，各最多一次，中間以換行分隔；兩個提示都算進 2,500 的硬上限之前附加（截斷發生在它之後，所以提示本身不會被截掉一半）。**逐字強制只涵蓋 §7 的第 1、4 項**，其餘字串（含這兩個提示）由本節的測試與 `shared/aiChatReply.ts` 釘住，不是 Adam 的逐字裁決——這句話是回應 Role 6 對第 189 行「逐字強制」範圍的質疑。
 - **`author_kind` 的客戶端先行版（對應 Role 6 C-2）。** 讀取合約目前還沒有 `author_kind` 欄位（未套用），所以 `mapGroupChatMessages` 一律標記 `authorKind: "member"`，只有這個客戶端自己產生的 AI 回答標為 `"ai"`。前端**不再用 `sender_name_snapshot` 判斷是否為 AI**：把 display name 設成 `CityLink AI` 的成員，其訊息仍是成員訊息。schema 套用後，這個欄位改由伺服器回傳，渲染邏輯不變。
 
 ## 7. 揭露文字
@@ -194,7 +251,14 @@ revoke all on table public.group_ai_requests from service_role;
 4. **「前成員仍可讀取 AI 回答」**——逐字。退出或被移除後，聊天室歷史（含 AI 回答）仍可見。
 5. 每次提問重新同意，不記住選擇。
 
-實作位置：`client/src/lib/aiChatConsent.ts`（五條 statement，兩條標為 `requiredPhrase`，測試逐字比對這兩句；其餘三項以 `toContain` 檢查 provider 路徑與「CityLink AI」）。
+**Adam 裁決後新增的兩項（本輪）：**
+
+6. **其他成員無法單獨退出**——你的提問會把本群組**其他成員**的聊天記錄與本群組檔案文字一併送出，群組沒有 AI 開關、成員沒有個人退出選項（F-12 選項 c 的「明寫接受」）。
+7. **接受只在伺服器記錄一次**——第一次接受會寫下時間戳（F-11），之後每次提問仍要求在介面再勾選；兩边的記錄不一致時以伺服器為準。
+
+**第 5 項的含義變了（要講清楚，不是沿用舊措辭）：** F-11 之後「不記住選擇」只對**這個介面**成立。伺服器確實記住「這個帳號看過揭露」這一件事（一個時間戳，不記錄其他資料）。所以第 5 項現在是 UI 行為，第 7 項是伺服器行為，兩句並存而不是互相否定。
+
+實作位置：`client/src/lib/aiChatConsent.ts`（**七條** statement；只有 `reads-chat`、`former-members` 兩條標為 `requiredPhrase`，測試逐字比對這兩句；其餘以 `toContain` 檢查 provider 路徑、「CityLink AI」、F-12 的「無法單獨退出」與 F-11 的伺服器記錄說法）。**兩句逐字強制只涵蓋第 1、4 項**（Role 6 第三輪對第 189 行的質疑，答案在此）。回答提示的字串（截斷、丟 context、檔案未讀）不屬 Adam 的逐字裁決，由 `shared/aiChatReply.ts`、`shared/aiChatContext.ts` 與 `AI_CHAT_COPY` 釘住，順序見 §6。
 
 ## 8. 檔案範圍
 
@@ -202,47 +266,65 @@ revoke all on table public.group_ai_requests from service_role;
 
 ## 9. 錯誤 token
 
-| token                           | 觸發條件                                       |
-| ------------------------------- | ---------------------------------------------- |
-| `group_ai_no_permission`        | 非成員、或非 `active` 成員嘗試提問             |
-| `group_ai_group_abandoned`      | 群組已 `abandoned`                             |
-| `group_ai_context_cleared`      | 成功清空 context（非錯誤，回傳用）             |
-| `group_ai_file_not_eligible`    | 選取的檔案非本群組、非 `current` 或已過期      |
-| `group_ai_too_many_files`       | 選取超過 2 個                                  |
-| `group_ai_question_empty`       | 提問空白                                       |
-| `group_ai_provider_failed`      | provider 回錯或逾時                            |
-| `group_ai_rate_limited`         | 超出每日或 in-flight 上限；附 `retry_after` 秒 |
-| `group_ai_idempotency_conflict` | 同一 key 但 `question`／`file_ids` 不同（F-2） |
-| `group_ai_file_not_read`        | 選取的檔案沒有可讀文字（F-8）                  |
-| `ai_chat_consent_incomplete`    | 客戶端同意未完成（僅前端）                     |
+**伺服器實際拋出的 token（SQL 裡逐支可查，每個 SQLSTATE 只對應一個原因）：**
+
+| SQLSTATE | token                           | 觸發條件                                                            |
+| -------- | ------------------------------- | ------------------------------------------------------------------- |
+| `45N01`  | `group_ai_no_permission`        | 無 actor、無 profile 列、或非「active 成員且群組未 `abandoned`」    |
+| `45N02`  | `group_ai_group_abandoned`      | **不在本 SQL 拋出**，保留給抽屜在載入群組狀態時先擋（純客戶端提示） |
+| `45N03`  | `group_ai_question_empty`       | 提問為空白（全空白也算）                                            |
+| `45N04`  | `group_ai_file_not_eligible`    | 選取的檔案非本群組、非 `current`、已過期或已刪除                    |
+| `45N05`  | `group_ai_too_many_files`       | 選取超過 2 個                                                       |
+| `45N06`  | `group_ai_rate_limited`         | 超出每日或 in-flight 上限；`retry_after`／`reason` 在 `DETAIL`      |
+| `45N07`  | `group_ai_idempotency_conflict` | 同一 key 但 `question` 或排序後的 `file_ids` 不同（F-2）            |
+| `45N08`  | `group_ai_request_unknown`      | `claim`／`finish` 指到一個不存在的 request id                       |
+| `45N09`  | `group_ai_disclosure_required`  | 提問者沒有 AI 揭露接受記錄（Adam F-11，本輪新增）                   |
+| `45N10`  | `group_ai_answer_empty`         | `finish` 以成功結案卻沒有回答文字（本輪新增，一個 code 只講一件事） |
+| `45N11`  | `group_ai_question_too_long`    | 提問超過 4,000 字元（本輪從 45N03 拆出來，空問與超長是兩種修法）    |
+
+**改動說明（Role 6 第三輪 §9）：**
+
+- `group_ai_context_cleared` **刪除**：清空 context 是成功路徑，回傳 `context_starts_at` 即可，不需要一個偽 token。
+- `group_ai_provider_failed` 移到**寫回路徑**：它不是 PostgreSQL token，而是 `finish_group_ai_request` 寫進 `group_ai_requests.error_code` 的值（`provider_timeout`／`provider_failed`），聊天室對使用者顯示一句普通失敗提示。列在這裡是因為它會出現在客戶端看到的 payload 中。
+- `group_ai_file_not_read` **改為旗標**而非 token：`files_used = 0` 才是判據（§6），拋錯會讓「提問仍然被回答」變成失敗。
+- `ai_chat_consent_incomplete` 保留為**僅前端** token（勾選未完成時根本不送出）。
+- 45M01／45M02／45M03／45M04 是**套用時期**的目標守衛（沿用 P1 的 `private.assert_citylink_target`），不是執行期 token。
 
 ## 10. 不在本草案範圍
 
-- 任何 SQL 檔或 migration；schema 變更需 Role 6 exact-head 審查與 Adam 指名授權。
+- **套用這個提案。** SQL 檔已寫出（`docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql`，本輪新增，未套用）：它需要 Role 6 在 **blob 層級**做 exact-head 審查，再由 Adam 指名確切 blob 授權，才可對 Test/Launch 執行。本輪沒有對任何 Supabase 專案執行過任何 SQL。
+- 本地套用證據的範圍：`server/stage6AiChatMigrationApplies.test.ts` 把本檔套在一個**仿製 schema**（`server/fixtures/aiChatStubSchema.sql`）上，能證明語法可套用、行為符合規格，**不能**證明 live 的 Auth、真實表上的 RLS、既有 grant、並發或 provider。
 - provider 實作與 key（後續獨立指派）。
 - 既有 `group_analysis_plans` / `group_analysis_jobs` 的處置：不刪、不改，只停用。
-- 速率限制的 SQL 實作本身（設計已定案於 §2.1，尚未寫成 migration）。
+- 速率限制的 SQL 已寫進提案（§2.1 的 20／10／1／120 與兩把 advisory lock），但**未套用**，也未做並發壓測。
 - 清空 context 的防濫用機制：Adam 已確認不做，維持任何成員可清空。
 
 ## 11. Role 6 審查處置
 
-**第一次審查（2026-11-24）：** `bd60b5c`，blob `73c9297732a4ceb87a3c2f6893aa10c734148be5`，163 行，sha256 `e709a4c1249fb4b6716c2f21ed77c6c06d290ce65e61d15aad14d7755b82de80`。
+**審查史（完整 OID，Role 6 F-10／N-3）。** 本檔的 blob 鏈與實際被審查的是哪一份，逐段對齊：
 
-**第二次審查（focused 複查，2026-11-24）：** `934ee78`，blob `b4fed194958c0bbb89a4ffc890e23a060514cc91`，220 行，sha256 `0618ee5272812c60b421e4b02ee6fd32b01baff936854286e60bd7a8e4f3693b`。
+| 輪次                 | 被審查的 commit | blob（完整 OID）                           | 大小             | sha256                                                             | 產出                      |
+| -------------------- | --------------- | ------------------------------------------ | ---------------- | ------------------------------------------------------------------ | ------------------------- |
+| 第一輪 exact-head    | `bd60b5c`       | `73c9297732a4ceb87a3c2f6893aa10c734148be5` | 163 行／12,017 B | `e709a4c1249fb4b6716c2f21ed77c6c06d290ce65e61d15aad14d7755b82de80` | B-1、B-2、C-1…C-8         |
+| （未經審查的中間版） | `934ee78`       | `b4fed194958c0bbb89a4ffc890e23a060514cc91` | 220 行／25,224 B | `0618ee5272812c60b421e4b02ee6fd32b01baff936854286e60bd7a8e4f3693b` | 無（Role 6 審的是下一份） |
+| 第二輪 focused       | `3a57556`       | `bdb31785989507f593120d61bbffa21df68b1bf6` | 239 行／27,729 B | `a19c79a2473de5a57c82b00279a068ef617827e857865504b6b3486a31f57050` | F-1…F-12、G-1…G-5         |
+| 第三輪 focused       | `352e88b`       | `aa93a5f543efea4b8add0bd65e8482b0a7b8d566` | 277 行／36,679 B | `d361ab98ff73120f99de3367fc7c79ebd25b0b947d2e1bb8a39aebaca76b569c` | R-1、R-2、N-1…N-6         |
 
-| 項  | 內容摘要                                                           | 處置                                                                                                                                                                                                                    |
-| --- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| B-1 | 寫入路徑自相矛盾；任何成員可偽造 AI 訊息；log 表停在 `queued`      | **已改寫**：拆成 `begin_group_ai_request`（authenticated）與 `finish_group_ai_request`（僅 `service_role`）；`group_ai_requests` 不再 revoke `service_role`。**已由 Adam 2026-11-24 批准**（寫回只經 `service_role`）。 |
-| B-2 | `RETURNS TABLE` 加欄位不是 additive，需 DROP+CREATE                | **已改寫**：新增 `list_group_chat_messages_ai`，舊函式一字不動（沿用 `_capacity` 先例）。**已由 Adam 2026-11-24 批准**（新增 `list_group_chat_messages_ai`，舊函式不動）。                                              |
-| C-1 | `ai_request_id` 只有註解、沒有約束                                 | **已修**：外鍵 + `group_chat_messages_ai_request_only_for_ai`。                                                                                                                                                         |
-| C-2 | 名稱 CHECK 只約束一半，成員可用 display name 冒充                  | **已修**：文件明定前端一律以 `author_kind` 渲染，並列為 P2 驗收項；CHECK 的 drop/recreate 成本已記錄。                                                                                                                  |
-| C-3 | 任何成員可反覆清空共享 context，無頻率限制、無稽核                 | **Adam 2026-11-24 確認維持原設計**：任何成員可清空，不加頻率限制、不加稽核。文件明寫這是共享重置。                                                                                                                      |
-| C-4 | 無冪等鍵、無速率限制                                               | **冪等已修**（`idempotency_key` + unique）；**限流已定案**：RPC 內交易式檢查，見 §2.1（`group_ai_rate_limited` + `retry_after`）。                                                                                      |
-| C-5 | 字元 ≠ token；emoji 與 `.length` 不一致                            | **已修**：文件寫明以 `Array.from().length` 計數，並保留改為 `Intl.Segmenter` 時必須同步改測試的規定。                                                                                                                   |
-| C-6 | 「提示字元計入 2,500」語意不明                                     | **已修**：改寫為「截斷提示字串本身計入 2,500」。                                                                                                                                                                        |
-| C-7 | 標題說兩句、清單五項                                               | **已修**：改寫為五項，第 1、4 項逐字強制，其餘包含比對。                                                                                                                                                                |
-| C-8 | `group_ai_requests` cascade 與 `group_chat_messages` restrict 相反 | **已修**：改為 `on delete restrict`。                                                                                                                                                                                   |
-| —   | `group_chat_messages` 無 trigger，插入 AI 列不會被擋               | **已記錄**於第 2 節。                                                                                                                                                                                                   |
+**必須如實寫的一件事（Role 6 N-3／F-9）。** 第二輪送審的那份（`bdb3178`）已經包含 §2.1 限流規格；修 F-1…F-10 的那次提交（`352e88b`）**把整節 §2.1 刪掉了**，卻沒有更新任何指向它的句子——這不是 Role 6 誤讀，是實際發生的回退（字串計數：`### 2.1` 1→0、`pg_advisory` 1→0、`hashtextextended` 1→0、`aiRateLimit` 1→0）。本版把該節**逐字還原**（來源為 `bdb3178` 第 121–137 行，未改寫、未重新措辭），並在後面補上四個實作決定。同一次提交也沒有把 `bdb3178` 寫進審查史，因此上表把四個 blob 全列出來。
+
+| 項  | 內容摘要                                                           | 處置                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B-1 | 寫入路徑自相矛盾；任何成員可偽造 AI 訊息；log 表停在 `queued`      | **已改寫**：拆成 `begin_group_ai_request`（authenticated）＋ `claim_group_ai_request` ＋ `finish_group_ai_request`（後兩者僅 `service_role`）。**已由 Adam 2026-11-24 批准**（寫回只經 `service_role`）。表權限**連 `service_role` 一起 revoke**，寫入只透過 definer 函式（§1.3／F-1）；上一版這格寫的「`group_ai_requests` 不再 revoke `service_role`」是 F-1 修正前的舊文字，與 §1.3 第 91 行矛盾，依 Role 6 N-2 於本版改寫。 |
+| B-2 | `RETURNS TABLE` 加欄位不是 additive，需 DROP+CREATE                | **已改寫**：新增 `list_group_chat_messages_ai`，舊函式一字不動（沿用 `_capacity` 先例）。**已由 Adam 2026-11-24 批准**（新增 `list_group_chat_messages_ai`，舊函式不動）。                                                                                                                                                                                                                                                      |
+| C-1 | `ai_request_id` 只有註解、沒有約束                                 | **已修**：外鍵 + `group_chat_messages_ai_request_only_for_ai`。                                                                                                                                                                                                                                                                                                                                                                 |
+| C-2 | 名稱 CHECK 只約束一半，成員可用 display name 冒充                  | **已修**：文件明定前端一律以 `author_kind` 渲染，並列為 P2 驗收項；CHECK 的 drop/recreate 成本已記錄。                                                                                                                                                                                                                                                                                                                          |
+| C-3 | 任何成員可反覆清空共享 context，無頻率限制、無稽核                 | **Adam 2026-11-24 確認維持原設計**：任何成員可清空，不加頻率限制、不加稽核。文件明寫這是共享重置。                                                                                                                                                                                                                                                                                                                              |
+| C-4 | 無冪等鍵、無速率限制                                               | **冪等已修**（`idempotency_key` + unique）；**限流已定案**：RPC 內交易式檢查，見 §2.1（`group_ai_rate_limited` + `retry_after`）。                                                                                                                                                                                                                                                                                              |
+| C-5 | 字元 ≠ token；emoji 與 `.length` 不一致                            | **已修**：文件寫明以 `Array.from().length` 計數，並保留改為 `Intl.Segmenter` 時必須同步改測試的規定。                                                                                                                                                                                                                                                                                                                           |
+| C-6 | 「提示字元計入 2,500」語意不明                                     | **已修**：改寫為「截斷提示字串本身計入 2,500」。                                                                                                                                                                                                                                                                                                                                                                                |
+| C-7 | 標題說兩句、清單五項                                               | **已修**：改寫為五項，第 1、4 項逐字強制，其餘包含比對。                                                                                                                                                                                                                                                                                                                                                                        |
+| C-8 | `group_ai_requests` cascade 與 `group_chat_messages` restrict 相反 | **已修**：改為 `on delete restrict`。                                                                                                                                                                                                                                                                                                                                                                                           |
+| —   | `group_chat_messages` 無 trigger，插入 AI 列不會被擋               | **已記錄**於第 2 節。                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 11.1 第二輪（focused 複查）的發現
 
@@ -256,22 +338,40 @@ revoke all on table public.group_ai_requests from service_role;
 | F-6  | 走舊函式的客戶端會把 AI 回答顯示成成員訊息                        | **已寫成 P2 驗收項**：AI 回答上線前，所有讀取聊天室的介面必須改用 `_ai` 版本。                                                               |
 | F-7  | 哪一層算預算沒寫清楚                                              | **已寫明**：伺服器權威，客戶端只做預覽，不得顯示剩餘額度或據此阻止送出。                                                                     |
 | F-8  | 選了檔案卻 0 字元時沒有揭露                                       | **已加**：drawer 標示「沒有可讀文字」、`group_ai_file_not_read`、回答開頭另加「（部分選取檔案沒有可讀文字）」。                              |
-| F-9  | 自述變動清單不完整（漏 §8、§10、檔頭）                            | **已修**：見下方完整清單。                                                                                                                   |
-| F-10 | 引用只有 7 字元 blob，無 sha256                                   | **已修**：本節標題補上兩個審查點的完整 OID 與 sha256。                                                                                       |
-| F-11 | 同意只在瀏覽器把關，伺服器無法驗證提問者看過揭露                  | **列為 Adam 待決**（見 11.2）。                                                                                                              |
-| F-12 | 其他成員的訊息與檔案由提問者一人同意即外送，無退出機制            | **列為 Adam 待決**（見 11.2）。                                                                                                              |
+| F-9  | 自述變動清單不完整                                                | **本版重寫**（§11.4）。先前那格自稱「已修」，但清單本身漏了整節 §2.1 的刪除，Role 6 判為「不只不完整，且含不實陳述」——本輪如實更正。         |
+| F-10 | 引用只有 7 字元 blob、無 sha256                                   | **已修**：§11 審查史改用完整 OID＋sha256＋行數＋bytes，並列出中間未經審查的 `b4fed19`；檔頭第 5 行不再是 7 字元縮寫。                        |
+| F-11 | 同意只在瀏覽器把關，伺服器無法驗證提問者看過揭露                  | **Adam 已裁決**（§11.2）：伺服器端記錄一次接受（`profiles.ai_disclosure_accepted_at`），`begin` 以 45N09 檢查。                              |
+| F-12 | 其他成員的訊息與檔案由提問者一人同意即外送，無退出機制            | **Adam 已裁決**（§11.2）：選項 c——無群組開關、無成員退出，把接受寫明白。                                                                     |
 
-### 11.2 需要 Adam 決定的產品同意問題（F-11／F-12）
+### 11.2 Adam 的裁決（F-11／F-12／C-4，2026-11-24）
 
-這兩項不是 SQL 缺陷，schema 也修不了，但沒有決定就不能對外上線：
+原本列為「待決」的兩個同意問題已由 Adam 裁決；原問題照原樣保留以便對照。
 
-- **F-11：** `begin_group_ai_request` 無法知道提問者是否看過揭露文字。任何能構造請求的 active 成員，都能在不見揭露的情況下把群組對話與檔案內容送到中國大陸 provider。前端同意是 UI 承諾，不是可驗證的事實。可選做法：伺服器記錄一次同意（例如 `profiles.ai_disclosure_accepted_at`）並在 `begin` 檢查、或接受這個風險並在文件寫明。
-- **F-12：** context 含其他成員最多 4,000 字元訊息與 10,000 字元群組檔案文字，由提問者一人同意即外送，其他成員沒有退出機制，而 §5 規定保留永久。可選做法：群組級 AI 開關（leader 設定）、成員級退出、或兩者皆無並明寫接受。
+- **F-11 原問題：** `begin_group_ai_request` 無法知道提問者是否看過揭露文字。任何能構造請求的 active 成員，都能在不見揭露的情況下把群組對話與檔案內容送到中國大陸 provider。前端同意是 UI 承諾，不是可驗證的事實。
+- **F-11 裁決：** 「在伺服器端記錄一次接受，並在 `begin` 檢查。」落點：`profiles.ai_disclosure_accepted_at timestamptz`（可為 NULL，**不 backfill**——既有使用者未曾看過新揭露文字，預設接受等於把未取得的同意寫進資料庫）；新 RPC `accept_ai_disclosure()` 由本人在抽屜勾選後呼叫；`begin_group_ai_request` 在任何寫入**之前**檢查該欄位，未接受即拋 `45N09 group_ai_disclosure_required`。**已知局限（記錄，不掩蓋）：** 它記錄的是「該帳號在該時點按過接受」，不是「讀過並理解」；它堵掉的是「繞過前端直接構造請求」，堵不掉想法改變。**與 §7 第 5 項的關係：** 同意只記一次（Adam 選擇），所以「每次提問重新同意」變成純 UI 行為——每次都要求勾選，伺服器只在第一次寫入時間戳。兩邊不一致時以伺服器為準，本檔不做修飾。
+- **F-12 原問題：** context 含其他成員最多 4,000 字元訊息與 10,000 字元群組檔案文字，由提問者一人同意即外送，其他成員沒有退出機制，而 §5 規定保留永久。
+- **F-12 裁決：** **選項 c**——既不做群組級 AI 開關，也不做成員級退出，而是**把接受寫明白**：揭露文字必須點出「你的提問會把本群組其他成員的聊天記錄與本群組檔案文字一併送給 OpenRouter 轉送的 DeepSeek（中國大陸 provider），其他成員無法單獨退出」。SQL 因此刻意**沒有** `ai_enabled`／opt-out 欄位或 trigger（本輪新增靜態測試擋住這類欄位出現）。這一項的合規判斷屬 Adam／產品；Kayk 不自行評估法律效果。
+- **C-4 裁決（先前已定，連同數字入檔）：** 交易式檢查在 `begin_group_ai_request` 內、寫 request 列之前；上限 20／群組／UTC 日、10／成員／UTC 日、1 個並行；`queued`／`processing` 超過 120 秒視為死亡；拋 `group_ai_rate_limited`（45N06），`retry_after` 與 `reason` 放在 `DETAIL`。
 
-### 11.3 本版實際改了哪些節（F-9）
+### 11.3 第三輪（focused，2026-11-24）的發現與處置
 
-第一次審查後（`73c9297` → `b4fed19`）改了：檔頭第 3、5 行、§1.1、§1.2、§1.3、§2、§3、§4、§6、§7、§8、§10、§11；§0、§5、§9 未動。
+| 項   | 內容                                                                                                                                                                   | 處置                                                                                                                                                                                    |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| R-1  | §2.1 整節在 `aa93a5f` 被刪除，五處仍指向它；Adam 的 C-4 裁決在被審查的 blob 中不存在                                                                                   | **已還原**（逐字取自 `bdb3178` 第 121–137 行），並定稿 G-1／G-2／G-3／G-5，見 §2.1 末。                                                                                                 |
+| R-2  | 第 124 行對 `claim`／`finish` 沒有 revoke（PostgreSQL 預設授 PUBLIC `EXECUTE`，`authenticated` 是 PUBLIC 成員）→ 任何登入者可偽造 AI 訊息；也未寫 definer／search_path | **已改寫**成逐支函式的 ACL 表（七支，含 `private` helper 與 `accept_ai_disclosure`）；SQL §8 一律先 revoke `public, anon, authenticated, service_role` 再 grant，並以 `set role` 實測。 |
+| N-1  | `group_ai_context` 的列沒有人建立，`clear` 的 `update` 影響 0 列                                                                                                       | **已定案**：`clear` 用 `insert … on conflict (group_id) do update`；`begin` 以 `coalesce((select context_starts_at …), to_timestamp(0))` 取下界。見 §1.2。                              |
+| N-2  | 第 251 行（B-1 處置列）仍寫「`group_ai_requests` 不再 revoke `service_role`」，與 §1.3／F-1 自相矛盾                                                                   | **已改寫**該列，並註明那是 F-1 修正前的舊文字（見上表）。                                                                                                                               |
+| N-3  | 審查史只列兩個 blob、漏掉 `bdb3178` 那輪，把 `b4fed19` → 本版當成一步                                                                                                  | **已補**四段 blob 表（含未經審查的中間版）與 sha256／行數／bytes，並如實寫 §2.1「曾被加入又被刪除」。                                                                                   |
+| N-4  | `ADD COLUMN`＋`CHECK` 同一語句在 ACCESS EXCLUSIVE 下全表掃描 live 聊天表，成本未記錄                                                                                   | **已採納**：先加欄位；五條約束各自 `not valid`；§3.1 逐條 `validate constraint`（刻意獨立成段，可拆成第二次部署）；preflight 須記錄行數、`pg_total_relation_size`、鎖等待。             |
+| N-5  | `group_chat_messages.ai_request_id` 沒索引，`finish` 的冪等路徑會掃表                                                                                                  | **已加** partial index `group_chat_messages_ai_request`（`where ai_request_id is not null`），見 §1.1。                                                                                 |
+| N-6  | 兩個提示可能同時出現、順序未定；第 189 行的逐字強制只涵蓋第 1、4 項                                                                                                    | **已定案**：context 提示在前、檔案提示在後，各最多一次；§6 並寫明逐字強制只涵蓋 §7 第 1、4 項。                                                                                         |
+| 補充 | `file_ids uuid[]` 沒有陣列長度約束，≤2 只在 RPC 與 UI 驗                                                                                                               | **已加** `check (coalesce(array_length(file_ids, 1), 0) <= 2)`（建表時的 CHECK，不掃表）。                                                                                              |
 
-第二次審查後（`b4fed19` → 本版）改了：§1.2（C-3 改為已確認）、§1.3（F-1、F-2、F-3）、§2（三段式、F-4、F-5、F-6）、§2.1（限流，Adam 裁決）、§3（F-7）、§6（F-8）、§9（兩個新 token）、§11（F-1…F-12、完整 OID）；§0、§4、§5、§7、§8、§10 未動。
+### 11.4 本版實際改了哪些節（F-9、N-3）
 
-**目前狀態：** B-1、B-2、C-3、C-4 已由 Adam 於 2026-11-24 裁決；F-1…F-10 已在本版修正；F-11、F-12 待 Adam 決定。修正後尚未經第三次審查。
+- `73c9297`（第一輪審查的對象）→ `b4fed19`（commit `934ee78`，**未經審查**）：檔頭、§1.1、§1.2、§1.3、§2、§3、§4、§6、§7、§8、§10、§11。
+- `b4fed19` → `bdb3178`（第二輪審查的對象）：新增 **§2.1**（Adam 的 C-4 裁決）、§1.2（C-3 確認）、§1.3、§2、§3、§6、§9、§11。
+- `bdb3178` → `aa93a5f`（第三輪審查的對象）：§1.1／§1.2／§1.3／§2／§3／§6／§9／§11 多處，**並誤刪 §2.1**（R-1）。
+- `aa93a5f` → **本版**（回應第三輪）：檔頭（完整 OID、SQL 檔已存在）；§1.1（N-4 拆段＋N-5 索引）；§1.2（N-1 列來源）；§1.3（`turns`／`files` 是實際欄位的更正、`file_ids` 長度 CHECK、F-2 措辭改為 snapshot 重放）；§2（R-2 逐支函式 ACL 表）；§2.1（逐字還原＋G-1／G-2／G-3／G-5 定稿）；§6（N-6 提示順序、F-8 改為旗標）；§9（加 45N09／45N10／45N11、刪 `group_ai_context_cleared`、`group_ai_file_not_read` 改為旗標、標出純客戶端 token、補 SQLSTATE 欄）；§10（改掉「不含任何 SQL 檔」，寫明本地證據的範圍）；§11（審查史四 blob 表、B-1 列更正、F-9／F-10 更正、11.2 裁決、11.3 第三輪表、本節重寫）。§0、§3、§4、§5、§7、§8 本輪未改動；§7 第 5 項與 F-11 的關係在 §11.2 說明，未改該節文字。
+
+**目前狀態：** B-1、B-2、C-3、C-4、F-11、F-12 已由 Adam 裁決；R-1、R-2、N-1…N-6 已在本版處理。**SQL 提案檔已寫出但未套用**，附本地套用／行為測試（16 項）與靜態釘住測試（22 項），全數通過。依 Role 6 本輪明確指示**不做第四輪文件複查**：Role 6 先對本版新 blob 做「確認還原」短查（§2.1、ACL 段、§11），隨後在 **SQL blob 上做 exact-head 審查**。本檔與該 SQL 都不構成任何 migration、signed-in QA、merge、部署或發布授權。

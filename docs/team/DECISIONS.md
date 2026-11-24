@@ -1538,4 +1538,57 @@ draft) so the deployed code has a reviewable source; nothing was deployed or mer
 - **C-4 — the rate limit is a transactional check inside the RPC.** Before inserting the request row, `begin_group_ai_request` counts today's questions for the group, today's for the member, and the group's in-flight requests; any breach raises `group_ai_rate_limited` with `retry_after` in seconds. Chosen over a server-side limiter because the RPC is the one path no client can bypass, and it needs no new service. The numbers are a product choice, not a security boundary: 20 per group per UTC day, 10 per member per UTC day, 1 in flight per group, with a request `queued`/`processing` for more than 120 seconds treated as dead so a crashed server cannot wedge a group until midnight. The check takes `pg_advisory_xact_lock` on the group before counting, because count-then-insert is not atomic on its own. Constants live in `shared/aiRateLimit.ts` so the SQL and the client cannot drift.
 - **C-3 — the shared reset stays as designed.** Any member, including one who just joined, may clear the group's AI context; clearing moves `context_starts_at` and deletes nothing. No rate limit and no audit trail are added. Recorded explicitly as a shared, repeatable reset rather than left implicit.
 
-Still not authorized by this entry: no SQL file exists for any of it, nothing is applied, and the migration needs Role 6's exact-head review of the final blob plus Adam naming the exact SQL head.
+Still not authorized by this entry: no SQL file exists for any of it, nothing is applied, and the migration needs Role 6's exact-head review of the final blob plus Adam naming the exact SQL head. — see the entry below: as of 2026-11-24 (later the same day) the SQL file does exist, still unapplied.
+
+## 2026-11-24 — Group AI chat: Adam rules F-11 (server-recorded acceptance) and F-12 (no switch, no opt-out); the SQL proposal is written
+
+Adam's rulings, given in the Kayk task on 2026-11-24 after Role 6's third focused review
+(`docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md` blob `aa93a5f543efea4b8add0bd65e8482b0a7b8d566`,
+commit `352e88b`). This entry records the decisions and the file that now exists; it authorises
+nothing beyond what the 2026-11-24 chat entry above authorised.
+
+- **F-11 — acceptance is recorded server-side, once, and checked in `begin`.** Adam: "record
+  AI-disclosure acceptance server-side once and check it in `begin`". Implementation shape in the
+  proposal: `profiles.ai_disclosure_accepted_at timestamptz` — nullable, **no backfill**, because
+  existing users never saw this disclosure and a default would manufacture consent. New RPC
+  `public.accept_ai_disclosure()` writes it for the calling actor only.
+  `public.begin_group_ai_request` checks it before any write and raises SQLSTATE `45N09`
+  `group_ai_disclosure_required`. Known limit, stated rather than glossed: the record proves an
+  account pressed accept at a timestamp, not that anyone read or understood the text; it closes
+  "construct the request directly", not "changed your mind".
+- **F-12 — option (c): neither a group switch nor a member opt-out; the acceptance is explicit.**
+  Adam chose the third option, so the proposal deliberately creates **no** `ai_enabled` column and
+  **no** opt-out path, and the disclosure must state that one member's question sends other
+  members' chat and this group's file text to OpenRouter-routed DeepSeek, with no way for another
+  member to opt out alone. A static test (`server/stage6AiChatSqlContract.test.ts`) refuses the
+  appearance of such columns. Compliance judgement is Adam's/product's, not an agent's.
+- **Consequence for §7 item 5 of the disclosure.** "Re-consent every question, nothing is
+  remembered" is now a **UI** behaviour: the drawer asks every question, the server stores one
+  timestamp. The server record is authoritative where the two disagree.
+- **Rate-limit numbers, restated here so the SQL has a home to be compared against** (Adam's C-4
+  ruling): 20 questions per group per UTC day, 10 per member per UTC day across groups, 1 in
+  flight per group, `queued`/`processing` older than 120 s treated as dead, refusal token
+  `group_ai_rate_limited` (SQLSTATE `45N06`) with `retry_after` and `reason` in `DETAIL`.
+- **G-1 mechanism (Role 6's question "how can SQL share the TS constants?"):** literal duplication
+  in SQL plus a static test that pins `shared/aiRateLimit.ts` to the SQL text. Chosen over
+  build-time SQL generation and a settings table. Honest cost: there are two copies of the numbers;
+  a change must touch both and the test is what catches drift.
+- **New file, UNAPPLIED:** `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql` (group AI chat
+  schema: `group_ai_context`, `group_ai_requests`, `profiles.ai_disclosure_accepted_at`, three
+  new columns on `group_chat_messages` with five constraints created `not valid` then validated in
+  a separate section, `private.list_group_chat_messages_page`, `public.list_group_chat_messages_ai`,
+  `begin_group_ai_request`, `claim_group_ai_request`, `finish_group_ai_request`,
+  `clear_group_ai_context`, `accept_ai_disclosure`). It is guarded by the same
+  `private.assert_citylink_target` marker as P1, so it refuses a wrong or unrecognised target
+  instead of trusting an operator-set variable.
+- **Evidence produced so far is local only.** `server/stage6AiChatMigrationApplies.test.ts` (16)
+  applies the file to a throwaway PostgreSQL 17.12 database built on a **stub schema**
+  (`server/fixtures/aiChatStubSchema.sql`, scenario `server/fixtures/aiChatScenario.sql`);
+  `server/stage6AiChatSqlContract.test.ts` (22) pins SQL literals to the client constants. A pass
+  proves the SQL parses, applies, re-applies and behaves as specified against the stub. It does not
+  prove live Auth, real-table RLS, existing grants, concurrency, or any provider.
+- **Not authorized by this entry:** applying the SQL to any Supabase project (Test or Launch), any
+  signed-in write QA, `notify pgrst` against a real project, merge, ready-for-review, deployment,
+  publication, GitHub visibility changes, or any write to Launch. Role 6's third review asked for a
+  short "確認還原" check of the restored §2.1/ACL/§11 on a new blob, then a blob-level exact-head
+  review of the SQL; there is explicitly **no fourth documentation round.**
