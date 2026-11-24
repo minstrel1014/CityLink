@@ -5,18 +5,22 @@ import {
   MockAnalysisProvider,
   createAnalysisProvider,
 } from "./index";
-import { readObjectives } from "./mock";
+import type { AiChatRequest } from "./types";
 
-const plan = {
-  content: { objectives: ["Summarise the brief", "List the deadlines"] },
-  revision: 3,
-};
+const turn = (id: string, authorKind: "member" | "ai", body: string) => ({
+  id,
+  authorKind,
+  authorName: authorKind === "ai" ? "CityLink AI" : "Ada",
+  body,
+  createdAt: "2026-11-24T10:00:00.000Z",
+});
 
-const request = {
+const request: AiChatRequest = {
   groupId: "group-1",
-  fileId: "file-1",
-  text: "The brief asks for a prototype. The report is due in week 10.\n\nLate work loses ten percent.",
-  plan,
+  question: "What did we decide about the storage layer?",
+  turns: [turn("m1", "member", "We should keep it provider-neutral.")],
+  files: [{ id: "f1", name: "brief.pdf", text: "The brief asks for a prototype." }],
+  contextNotice: null,
 };
 
 afterEach(() => {
@@ -31,15 +35,11 @@ describe("the provider boundary", () => {
   });
 
   it("refuses an unconfigured provider instead of falling back", () => {
-    expect(() => createAnalysisProvider("openrouter")).toThrowError(
-      AnalysisProviderError
-    );
+    expect(() => createAnalysisProvider("openrouter")).toThrowError(AnalysisProviderError);
     try {
       createAnalysisProvider("openrouter");
     } catch (error) {
-      expect((error as AnalysisProviderError).code).toBe(
-        "analysis_provider_not_configured"
-      );
+      expect((error as AnalysisProviderError).code).toBe("analysis_provider_not_configured");
     }
   });
 });
@@ -51,101 +51,47 @@ describe("the mock provider", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    const result = await new MockAnalysisProvider().analyse(request);
+    const reply = await new MockAnalysisProvider().answer(request);
 
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(result.providerId).toBe("mock");
+    expect(reply.providerId).toBe("mock");
   });
 
-  it("is deterministic, so tests can assert a shape", async () => {
+  it("is deterministic", async () => {
     const provider = new MockAnalysisProvider();
-    const first = await provider.analyse(request);
-    const second = await provider.analyse(request);
-    expect(second).toEqual(first);
+    expect(await provider.answer(request)).toEqual(await provider.answer(request));
   });
 
-  it("answers each plan objective, in order", async () => {
-    const result = await new MockAnalysisProvider().analyse(request);
-    expect(result.sections.map(section => section.heading)).toEqual([
-      "Summarise the brief",
-      "List the deadlines",
-    ]);
-    expect(result.summary).toContain("Checked 2 plan objective(s).");
+  it("aims for the 1,200-1,500 character band", async () => {
+    const reply = await new MockAnalysisProvider().answer(request);
+    const chars = Array.from(reply.body).length;
+    expect(chars).toBeGreaterThanOrEqual(1_200);
+    expect(chars).toBeLessThanOrEqual(1_500);
   });
 
-  it("says plainly when there is no plan yet", async () => {
-    const result = await new MockAnalysisProvider().analyse({
-      ...request,
-      plan: { content: {}, revision: 0 },
-    });
-    expect(result.summary).toContain("No plan objectives were supplied");
-    expect(result.sections).toHaveLength(0);
+  it("answers from the context it was given", async () => {
+    const reply = await new MockAnalysisProvider().answer(request);
+    expect(reply.body).toContain("brief.pdf");
+    expect(reply.usage.turnsUsed).toBe(1);
+    expect(reply.usage.filesUsed).toBe(1);
   });
 
-  it("cites verbatim spans of the input", async () => {
-    const result = await new MockAnalysisProvider().analyse(request);
-    expect(result.citations.length).toBeGreaterThan(0);
-    for (const citation of result.citations) {
-      expect(request.text).toContain(citation);
-    }
+  it("says so when no file was selected", async () => {
+    const reply = await new MockAnalysisProvider().answer({ ...request, files: [] });
+    expect(reply.body).toContain("沒有選取檔案");
   });
 
-  it("reports character usage without inventing token counts", async () => {
-    const result = await new MockAnalysisProvider().analyse(request);
-    expect(result.usage.inputChars).toBe(request.text.length);
-    expect(result.usage.outputChars).toBeGreaterThan(0);
-    expect(result.model).toBeNull();
-  });
-
-  it("fails loudly on empty text rather than returning an empty answer", async () => {
+  it("fails loudly on an empty question", async () => {
     await expect(
-      new MockAnalysisProvider().analyse({ ...request, text: "   " })
+      new MockAnalysisProvider().answer({ ...request, question: "   " }),
     ).rejects.toMatchObject({ code: "analysis_provider_failed" });
   });
 
   it("honours cancellation", async () => {
     const controller = new AbortController();
     const provider = new MockAnalysisProvider({ delayMs: 50 });
-    const pending = provider.analyse(request, controller.signal);
+    const pending = provider.answer(request, controller.signal);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ code: "analysis_cancelled" });
-  });
-});
-
-describe("reading plan content defensively", () => {
-  it("keeps only non-empty strings and caps the list", () => {
-    const content = {
-      objectives: [
-        "one",
-        "  ",
-        42,
-        null,
-        "two",
-        "three",
-        "four",
-        "five",
-        "six",
-        "seven",
-        "eight",
-        "nine",
-        "ten",
-      ],
-    };
-    const objectives = readObjectives(content);
-    expect(objectives).toEqual([
-      "one",
-      "two",
-      "three",
-      "four",
-      "five",
-      "six",
-      "seven",
-      "eight",
-    ]);
-  });
-
-  it("returns nothing when the field is missing or not an array", () => {
-    expect(readObjectives({})).toEqual([]);
-    expect(readObjectives({ objectives: "one" })).toEqual([]);
   });
 });

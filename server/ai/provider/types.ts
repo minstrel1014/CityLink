@@ -1,64 +1,52 @@
 /**
- * The boundary between CityLink and whatever produces an analysis.
+ * The boundary between CityLink and whatever answers the group's question.
  *
- * Everything above this file - the job row, the extraction module, the consent
- * screen - is provider-independent on purpose: the provider decision is Adam's
- * (OpenRouter + DeepSeek), the account and the key are not available to this
- * branch, and the shape of a real request is not settled until the disclosure
- * text is approved. So the contract is defined here and only a mock implements
- * it. Adding the real adapter means adding one file and one case in
- * `server/ai/provider/index.ts`; nothing else should need to change.
+ * The shape is the chat one, not the old plan one: a question, the assembled
+ * context (recent chat plus selected file text) and nothing else. Assembly
+ * happens in `shared/aiChatContext.ts`, so a provider never sees a message the
+ * budget excluded and never decides what to include.
+ *
+ * Only a mock implements this on the branch. The OpenRouter/DeepSeek adapter is a
+ * later, separately authorised assignment: it needs a key, an approved disclosure
+ * text and a decision on where the call runs.
  */
+import type { ChatTurn } from "../../../shared/aiChatContext";
 
-/** The plan a group has saved, as the RPC returns it. */
-export interface AnalysisPlan {
-  /** Free-form JSONB in `public.group_analysis_plans.content`. */
-  content: Record<string, unknown>;
-  /** `public.group_analysis_plans.revision`; 0 means "no plan saved yet". */
-  revision: number;
-}
-
-export interface AnalysisRequest {
+export interface AiChatRequest {
   groupId: string;
-  fileId: string;
-  /** Extracted text only. The provider never receives the file itself. */
-  text: string;
-  plan: AnalysisPlan;
-  /** BCP-47 tag the group writes in, used to keep the answer in the same language. */
+  /** The member's question, always included. */
+  question: string;
+  /** Selected chat turns, chronological. May be empty. */
+  turns: ChatTurn[];
+  /** Selected file text, already filtered for status and retention. */
+  files: Array<{ id: string; name: string; text: string }>;
+  /** Notice to prefix when context was dropped, or null. */
+  contextNotice: string | null;
   locale?: string;
 }
 
-export interface AnalysisSection {
-  heading: string;
-  body: string;
-}
-
-export interface AnalysisResult {
+export interface AiChatReply {
   providerId: string;
-  /** Null for providers that do not expose a model name. */
   model: string | null;
-  summary: string;
-  sections: AnalysisSection[];
-  /** Verbatim spans of the input the answer relies on; empty is allowed. */
-  citations: string[];
+  /** Answer text before the length policy is applied. */
+  body: string;
   usage: {
     inputChars: number;
     outputChars: number;
+    turnsUsed: number;
+    filesUsed: number;
   };
 }
 
 export interface AnalysisProvider {
   readonly id: string;
   /**
-   * True when `analyse` leaves the process. The mock sets this to false and the
-   * UI uses it to decide whether the consent screen is required, so a provider
+   * True when `answer` leaves the process. The mock sets this to false; the UI
+   * reads it to decide whether the consent screen is required, so a provider
    * that sends content off-site cannot be added without declaring it.
    */
   readonly requiresNetwork: boolean;
-  analyse(
-    request: AnalysisRequest,
-    signal?: AbortSignal
-  ): Promise<AnalysisResult>;
+  answer(request: AiChatRequest, signal?: AbortSignal): Promise<AiChatReply>;
 }
 
 export class AnalysisProviderError extends Error {
@@ -67,7 +55,7 @@ export class AnalysisProviderError extends Error {
       | "analysis_provider_not_configured"
       | "analysis_provider_failed"
       | "analysis_cancelled",
-    message: string
+    message: string,
   ) {
     super(message);
     this.name = "AnalysisProviderError";
