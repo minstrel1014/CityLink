@@ -27,6 +27,10 @@ const proposalPath = path.resolve(
   here,
   "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql"
 );
+const deploy2Path = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql"
+);
 const stubPath = path.resolve(here, "fixtures/aiChatStubSchema.sql");
 const scenarioPath = path.resolve(here, "fixtures/aiChatScenario.sql");
 const baseUri = process.env.CITYLINK_TEST_PG_URI ?? "postgres:///postgres";
@@ -212,7 +216,7 @@ function provision(
   });
 }
 
-function apply(database: string): Run {
+function applyFile(database: string, file: string): Run {
   // VERBOSITY=verbose is not cosmetic: psql hides the SQLSTATE at the default level, so
   // without it these tests could only match the message text. The token-to-code pairing
   // in the file itself is checked statically in stage6AiChatSqlContract.test.ts.
@@ -222,8 +226,37 @@ function apply(database: string): Run {
     "-v",
     "VERBOSITY=verbose",
     "-f",
-    proposalPath,
+    file,
   ]);
+}
+
+/** Deploy 1 of Adam's S-9 ruling (b): tables, consent, columns, unvalidated constraints. */
+function applyDeploy1(database: string): Run {
+  return applyFile(database, proposalPath);
+}
+
+/** Deploy 2: validation, indexes, the read/write path, the status RPC and all grants. */
+function applyDeploy2(database: string): Run {
+  return applyFile(database, deploy2Path);
+}
+
+/**
+ * The whole proposal, in the order the operator must run it. A failed deploy 1 is returned
+ * without attempting deploy 2: running the second half anyway is exactly the "apply then
+ * fix" move the project rules forbid, so the harness refuses to model it.
+ */
+function apply(database: string): Run {
+  const first = applyDeploy1(database);
+  if (first.status !== 0) {
+    return first;
+  }
+  return applyDeploy2(database);
+}
+
+function withScenario(database: string): void {
+  expect(
+    psql(database, ["-v", "ON_ERROR_STOP=1", "-f", scenarioPath]).status
+  ).toBe(0);
 }
 
 function provisioned(run: (database: string) => void): void {
@@ -231,9 +264,18 @@ function provisioned(run: (database: string) => void): void {
     const first = apply(database);
     expect(first.stderr).not.toContain("ERROR");
     expect(first.status).toBe(0);
-    expect(
-      psql(database, ["-v", "ON_ERROR_STOP=1", "-f", scenarioPath]).status
-    ).toBe(0);
+    withScenario(database);
+    run(database);
+  });
+}
+
+/** Only deploy 1 has run. Used to prove the split is real, not cosmetic. */
+function provisionedDeploy1(run: (database: string) => void): void {
+  provision(database => {
+    const first = applyDeploy1(database);
+    expect(first.stderr).not.toContain("ERROR");
+    expect(first.status).toBe(0);
+    withScenario(database);
     run(database);
   });
 }
@@ -248,7 +290,31 @@ const ACCEPT = "public.accept_ai_disclosure()";
 const CLAIM = "public.claim_group_ai_request(uuid)";
 const FINISH =
   "public.finish_group_ai_request(uuid,text,boolean,boolean,integer,integer,integer,text)";
-const ALL_FUNCTIONS = [READ_AI, READ_PAGE, BEGIN, CLEAR, ACCEPT, CLAIM, FINISH];
+const STATUS = "public.get_group_ai_request_status(uuid)";
+const ALL_FUNCTIONS = [
+  READ_AI,
+  READ_PAGE,
+  BEGIN,
+  CLEAR,
+  ACCEPT,
+  CLAIM,
+  FINISH,
+  STATUS,
+];
+
+/** Objects that only the second deploy creates, so a refused deploy 2 proves nothing landed. */
+const DEPLOY2_PROBE =
+  "select ((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace " +
+  "where (n.nspname = 'public' and p.proname in ('list_group_chat_messages_ai', " +
+  "'begin_group_ai_request', 'clear_group_ai_context', 'claim_group_ai_request', " +
+  "'finish_group_ai_request', 'get_group_ai_request_status')) " +
+  "or (n.nspname = 'private' and p.proname = 'list_group_chat_messages_page')))::text";
+
+/** The five constraints Section 3 adds `not valid` and Section 3.1 validates. */
+const FIVE_CONSTRAINTS =
+  "('group_chat_messages_author_kind', 'group_chat_messages_ai_has_no_sender', " +
+  "'group_chat_messages_ai_name', 'group_chat_messages_ai_request_only_for_ai', " +
+  "'group_chat_messages_ai_request_fkey')";
 
 /**
  * Every object the proposal creates: two tables plus seven functions. A refused apply
@@ -260,7 +326,8 @@ const CREATED_PROBE =
   "(select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace " +
   "where (n.nspname = 'public' and p.proname in ('list_group_chat_messages_ai', " +
   "'begin_group_ai_request', 'clear_group_ai_context', 'accept_ai_disclosure', " +
-  "'claim_group_ai_request', 'finish_group_ai_request')) " +
+  "'claim_group_ai_request', 'finish_group_ai_request', " +
+  "'get_group_ai_request_status')) " +
   "or (n.nspname = 'private' and p.proname = 'list_group_chat_messages_page')))::text";
 
 describe.skipIf(!available)("group ai chat migration proposal applies", () => {
@@ -314,14 +381,12 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
       const second = apply(database);
       expect(second.stderr).not.toContain("ERROR");
       expect(second.status).toBe(0);
-      expect(one(database, CREATED_PROBE)).toBe("9");
+      expect(one(database, CREATED_PROBE)).toBe("10");
       expect(
         one(
           database,
           "select count(*) from pg_constraint where conname in " +
-            "('group_chat_messages_author_kind', 'group_chat_messages_ai_has_no_sender', " +
-            "'group_chat_messages_ai_name', 'group_chat_messages_ai_request_only_for_ai', " +
-            "'group_chat_messages_ai_request_fkey')"
+            FIVE_CONSTRAINTS
         )
       ).toBe("5");
       // N-4: the constraints are created `not valid` and validated in section 3.1, so a
@@ -342,7 +407,7 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
           database,
           `select count(*) from pg_proc where oid in (${oids}) and prosecdef`
         )
-      ).toBe("7");
+      ).toBe("8");
       // search_path = '' appears in proconfig as search_path="".
       expect(
         one(
@@ -350,7 +415,7 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
           `select count(*) from pg_proc where oid in (${oids}) ` +
             `and proconfig @> array['search_path=""']`
         )
-      ).toBe("7");
+      ).toBe("8");
       expect(
         one(
           database,
@@ -391,6 +456,10 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
       expect(fn("authenticated", READ_AI)).toBe("true");
       expect(fn("authenticated", ACCEPT)).toBe("true");
       expect(fn("authenticated", CLEAR)).toBe("true");
+      // S-2 (Adam's option b): the disclosure counters are readable by anyone who can
+      // read the chat, because that is how the notice reaches a client at all.
+      expect(fn("authenticated", STATUS)).toBe("true");
+      expect(fn("service_role", STATUS)).toBe("false");
       expect(fn("authenticated", FINISH)).toBe("false");
       expect(fn("authenticated", CLAIM)).toBe("false");
       // The private helper stays internal: only the definer wrapper calls it.
@@ -457,7 +526,7 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
         "45N03",
         "group_ai_question_empty"
       );
-      expect(one(database, CREATED_PROBE)).toBe("9");
+      expect(one(database, CREATED_PROBE)).toBe("10");
       expect(
         one(database, "select count(*) from public.group_ai_requests")
       ).toBe("0");
@@ -1125,6 +1194,305 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
         one(
           database,
           "select count(*) from public.profiles where ai_disclosure_accepted_at is not null"
+        )
+      ).toBe("0");
+    });
+  });
+
+  it("splits the lock across two deploys and validates only in the second", () => {
+    // Adam's S-9 ruling (b) is only worth anything if the split is real. The proof is
+    // timing-shaped rather than prose-shaped: after deploy 1 the five constraints exist
+    // but are still `not valid`, which is precisely the state that lets Section 3's
+    // ACCESS EXCLUSIVE go out at the first commit instead of being held through the
+    // scans, the function definitions and every grant.
+    provisionedDeploy1(database => {
+      expect(
+        one(
+          database,
+          `select count(*) from pg_constraint where conname in ${FIVE_CONSTRAINTS}`
+        )
+      ).toBe("5");
+      expect(
+        one(
+          database,
+          `select count(*) from pg_constraint where conname in ${FIVE_CONSTRAINTS} ` +
+            "and not convalidated"
+        )
+      ).toBe("5");
+      // The three columns are already usable, so member chat keeps working untouched,
+      // and a member row still lands on the 'member' default without any new write path.
+      const plain = sql(
+        database,
+        "insert into public.group_chat_messages (group_id, sender_id, " +
+          "sender_name_snapshot, body) values " +
+          `('${GROUP}','${ASKER}','Someone','plain member message') ` +
+          "returning author_kind;"
+      );
+      expect(plain.stderr).not.toContain("ERROR");
+      expect(plain.stdout).toContain("member");
+      expect(applyDeploy2(database).status).toBe(0);
+      expect(
+        one(
+          database,
+          `select count(*) from pg_constraint where conname in ${FIVE_CONSTRAINTS} ` +
+            "and not convalidated"
+        )
+      ).toBe("0");
+    });
+  });
+
+  it("does not half-deploy the AI write path between the two runs", () => {
+    // After deploy 1 alone there is no begin/claim/finish at all: the feature is absent,
+    // not present-but-broken, which is what makes a pause between deploys survivable.
+    provisionedDeploy1(database => {
+      for (const sig of [BEGIN, CLAIM, FINISH, READ_AI, STATUS, READ_PAGE]) {
+        expect(
+          one(database, `select (to_regprocedure('${sig}') is null)::text`),
+          sig
+        ).toBe("true");
+      }
+      // The consent function deploy 1 does create is already at its final ACL, because
+      // leaving the grants to deploy 2 would expose default PUBLIC EXECUTE in between.
+      expect(
+        one(
+          database,
+          `select has_function_privilege('anon','${ACCEPT}','execute')::text`
+        )
+      ).toBe("false");
+      expect(
+        one(
+          database,
+          `select has_function_privilege('authenticated','${ACCEPT}','execute')::text`
+        )
+      ).toBe("true");
+      expect(
+        one(
+          database,
+          "select (count(*) > 0)::text from public.group_chat_messages"
+        )
+      ).toBe("true");
+    });
+  });
+
+  it("deploy 2 re-asserts the target after deploy 1 committed", () => {
+    // The split Adam approved buys a shorter lock; the condition attached to it is that
+    // the second deploy cannot trust the first one's verdict. This is the only test that
+    // would fail if someone deleted Section 0 from DEPLOY2 as a "duplicate".
+    provision(database => {
+      expect(applyDeploy1(database).status).toBe(0);
+      exec(
+        database,
+        "update private.citylink_target set system_identifier = '1'::text"
+      );
+      const second = applyDeploy2(database);
+      refused(second, "45M03", "citylink_target_cluster_changed");
+      // Nothing from deploy 2 landed, and no privilege was rewritten.
+      expect(
+        one(database, `select (to_regprocedure('${BEGIN}') is null)::text`)
+      ).toBe("true");
+      expect(
+        one(
+          database,
+          "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace " +
+            "where n.nspname = 'public' and p.proname = 'get_group_ai_request_status'"
+        )
+      ).toBe("0");
+      // The same file then succeeds once the cluster is recognised again, which is what
+      // makes this a guard rather than a permanent lockout.
+      exec(
+        database,
+        "update private.citylink_target set system_identifier = " +
+          "(select system_identifier::text from pg_control_system())"
+      );
+      expect(applyDeploy2(database).status).toBe(0);
+      expect(one(database, DEPLOY2_PROBE)).toBe("7");
+    });
+  });
+
+  it("keeps the counters begin computed when finish omits them", () => {
+    // S-1, Adam's option (a). The old defaults made this call silently rewrite the audit
+    // row: finish(id, body) wrote dropped_context = false and chat_chars = 0 over the
+    // values begin had just measured, which is the whole reason the table exists.
+    provisioned(database => {
+      accept(database, BUDGET);
+      const run = sql(
+        database,
+        beginSql(BUDGET, BUDGET_GROUP, "'budget question'::text", [], KEY(91))
+      );
+      expect(run.stderr).not.toContain("ERROR");
+      const id = requestIdFrom(run);
+      expect(
+        one(
+          database,
+          "select dropped_context::text || '/' || chat_chars::text from " +
+            `public.group_ai_requests where id = '${id}'`
+        )
+      ).toBe("true/4000");
+
+      const twoArg = sql(
+        database,
+        `select public.finish_group_ai_request('${id}', 'two argument answer');`
+      );
+      expect(twoArg.stderr).not.toContain("ERROR");
+      expect(
+        one(
+          database,
+          "select dropped_context::text || '/' || chat_chars::text || '/' || " +
+            "truncated::text || '/' || files_used::text from " +
+            `public.group_ai_requests where id = '${id}'`
+        )
+      ).toBe("true/4000/false/0");
+
+      // Coalesce must not become "ignore the caller": an explicit value still wins. This
+      // is also the pairing that keeps an existing test honest — the same call with a
+      // supplied 200 must overwrite, not merge.
+      const id2 = requestIdFrom(
+        sql(
+          database,
+          beginSql(
+            BUDGET,
+            BUDGET_GROUP,
+            "'budget question two'::text",
+            [],
+            KEY(92)
+          )
+        )
+      );
+      sql(
+        database,
+        `select public.finish_group_ai_request('${id2}', 'explicit', false, true, ` +
+          "200, 0, 0, null);"
+      );
+      expect(
+        one(
+          database,
+          "select chat_chars::text || '/' || dropped_context::text from " +
+            `public.group_ai_requests where id = '${id2}'`
+        )
+      ).toBe("200/true");
+    });
+  });
+
+  it("records the first disclosure acceptance and never rewrites it", () => {
+    // S-3, approved with S-4. §7 item 5 makes the client tick the disclosure for every
+    // question, so calling this function repeatedly is the normal path — under the old
+    // body the column tracked the last click and could not answer "when did this member
+    // first accept", which is the only reason F-11 asked for it server-side.
+    provisioned(database => {
+      const first = one(
+        database,
+        as(ASKER, "select public.accept_ai_disclosure();")
+      );
+      expect(first).not.toBe("");
+      exec(database, as(ASKER, "select public.accept_ai_disclosure();"));
+      const third = one(
+        database,
+        as(ASKER, "select public.accept_ai_disclosure();")
+      );
+      expect(third).toBe(first);
+      expect(
+        one(
+          database,
+          "select (ai_disclosure_accepted_at = " +
+            `'${first}'::timestamptz)::text from public.profiles where id = '${ASKER}'`
+        )
+      ).toBe("true");
+      // The return value is the evidence, not the wall clock: a caller that re-accepts
+      // still learns when the acceptance actually happened.
+      expect(
+        one(
+          database,
+          as(
+            ASKER,
+            `select (public.accept_ai_disclosure() = '${first}'::timestamptz)::text;`
+          )
+        )
+      ).toBe("true");
+    });
+  });
+
+  it("delivers the file counters through the status RPC without leaking content", () => {
+    // S-2, Adam's option (b). files_requested comes from file_ids and files_used is what
+    // the worker reports at finish, so the gap between them is the F-8 notice's evidence.
+    provisioned(database => {
+      accept(database, BUDGET);
+      const id = requestIdFrom(
+        sql(
+          database,
+          beginSql(
+            BUDGET,
+            GROUP,
+            "'two files please'::text",
+            [FILE_OK, FILE_OK2],
+            KEY(93)
+          )
+        )
+      );
+      const row = one(
+        database,
+        as(
+          BUDGET,
+          `select status || '|' || files_requested::text || '|' || files_used::text ` +
+            `from public.get_group_ai_request_status('${id}');`
+        )
+      );
+      expect(row).toBe("queued|2|2");
+
+      // One of the two could not be read: the worker says so at finish and the reader sees
+      // the gap. Nothing about the question or the file names crosses this boundary.
+      const text = one(
+        database,
+        as(
+          BUDGET,
+          `select coalesce(string_agg(g::text, ','), '') ` +
+            `from public.get_group_ai_request_status('${id}') g;`
+        )
+      );
+      expect(text).not.toContain("two files please");
+      expect(text).not.toContain("ok.pdf");
+
+      sql(
+        database,
+        `select public.finish_group_ai_request('${id}', 'an answer', null, null, ` +
+          "null, null, 1, null);"
+      );
+      expect(
+        one(
+          database,
+          as(
+            BUDGET,
+            `select files_requested::text || '|' || files_used::text || '|' || ` +
+              `(message_id is not null)::text ` +
+              `from public.get_group_ai_request_status('${id}');`
+          )
+        )
+      ).toBe("2|1|true");
+
+      // Fail closed as an empty set, never as a distinguishing error: an outsider must not
+      // learn that this request id exists somewhere it cannot see.
+      expect(
+        one(
+          database,
+          as(
+            OUTSIDER,
+            `select count(*)::text from public.get_group_ai_request_status('${id}');`
+          )
+        )
+      ).toBe("0");
+      expect(
+        one(
+          database,
+          as(
+            ASKER,
+            "select count(*)::text from " +
+              "public.get_group_ai_request_status('00000000-0000-4000-8000-000000000000');"
+          )
+        )
+      ).toBe("0");
+      expect(
+        one(
+          database,
+          "select count(*)::text from public.get_group_ai_request_status(null);"
         )
       ).toBe("0");
     });

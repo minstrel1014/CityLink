@@ -1653,3 +1653,74 @@ migration may ever be applied; none of them is an authorisation to apply it, and
 **Not authorised by this entry.** No apply, no preflight execution, no Launch write, no `notify pgrst`, no
 signed-in QA, no merge, no ready-for-review transition, no deployment or publication. Recording the rules is
 not granting permission. Connection strings, project URLs and keys stay out of PR bodies, chat and this file.
+
+## 2026-11-25 — Adam rules S-1(a), S-2(b), S-3, S-4 and S-9(b); the AI-chat proposal becomes two deploys
+
+Adam answered four of the ten conditions Role 6 raised against SQL blob `1a4f6c84…4136`. Kayk implemented
+them in the same session. **This entry authorises nothing to run: no preflight, no connection to Prototype or
+Launch, nothing applied, and no merge.** PR #67 stays draft.
+
+**The rulings, as given.** S-1 option (a); S-2 option (b); S-3 approved; S-4 approved; S-9 option (b) — Role 6's
+recommendation. S-5, S-6, S-7, S-8 and S-10 are **still open** and were deliberately not touched.
+
+**What changed in the SQL.**
+
+1. **S-1 (a)** — `finish_group_ai_request`'s five record parameters (`p_truncated`, `p_dropped_context`,
+   `p_chat_chars`, `p_file_chars`, `p_files_used`) default to `null` and are written as
+   `coalesce(p_x, q.x)`. A `finish(id, body)` call can no longer erase what `begin` measured; an explicitly
+   passed value still wins. The AI message row now uses the resolved `truncated`, so the message and the log
+   row cannot disagree.
+2. **S-2 (b)** — new **`public.get_group_ai_request_status(uuid)`**, `security definer`,
+   `set search_path = ''`, revoked from all four roles and granted to `authenticated` only. It returns state
+   and counters (`status`, `asked_at`, `finished_at`, `message_id`, `error_code`, `dropped_context`,
+   `truncated`, `files_requested`, `files_used`, `chat_chars`, `file_chars`) and **never** the question, the
+   assembled turns or a file name, so it is a disclosure channel rather than a content channel. F-8's test is
+   `files_used < files_requested`. Read scope is `private.can_read_group_chat` (the same rule that lets former
+   members read AI answers); unknown id, unreadable group and a `null` argument all return **zero rows instead
+   of an error**, so the function does not confirm which group a request id belongs to. `finish`'s return type
+   is unchanged — Adam chose the option that does not require a later `DROP`+`CREATE`.
+3. **S-3** — `accept_ai_disclosure()` writes only `where … ai_disclosure_accepted_at is null` and otherwise
+   returns the existing instant. The column again means "when this member first accepted" (F-11), while §7
+   item 5 keeps re-ticking per question.
+4. **S-4** — both file headers now carry the full SQLSTATE table including `45N11`, and
+   `stage6AiChatSqlContract.test.ts` **parses that table**: the union of codes declared in the two headers must
+   equal the union of codes the two bodies raise, and each code's token must match the test's pairing table.
+   The previous check only proved a token appeared somewhere in the file, which is why 45N11 could be missing
+   from the header and the suite still passed.
+
+**S-9 (b) — the split, and the structural rule it created.** The proposal is now two files with their own
+transactions, cut between Section 3 and Section 3.1:
+
+| File                                                                 | blob (full OID)                            | lines | size     | sha256                                                             |
+| -------------------------------------------------------------------- | ------------------------------------------ | ----- | -------- | ------------------------------------------------------------------ |
+| `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql` (deploy 1)         | `33e5589e6ee5ddd0ed88b101be42d1f1700675df` | 290   | 17,703 B | `294ab3e6c9d671c591b8aad46cdb77f36b9ca6f8202cd4eaa0793f8bbec90b98` |
+| `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql` (deploy 2) | `045546fd5068cd1216f90490e8a0dac8b5e03c33` | 681   | 29,726 B | `5da292dfacda973a39ad96750e739554e34a2a4d81d708207aeb953717e02213` |
+
+Deploy 1 = target assertion, the two tables, `profiles.ai_disclosure_accepted_at` +
+`accept_ai_disclosure()`, the three `group_chat_messages` columns and five `not valid` constraints. Its commit
+releases the `ACCESS EXCLUSIVE` from the `ADD COLUMN`, which was the point of splitting. Deploy 2 =
+**the target assertion re-run first**, the five `validate constraint` steps, the partial index, both read
+functions and the private helper, `begin`/`claim`/`finish`, the new status function, `clear`, and the grants for
+the objects it creates.
+
+**New structural rule adopted from the split (not asked for by Role 6, stated so it can be reviewed):** an
+object created by deploy 1 carries its own revoke/grant inside deploy 1. Leaving `accept_ai_disclosure()`'s ACL
+to deploy 2 would leave it with PostgreSQL's default **PUBLIC `EXECUTE`** for the whole window between the two
+commits — the exact shape R-2 was raised against.
+
+**Honest description of the intermediate state.** After deploy 1 alone the columns exist with constraints
+unvalidated, and the AI write path, the read function and the status RPC **do not exist**, so the feature is
+absent rather than half-live; member chat is unaffected because `author_kind` defaults to `'member'` and the
+only writer of `'ai'` arrives in deploy 2. Both files are idempotent (`if not exists`, guarded `DO` blocks,
+`create or replace`), so a failed deploy 2 is fixed and re-run; deploy 1 is not rolled back. **Running only
+half of this is not a valid end state** — the authorisation must name both blobs.
+
+**Evidence.** `server/stage6AiChatMigrationApplies.test.ts` grew from 16 to **22** tests and
+`server/stage6AiChatSqlContract.test.ts` from 22 to **23**; the six new apply tests are the structural claims
+above, including that deploy 2 is refused (45M03) with **zero** of its seven functions created if the cluster
+identity changes after deploy 1 committed, and succeeds again once it is recognised. The suite was run twice:
+on the default cluster **PostgreSQL 16.15** and, to close the harness/target gap Adam was told about on
+2026-11-24, on a PGDG cluster at port 5433 reporting **PostgreSQL 17.12** — same engine family as the 17.11
+targets, not the same version. Both runs: 22/22. `corepack pnpm check` exit 0; `corepack pnpm test` 54 files /
+**817 tests** passed; `corepack pnpm build` exit 0. A local green apply — on either engine — is still not an
+applied migration.

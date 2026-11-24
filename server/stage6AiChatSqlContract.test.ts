@@ -28,7 +28,14 @@ const proposalPath = path.resolve(
   here,
   "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql"
 );
-const sql = readFileSync(proposalPath, "utf8");
+const deploy2Path = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql"
+);
+const deploy1 = readFileSync(proposalPath, "utf8");
+const deploy2 = readFileSync(deploy2Path, "utf8");
+/** The proposal is two deploys (Adam's S-9 ruling b); the static checks walk both. */
+const sql = deploy1 + "\n" + deploy2;
 const lines = sql.split("\n");
 
 /** Everything after `--` is commentary; contracts live in the executable text. */
@@ -44,6 +51,12 @@ function section(name: string): string {
 }
 
 const LAUNCH_REF = "pijslbchvstkoweslymr";
+const READ_PAGE_SIG =
+  "private.list_group_chat_messages_page(uuid, timestamptz, uuid, integer)";
+const READ_AI_SIG =
+  "public.list_group_chat_messages_ai(uuid, timestamptz, uuid, integer)";
+const FINISH_SIG =
+  "public.finish_group_ai_request(uuid, text, boolean, boolean, integer, integer, integer, text)";
 
 describe("ai chat migration proposal, statically", () => {
   it("keeps the rate-limit literals equal to the client constants", () => {
@@ -240,10 +253,97 @@ describe("ai chat migration proposal, statically", () => {
       expect(pair?.[1], `${codeValue} mapped to ${token}`).toBe(token);
     }
     expect(seen).toBeGreaterThanOrEqual(documented.length - 1);
-    // The header must list every code the body can raise, and no others.
+
+    // S-4 (Adam, 2026-11-25): the old version of this check only proved the token appeared
+    // somewhere in the file, so a header that silently lost a code could still pass. This
+    // parses the declared table itself. Each deploy file carries the union, because the
+    // reader of one file must be able to see what the pair can raise.
+    const declared = new Set<string>();
+    const declaredToken = new Map<string, string>();
+    for (const text of [deploy1, deploy2]) {
+      for (const m of text.matchAll(/^--\s+(45N\d{2})\s+([a-z_]+)/gm)) {
+        declared.add(m[1].toLowerCase());
+        const prev = declaredToken.get(m[1].toLowerCase());
+        expect(
+          prev === undefined || prev === m[2].toLowerCase(),
+          `${m[1]} declared with two tokens (${prev} / ${m[2]})`
+        ).toBe(true);
+        declaredToken.set(m[1].toLowerCase(), m[2].toLowerCase());
+      }
+    }
+    expect([...declared].sort()).toEqual(documented.map(([c]) => c).sort());
     for (const [codeValue, token] of documented) {
-      expect(sql.toLowerCase()).toContain(codeValue);
-      expect(sql).toContain(token);
+      expect(
+        declaredToken.get(codeValue),
+        `header token for ${codeValue}`
+      ).toBe(token);
+    }
+
+    // And every code a body actually raises must be declared, so an invented errcode
+    // cannot survive by being absent from a list nobody reads.
+    const raised = new Set<string>();
+    for (const m of sql.matchAll(/using\s+errcode\s*=\s*'([0-9A-Za-z]+)'/g)) {
+      const c = m[1].toLowerCase();
+      if (c.startsWith("45n")) {
+        raised.add(c);
+      }
+    }
+    for (const c of raised) {
+      expect(declared.has(c), `raise ${c} missing from the header table`).toBe(
+        true
+      );
+    }
+    expect([...raised].sort()).toEqual(documented.map(([c]) => c).sort());
+  });
+
+  it("keeps both deploys guarded, ordered and ACL-complete", () => {
+    // S-9 (b): the second deploy is a second chance to point at the wrong project, so it
+    // must carry its own assertion, and the first must not defer any grant of its own.
+    expect(
+      (deploy1.match(/select private\.assert_citylink_target\(/g) ?? []).length
+    ).toBe(1);
+    expect(
+      (deploy2.match(/select private\.assert_citylink_target\(/g) ?? []).length
+    ).toBe(1);
+    for (const [name, raw] of [
+      ["deploy1", deploy1],
+      ["deploy2", deploy2],
+    ] as const) {
+      // Commentary also contains the words `begin;` and `commit;`, and a header that
+      // explains the transaction shape is not the transaction shape. Measure the
+      // executable text only, so the ordering claim cannot be satisfied by prose.
+      const text = raw
+        .split("\n")
+        .filter(line => !line.trim().startsWith("--"))
+        .join("\n");
+      const guard = text.indexOf("assert_citylink_target(");
+      const firstWrite = text.search(
+        /^(create|alter|drop|insert|update|delete|grant|revoke|notify)/im
+      );
+      expect(guard, `${name}: no target guard`).toBeGreaterThan(-1);
+      expect(firstWrite, `${name}: no statement found`).toBeGreaterThan(-1);
+      expect(guard, `${name}: guard is not the first statement`).toBeLessThan(
+        firstWrite
+      );
+      expect(text.match(/^begin;/gm)?.length, `${name}: begin count`).toBe(1);
+      expect(text.match(/^commit;/gm)?.length, `${name}: commit count`).toBe(1);
+      expect(text.indexOf("begin;")).toBeLessThan(guard);
+    }
+    // Every function created anywhere in the pair is revoked from the four roles and then
+    // granted to at most one, so no new function can ship without an ACL decision.
+    for (const sig of [
+      "public.get_group_ai_request_status(uuid)",
+      "public.accept_ai_disclosure()",
+      "public.begin_group_ai_request(uuid, text, uuid[], uuid)",
+      "public.clear_group_ai_context(uuid)",
+      "public.claim_group_ai_request(uuid)",
+      READ_PAGE_SIG,
+      READ_AI_SIG,
+      FINISH_SIG,
+    ]) {
+      expect(sql, `revoke missing for ${sig}`).toContain(
+        `revoke all on function ${sig}`
+      );
     }
   });
 
