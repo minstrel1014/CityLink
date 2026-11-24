@@ -405,7 +405,12 @@ describe("ai chat migration proposal, statically", () => {
   it("derives every threshold from one time source", () => {
     // G-5: the day boundary, the stale test and retry_after must share now(), or a long
     // transaction can disagree with itself.
-    expect(code).toContain("v_day_start := date_trunc('day', now())");
+    // TZ (Adam's 2026-11-25 "follow suggestions" ruling, second reviewer item 4): the day
+    // boundary is named UTC instead of inherited from the connecting session's TimeZone, so
+    // the quota reset and retry_after cannot drift together. `code` has `--` commentary
+    // stripped, so this pins the executable form rather than a mention in prose.
+    expect(code).toContain("v_day_start := date_trunc('day', now(), 'utc')");
+    expect(code).not.toContain("date_trunc('day', now())");
     expect(
       code.match(
         /extract\(epoch from \(\(v_day_start \+ interval '1 day'\) - now\(\)\)\)/g

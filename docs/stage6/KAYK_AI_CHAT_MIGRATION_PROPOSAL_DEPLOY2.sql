@@ -35,6 +35,9 @@
 --   S-8      finish 的 truncated 現在也承認 4,000 字元的左側鉗位，log 不會再宣稱「未截斷」。
 --   S-10     error_code 的 CHECK 在部署 1 的建表裡（建立即驗證，新表為空、不掃表）；
 --            本檔的 finish 只寫合約 §9 那兩個值，其他寫法會被約束擋掉。
+--   TZ       日界 pin 成 UTC：v_day_start := date_trunc('day', now(), 'UTC')。這不是一個 S 編號
+--            項，是第二審查者的 item 4；Adam 2026-11-25 以「follow suggestions」裁決照建議改。
+--            本輪只有本檔的 blob 改變——部署 1 沒有任何 date_trunc，因此仍是它原本的 blob。
 --
 -- 套用目標（唯一；依 Adam 的 F14 決定 2026-11-23 01:50 與其 2026-11-25 規則）：
 --   CityLink Launch ref pijslbchvstkoweslymr。Prototype wkzclgmhrtecnpexfesr 依 F14 凍結、
@@ -321,7 +324,13 @@ begin
   -- 計入今天的每一列，唯獨從未被人接手過的 queued 除外：那種列沒有產生過 provider
   -- 呼叫、沒有花到錢，不該燒掉当天的配額（Adam 2026-11-24 的 G-3 決定）。已被 claim
   -- 過的列一律計入，不論現在停在哪個狀態；in-flight 另有自己的判準（下面的 v_stale）。
-  v_day_start := date_trunc('day', now());
+  -- TZ（Adam 2026-11-25 第三批裁決「follow suggestions」＝第二審查者 item 4）：日界明確寫成
+  -- UTC，不再靠連線端的 TimeZone 設定。合約 §2.1 與客戶端 shared/aiRateLimit.ts（Date.UTC）
+  -- 本來就以 UTC 日界為準；舊寫法 date_trunc('day', now()) 依 session timezone 解釋「今天」，
+  -- 只要連線端換時區（session 模式的 pooler、psql 環境、未來有人改 GUC），配額重置點就會和
+  -- retry_after 一起漂移——下面算 retry_after 用的正是同一個 v_day_start。Pin 成 UTC 之後兩邊
+  -- 是結構一致，而不是「剛好量到 TimeZone = UTC 才對」。
+  v_day_start := date_trunc('day', now(), 'UTC');
 
   select count(*) into v_group_today
   from public.group_ai_requests q

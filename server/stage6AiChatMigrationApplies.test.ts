@@ -1593,6 +1593,47 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
     });
   });
 
+  it("keeps the quota day on UTC whatever the session timezone is", () => {
+    // Adam's 2026-11-25 ruling on the second reviewer's item 4 ("follow suggestions"): the
+    // window is named UTC in the SQL, so a connection reporting a different zone still sees
+    // the same reset point the client computes with Date.UTC. Without the pin this case
+    // passes no refusal at all — measured against the previous blob in this same harness,
+    // the ten rows fell before a session-local "today" and the member got an extra question.
+    provisioned(database => {
+      accept(database, FRESH);
+      // Rows at 00:30 UTC today: inside the UTC day, but before the local midnight of a
+      // connection eight hours behind UTC (Etc/GMT+8 means UTC-8 in POSIX form).
+      exec(
+        database,
+        "insert into public.group_ai_requests (group_id, asked_by, idempotency_key, " +
+          "question, status, created_at) " +
+          `select '${OTHER_GROUP}','${FRESH}', gen_random_uuid(), 'q', 'ready', ` +
+          "date_trunc('day', now(), 'UTC') + interval '30 minutes' " +
+          "from generate_series(1, 10);"
+      );
+      const shifted = sql(
+        database,
+        "set time zone 'Etc/GMT+8'; " +
+          beginSql(FRESH, STALE_GROUP, "'shifted'::text", [], KEY(35))
+      );
+      refused(shifted, "45N06", "group_ai_rate_limited");
+      expect(shifted.stderr).toContain("reason=user_daily");
+      expect(shifted.stderr).toContain("user_today=10");
+      // retry_after comes from the same v_day_start, so it is the wait until the UTC reset:
+      // positive and never longer than one day, even on a shifted connection.
+      const seconds = Number(
+        shifted.stderr.match(/retry_after=(\d+)/)?.[1] ?? "0"
+      );
+      expect(seconds).toBeGreaterThan(0);
+      expect(seconds).toBeLessThanOrEqual(86400);
+      // And the same question on a plain UTC connection is refused identically: the zone
+      // stopped mattering, it did not merely move the failure somewhere else.
+      const plain = askOnce(database, FRESH, STALE_GROUP, "plain", KEY(36));
+      refused(plain, "45N06", "group_ai_rate_limited");
+      expect(plain.stderr).toContain("user_today=10");
+    });
+  });
+
   it("lets the 4,000-character clamp admit that it truncated", () => {
     // Role 6 S-8: the message insert clamps with left(..., 4000). A 4,001-character answer
     // written as finish(id, body) used to log truncated = false while the stored body had
