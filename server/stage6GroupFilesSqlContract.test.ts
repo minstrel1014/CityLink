@@ -144,6 +144,13 @@ describe("group files migration proposal", () => {
     }
   });
 
+  it("treats the group leader as study_groups.creator_id", () => {
+    // Verified against 20261114163512_stage5_group_authority_and_succession.sql:
+    // there is no separate leader column, and succession rewrites creator_id.
+    expect(sqlNoComments).toMatch(/g\.creator_id = v_actor/i);
+    expect(sqlNoComments).not.toMatch(/leader_id/i);
+  });
+
   it("contains no destructive statements", () => {
     expect(sqlNoComments).not.toMatch(/drop table/i);
     expect(sqlNoComments).not.toMatch(/truncate/i);

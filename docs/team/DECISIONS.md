@@ -488,3 +488,11 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **R2 has no hard storage cutoff.** Cloudflare's own limits page lists "Data storage per bucket: Unlimited"; exceeding the free tier produces billable overage rather than blocking writes. Nothing in R2 will stop an upload when a quota is reached.
 - **Therefore the 8 GiB cap is enforced by CityLink, not by Cloudflare.** `request_group_file_upload` and `replace_group_file` refuse to issue an upload before the presigned URL exists, returning `group_files_storage_limit_reached`. Any path that bypasses these RPCs — for example a leaked R2 token used directly against the S3 API — is not limited by anything. This is why the token stays server-side, remains bucket-scoped, and should be rotated if exposure is suspected.
 - **Cost controls:** an OpenRouter key can carry a spend limit on the OpenRouter side; R2 cannot be capped the same way, so cost protection there is limited to billing notifications and keeping the token out of client code.
+
+## 2026-11-24 — Fact check: the group leader is `study_groups.creator_id`
+
+- **Question raised by Adam:** whether the leader equals `creator_id`. Adam expected no. The checked-in SQL says otherwise.
+- **Evidence:** `20261114163512_20261114162301_stage5_group_authority_and_succession.sql` defines `private.reconcile_group_leader_after_membership_end`, which transfers leadership by running `update public.study_groups set creator_id = v_successor_id`. There is no `leader_id` column anywhere in the migrations. `public.review_group_join_request` performs its leader check as `v_creator_id is distinct from v_actor`, i.e. `creator_id`.
+- **Conclusion:** leadership is real and transferable, but it is stored in `creator_id` and reassigned on succession (earliest remaining active member, per the approved tie order). `creator_id = auth.uid()` is therefore the correct current-leader test, not an approximation, and no separate helper exists to call.
+- **Effect on P1:** `delete_group_file` was already correct. Its caveat comment was replaced with the verified statement, and a regression test now asserts the SQL uses `creator_id` and never references a `leader_id` column.
+- **Still not authorized:** applying the migration, deployment, Test or Main writes.

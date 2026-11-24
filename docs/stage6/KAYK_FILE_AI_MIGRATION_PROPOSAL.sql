@@ -448,9 +448,11 @@ begin
 end;
 $function$;
 
--- R6：上傳者本人或群組 leader 可以刪除。leader 的判定需與 Stage 5 的
--- authority/succession 模型核對（若 leadership 可轉移，此處應改用對應 helper，
--- 而非 creator_id）。此為 Role 6 審查時的必查點。
+-- R6：上傳者本人或群組 leader 可以刪除。
+-- 已核對 Stage 5 authority/succession 模型（20261114163512）：repo 沒有獨立的
+-- leader 欄位，leader 就是 study_groups.creator_id；succession 會直接把該欄位
+-- 改寫成最早加入的現任成員，因此 creator_id = auth.uid() 就是現任 leader 判定，
+-- 與 public.review_group_join_request 的既有寫法一致。
 create or replace function public.delete_group_file(p_file_id uuid)
 returns table (object_key text)
 language plpgsql
