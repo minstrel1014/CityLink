@@ -116,3 +116,7 @@
 ## 13. 建議實作順序
 
 先做不依賴 provider 與部署的部分：predicate 與 RPC 契約、狀態機、錯誤 token、UI 呈現、共用計畫的儲存與併發選項實作，以及第 12 章的 mock 測試。待 Adam 決定儲存後端、TTL、保留定義、AI 揭露與排程機制後，才接真實 Storage 與 AI，並在 Test 授權下做 live QA。任何 migration 都需另開分支、經 Role 6 exact-head 審查、再取得獨立的 Test-only 授權。
+
+## 14. Test preflight finding: Supabase default privileges (2026-11-24)
+
+Section 2's posture — tables unreachable directly, six RPCs the only entry point, `authenticated` the only grantee — is achieved by explicit statements in the migration, not by the project's defaults. `wkzclgmhrtecnpexfesr` carries `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` that auto-grants new tables, functions and sequences to `anon`, `authenticated` and `service_role`, and `service_role` holds `BYPASSRLS`. A revoke that omits `service_role` therefore leaves it effective on a real project even though it measures correctly on a plain local PostgreSQL. Every revoke in the P1 proposal names `service_role` for that reason, and `docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql` reproduces both the leak and the fix. Any later migration in this feature must do the same.

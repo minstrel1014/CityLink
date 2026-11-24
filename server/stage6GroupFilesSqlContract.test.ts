@@ -33,6 +33,10 @@ const sqlNoComments = sql.replace(/--[^\n]*/g, "");
 type SqlFunction = { schema: string; name: string; body: string };
 
 function functionBlocks(source: string): SqlFunction[] {
+  // Limitation (Role 6 N-3): argument types are read as the last token of each
+  // parameter, which is correct for the current signatures. It would misread a
+  // default value (`p_size bigint default 0` -> `0`) or a comma inside a numeric
+  // scale (`numeric(10,2)`), producing a misleading failure rather than a wrong pass.
   const found: SqlFunction[] = [];
   const re =
     /create or replace function\s+([a-z_]+)\.([a-z_]+)\s*\(([\s\S]*?)\$function\$;/gi;
@@ -48,6 +52,21 @@ const publicBlocks = blocks.filter(b => b.schema === "public");
 const privateBlocks = blocks.filter(b => b.schema === "private");
 
 describe("group files migration proposal", () => {
+  it("names service_role in every revoke so Supabase default privileges cannot leak", () => {
+    // Test wkzclgmhrtecnpexfesr has ALTER DEFAULT PRIVILEGES FOR ROLE postgres that
+    // auto-grants anon, authenticated and service_role on new tables, functions and
+    // sequences. A revoke that omits service_role therefore leaves it effective, which
+    // a plain local PostgreSQL harness cannot show. See the probe script.
+    const revokes = sql
+      .split("\n")
+      .map(line => line.trim())
+      .filter(line => line.startsWith("revoke all on "));
+    expect(revokes.length).toBe(12);
+    for (const statement of revokes) {
+      expect(statement).toContain("service_role");
+    }
+  });
+
   it("declares every function with SECURITY DEFINER and an empty search_path", () => {
     expect(blocks.length).toBe(9);
     expect(publicBlocks.length).toBe(6);

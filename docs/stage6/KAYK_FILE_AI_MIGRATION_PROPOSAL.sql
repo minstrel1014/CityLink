@@ -6,6 +6,14 @@
 -- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
 -- Role 6 審查（2026-11-24）：無阻擋項；已補 A-1（文字欄位長度）、A-2（MIME 不一致不再靜默）、
 -- A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被兩個 pending 替換同時指向。
+
+-- Test preflight（2026-11-24，Adam 授權的三個唯讀項目之外另讀 pg_default_acl）發現：
+--   wkzclgmhrtecnpexfesr 的 ALTER DEFAULT PRIVILEGES FOR ROLE postgres 會在新建的
+--   table／function／sequence 上自動授權給 anon、authenticated 與 service_role。本檔以
+--   postgres 身分套用，因此只寫 public/anon/authenticated 的 revoke 會讓 service_role 的
+--   預設授權留下來（含 service_role 的 BYPASSRLS）。第 4 節的註解原本宣稱「不給
+--   service_role」，在真實 Supabase 專案上並不成立，所以每個 revoke 現在都指名 service_role。
+--   重現：docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql。
 --
 -- 已套用的決定：300 秒 presigned TTL、日曆月 5 個月保留、8 GiB 全域上限、
 --   替換限現行版本上傳者（R6）、刪除允許上傳者或 leader（R6）、lazy expiry、不做掃描。
@@ -78,9 +86,9 @@ alter table public.group_analysis_plans enable row level security;
 alter table public.group_analysis_jobs enable row level security;
 
 -- 不建立任何 policy：唯一入口是 SECURITY DEFINER RPC。即使端點出錯也讀不到表。
-revoke all on table public.group_files from public, anon, authenticated;
-revoke all on table public.group_analysis_plans from public, anon, authenticated;
-revoke all on table public.group_analysis_jobs from public, anon, authenticated;
+revoke all on table public.group_files from public, anon, authenticated, service_role;
+revoke all on table public.group_analysis_plans from public, anon, authenticated, service_role;
+revoke all on table public.group_analysis_jobs from public, anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 2. private helpers
@@ -167,9 +175,9 @@ as $function$
     and (p_group_id is null or f.group_id = p_group_id);
 $function$;
 
-revoke all on function private.group_file_retention_expiry(uuid) from public, anon, authenticated;
-revoke all on function private.can_access_group_files(uuid) from public, anon, authenticated;
-revoke all on function private.group_files_bytes(uuid) from public, anon, authenticated;
+revoke all on function private.group_file_retention_expiry(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.can_access_group_files(uuid) from public, anon, authenticated, service_role;
+revoke all on function private.group_files_bytes(uuid) from public, anon, authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 3. RPC
@@ -509,15 +517,15 @@ end;
 $function$;
 
 -- ---------------------------------------------------------------------------
--- 4. 權限：只給 authenticated，不給 service_role
+-- 4. 權限：只給 authenticated；anon、service_role、public 全部明確 revoke
 -- ---------------------------------------------------------------------------
 
-revoke all on function public.request_group_file_upload(uuid, text, text, bigint) from public, anon, authenticated;
-revoke all on function public.confirm_group_file_upload(uuid, bigint, text) from public, anon, authenticated;
-revoke all on function public.list_group_files(uuid) from public, anon, authenticated;
-revoke all on function public.request_group_file_download(uuid) from public, anon, authenticated;
-revoke all on function public.replace_group_file(uuid, text, text, bigint) from public, anon, authenticated;
-revoke all on function public.delete_group_file(uuid) from public, anon, authenticated;
+revoke all on function public.request_group_file_upload(uuid, text, text, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.confirm_group_file_upload(uuid, bigint, text) from public, anon, authenticated, service_role;
+revoke all on function public.list_group_files(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.request_group_file_download(uuid) from public, anon, authenticated, service_role;
+revoke all on function public.replace_group_file(uuid, text, text, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.delete_group_file(uuid) from public, anon, authenticated, service_role;
 
 grant execute on function public.request_group_file_upload(uuid, text, text, bigint) to authenticated;
 grant execute on function public.confirm_group_file_upload(uuid, bigint, text) to authenticated;

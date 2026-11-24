@@ -53,6 +53,14 @@ function serverAvailable(): boolean {
 }
 
 const available = serverAvailable();
+if (!available) {
+  // Role 6 N-1: make the skip loud rather than silent, so nobody reads a green
+  // suite as proof that the migration was applied anywhere.
+  console.warn(
+    "[stage6GroupFilesMigrationApplies] SKIPPED: no reachable PostgreSQL. " +
+      "The 'it applies cleanly' claim is NOT covered by this run."
+  );
+}
 const serverVersion = available
   ? psql(baseUri, ["-tAc", "show server_version"]).trim()
   : "";
