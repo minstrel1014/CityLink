@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowDown, Send } from "lucide-react";
+import { ArrowDown, Send, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
+import GroupAiDrawer from "@/components/citylink/GroupAiDrawer";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import { AI_AUTHOR_NAME } from "@shared/chatAuthor";
+import type { ChatTurn } from "@shared/aiChatContext";
 import {
   CHAT_PAGE_SIZE,
   getGroupChatAccess,
@@ -37,6 +40,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
   const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [olderBusy, setOlderBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -250,9 +254,19 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
                 Messages are plain text and cannot be edited in this version.
               </p>
             </div>
-            <Link className="secondary" href="/my-courses">
-              View My Courses
-            </Link>
+            <div className="stage6-chat-header-actions">
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => setAiOpen(true)}
+                aria-expanded={aiOpen}
+              >
+                <Sparkles size={15} /> Ask CityLink AI
+              </button>
+              <Link className="secondary" href="/my-courses">
+                View My Courses
+              </Link>
+            </div>
           </header>
 
           {hasOlder && (
@@ -282,7 +296,14 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
           ) : (
             <ol className="stage6-message-list" aria-live="polite">
               {messages.map(message => (
-                <li className="stage6-message" key={message.id}>
+                <li
+                  className={
+                    message.senderName === AI_AUTHOR_NAME
+                      ? "stage6-message stage6-message-ai"
+                      : "stage6-message"
+                  }
+                  key={message.id}
+                >
                   <div className="stage6-message-meta">
                     <strong>{message.senderName}</strong>
                     <time dateTime={message.createdAt}>
@@ -294,6 +315,31 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               ))}
             </ol>
           )}
+
+          <GroupAiDrawer
+            groupId={groupId}
+            open={aiOpen}
+            history={messages.map<ChatTurn>(message => ({
+              id: message.id,
+              authorKind: message.senderName === AI_AUTHOR_NAME ? "ai" : "member",
+              authorName: message.senderName,
+              body: message.body,
+              createdAt: message.createdAt,
+            }))}
+            files={[]}
+            onClose={() => setAiOpen(false)}
+            onAiMessage={body => {
+              setMessages(current => [
+                ...current,
+                {
+                  id: `local-ai-${current.length}-${Date.now()}`,
+                  senderName: AI_AUTHOR_NAME,
+                  body,
+                  createdAt: new Date().toISOString(),
+                },
+              ]);
+            }}
+          />
 
           {access?.canSend ? (
             <form className="stage6-chat-form" onSubmit={submitMessage}>
