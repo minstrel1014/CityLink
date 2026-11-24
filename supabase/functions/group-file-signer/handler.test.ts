@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   GROUP_FILE_CONTENT_TYPE,
   handleRequest,
+  resolveOrigin,
   statusForToken,
   type SignerDeps,
 } from "./handler";
@@ -58,6 +59,59 @@ describe("handleRequest — routing and CORS", () => {
       config.siteOrigin
     );
     expect(res.headers.get("access-control-allow-methods")).toContain("POST");
+  });
+
+  it("echoes the published origin when it is the one configured", async () => {
+    const res = await handleRequest(
+      new Request(
+        "https://fn.example/functions/v1/group-file-signer/upload-url",
+        {
+          method: "OPTIONS",
+          headers: { origin: config.siteOrigin },
+        }
+      ),
+      deps()
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe(
+      config.siteOrigin
+    );
+  });
+
+  it("allows the project Preview, which lives on a different host", async () => {
+    const preview =
+      "https://8328-i3ze6u1fh0d0s6w66gm3u-82091ec0.sg2.manus.computer";
+    const res = await handleRequest(
+      new Request(
+        "https://fn.example/functions/v1/group-file-signer/upload-url",
+        { method: "OPTIONS", headers: { origin: preview } }
+      ),
+      deps()
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBe(preview);
+    expect(res.headers.get("vary")).toContain("Origin");
+  });
+
+  it("sends no allow-origin header to a host it does not trust", async () => {
+    const res = await handleRequest(
+      new Request(
+        "https://fn.example/functions/v1/group-file-signer/upload-url",
+        { method: "OPTIONS", headers: { origin: "https://evil.example" } }
+      ),
+      deps()
+    );
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("accepts a comma-separated list and localhost for development", () => {
+    const list = `${config.siteOrigin}, https://other.example`;
+    expect(resolveOrigin("https://other.example", list)).toBe(
+      "https://other.example"
+    );
+    expect(resolveOrigin("http://localhost:3000", list)).toBe(
+      "http://localhost:3000"
+    );
+    expect(resolveOrigin("https://evil.example", list)).toBeNull();
+    expect(resolveOrigin("https://anything.example", "*")).toBe("*");
   });
 
   it("refuses anything that is not a POST", async () => {

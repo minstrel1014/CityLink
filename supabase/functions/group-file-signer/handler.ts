@@ -58,6 +58,42 @@ const DOMAIN_TOKEN = /^group_files_[a-z][a-z0-9_]{0,40}$/;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Which origin may read a response.
+ *
+ * `SITE_ORIGIN` may name several origins, separated by commas or spaces; a bare
+ * `*` keeps the permissive behaviour used for local testing.
+ *
+ * Manus-hosted origins are also accepted by pattern, deliberately. The
+ * published site and the project Preview are different hosts — `*.manus.space`
+ * and `*.manus.computer` — so pinning CORS to the published host makes the
+ * feature fail inside the Preview with the exact symptom of an unreachable
+ * bucket: the browser discards the response and `fetch` throws before any
+ * status is visible. That happened once and cost an audit to find.
+ *
+ * It is not a hole in the authorization model. Every request carries the
+ * caller's own JWT, the function sets no cookies and reads no ambient
+ * credentials, so the token is what protects the data, not CORS. `Vary: Origin`
+ * keeps shared caches from handing one origin's response to another.
+ */
+const MANUS_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*manus\.(space|computer)$/i;
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
+export function resolveOrigin(
+  requestOrigin: string | null,
+  siteOrigin: string
+): string | null {
+  const configured = siteOrigin.split(/[\s,]+/).filter(Boolean);
+  if (configured.includes("*")) return "*";
+  if (!requestOrigin) return configured[0] ?? null;
+  if (configured.includes(requestOrigin)) return requestOrigin;
+  if (MANUS_ORIGIN.test(requestOrigin) || LOCAL_ORIGIN.test(requestOrigin)) {
+    return requestOrigin;
+  }
+  // No header at all: the browser blocks the response, which is the intent.
+  return null;
+}
+
 export type SignerConfig = {
   /** Exact origin allowed by CORS. `*` is accepted only for local testing. */
   siteOrigin: string;
@@ -99,17 +135,23 @@ export function statusForToken(message: string | undefined): number {
 }
 
 function json(body: unknown, status: number, config: SignerConfig): Response {
+  // `config.siteOrigin` has already been resolved for this request, and an
+  // empty string means "no origin is allowed" — omit the header rather than
+  // send an empty one, so the browser blocks it cleanly.
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Headers":
+      "authorization, content-type, apikey, x-client-info",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    Vary: "Origin",
+  };
+  if (config.siteOrigin) {
+    headers["Access-Control-Allow-Origin"] = config.siteOrigin;
+  }
   return new Response(JSON.stringify(body), {
     status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": config.siteOrigin,
-      "Access-Control-Allow-Headers":
-        "authorization, content-type, apikey, x-client-info",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      Vary: "Origin",
-    },
+    headers,
   });
 }
 
@@ -131,19 +173,26 @@ export async function handleRequest(
   req: Request,
   deps: SignerDeps
 ): Promise<Response> {
-  const config = deps.config();
+  // A per-request copy, because the resolved origin replaces the configured
+  // list for the rest of this call and must not leak into the next one.
+  const config: SignerConfig = { ...deps.config() };
+  config.siteOrigin =
+    resolveOrigin(req.headers.get("origin"), config.siteOrigin) ?? "";
 
   if (req.method === "OPTIONS") {
+    const headers: Record<string, string> = {
+      "Access-Control-Allow-Headers":
+        "authorization, content-type, apikey, x-client-info",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Max-Age": "600",
+      Vary: "Origin",
+    };
+    if (config.siteOrigin) {
+      headers["Access-Control-Allow-Origin"] = config.siteOrigin;
+    }
     return new Response(null, {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": config.siteOrigin,
-        "Access-Control-Allow-Headers":
-          "authorization, content-type, apikey, x-client-info",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Max-Age": "600",
-        Vary: "Origin",
-      },
+      headers,
     });
   }
 
