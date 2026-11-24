@@ -1229,3 +1229,60 @@ without a code change.
 
 Nothing else was touched: no other function, no table, no row, no site deploy, no PR
 state change, `main` still `519a69e`.
+
+## 2026-11-24 17:27-17:39 — signer version 2 deployed; files drawer implemented (not published)
+
+Adam approved three items at 17:26: "1. approved 2. approved 3 approved" — redeploy the signer,
+set `SITE_ORIGIN`, and build the drawer.
+
+**Redeploy: done, version 2.** Function `group-file-signer`, id `87c2d055-09c8-49ec-ad93-e149c8cda91c`,
+version 2, ACTIVE, `verify_jwt: true`, bundle `ezbr_sha256 51d2196d06644e1e5c8e74b4e15fee0c433ee335252415dc2bdb7f7c98d1c979`.
+
+Two things went wrong first, both mine, both recorded because they will recur:
+
+1. Updating an existing function fails with *"import map path does not exist"* unless
+   `import_map_path` is passed explicitly. The stored value from version 1 points at version 1's
+   temporary source directory, which no longer exists. Passing `import_map_path: "deno.json"`
+   resolves it relative to the new source directory.
+2. The `signing.ts` uploaded in version 2 carries one comment sentence different from
+   `af416f4` ("cannot lose a non-ASCII name" instead of "keeps a non-ASCII name readable").
+   No code differs. The repo stays authoritative; the next deploy should upload the repo bytes
+   so deployed and committed are identical again.
+
+**Verified live after the redeploy**, same probes as version 1 plus the defect case:
+
+| probe | result |
+|---|---|
+| `OPTIONS /upload-url` | 204, `access-control-allow-origin: *` (`SITE_ORIGIN` still unset) |
+| `POST /upload-url`, no token | 401 at the gateway |
+| `POST /upload-url`, QA-A token, pending row | 200 signed PUT URL, R2 host, TTL 900 |
+| `POST /download-url`, soft-deleted row | **404 `group_files_not_current`** — was 500 before the fix |
+| `POST /download-url`, unknown row | 404 `group_files_not_found` |
+| `POST /upload-url`, unknown UUID | 404 `group_files_not_pending` |
+
+**`SITE_ORIGIN` is still not set.** Approval was given, but no tool available to the coordinator
+can write function secrets: the Supabase MCP exposes deploy/read only, and no access token exists
+in the sandbox. This remains a dashboard action by Adam, or a credential handed over deliberately.
+
+**Drawer: implemented locally, committed, not pushed.** In the WebDev project `Vm2mKA3YornoSGba8WBzse`
+at `/home/ubuntu/citylink`, commit `1b0c984` on `main` (one commit ahead of `origin/main`):
+
+- `client/src/lib/supabaseGroupFiles.ts` — RPC wrappers, signer calls, one error-token translator,
+  `formatBytes`. The browser never chooses an object key.
+- `client/src/pages/citylink/GroupFilesDrawer.tsx` + `.css` — right-hand drawer from the chat header,
+  file list, upload, download, delete-own, group-scoped quota bar.
+- `client/src/pages/citylink/GroupChatPage.tsx` — a `Files` button in the chat header opens it.
+- `client/src/lib/supabaseGroupFiles.test.ts` — token translation and byte formatting.
+
+`pnpm check` exit 0; `pnpm test` 637 passed in 44 files; `pnpm build:static` exit 0.
+
+**Not pushed, deliberately.** `publishing.auto_publish` is `true` in this project, so a push to
+`main` is a checkpoint that publishes the live site. Publication is a separate decision and has
+not been taken. The work therefore exists only as a local commit; if Adam wants it live, either
+authorize publication or switch Auto Publish off first so the push records a checkpoint without
+publishing.
+
+**Gap this does not close.** The confirm step sends the browser's own size and MIME type. Adam's
+requirement that confirm re-check the real object (HeadObject content type, size ceiling, magic
+bytes) is server work that neither the SQL bundle nor the signer performs yet. Uploads are
+therefore verified for size only.
