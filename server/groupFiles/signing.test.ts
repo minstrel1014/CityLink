@@ -1,0 +1,129 @@
+import { describe, expect, it } from "vitest";
+import {
+  GROUP_FILE_CONTENT_TYPE,
+  contentDispositionFor,
+  createR2Client,
+  presignDownload,
+  presignUpload,
+} from "./signing";
+import type { GroupFileSignerConfig } from "./env";
+
+const config: GroupFileSignerConfig = {
+  supabaseUrl: "https://example.supabase.co",
+  supabasePublishableKey: "publishable",
+  r2Endpoint: "https://accountid.r2.cloudflarestorage.com",
+  r2Bucket: "citylink-group-files",
+  r2AccessKeyId: "AKIAEXAMPLEEXAMPLE",
+  r2SecretAccessKey: "secret-example-value",
+  uploadTtlSeconds: 900,
+  downloadTtlSeconds: 300,
+};
+
+const client = createR2Client(config);
+const objectKey = "groups/31e77eb7-fdd5-46b4-8593-98ce4c180305/69035965-e145-4310-b7dd-224cfdadbbda";
+
+function query(url: string): URLSearchParams {
+  return new URL(url).searchParams;
+}
+
+describe("presignUpload", () => {
+  it("signs a PUT with the content type inside the signature", async () => {
+    const url = await presignUpload({
+      client,
+      bucket: config.r2Bucket,
+      objectKey,
+      contentType: "text/plain",
+      expiresIn: config.uploadTtlSeconds,
+    });
+    const params = query(url);
+
+    expect(new URL(url).pathname).toContain(objectKey);
+    expect(params.get("X-Amz-Algorithm")).toBe("AWS4-HMAC-SHA256");
+    expect(params.get("X-Amz-Expires")).toBe("900");
+    expect(params.get("X-Amz-Signature")).toMatch(/^[0-9a-f]{64}$/);
+    // The header must be covered by the signature, not merely suggested.
+    expect(params.get("X-Amz-SignedHeaders") ?? "").toContain("content-type");
+  });
+
+  it("produces a different signature when the content type changes", async () => {
+    const base = {
+      client,
+      bucket: config.r2Bucket,
+      objectKey,
+      expiresIn: 900,
+    };
+    const text = await presignUpload({ ...base, contentType: "text/plain" });
+    const html = await presignUpload({ ...base, contentType: "text/html" });
+
+    expect(query(text).get("X-Amz-Signature")).not.toBe(
+      query(html).get("X-Amz-Signature")
+    );
+  });
+});
+
+describe("presignDownload", () => {
+  it("forces attachment disposition and a fixed content type", async () => {
+    const url = await presignDownload({
+      client,
+      bucket: config.r2Bucket,
+      objectKey,
+      fileName: "qa-p1-small.txt",
+      contentType: "text/plain",
+      expiresIn: config.downloadTtlSeconds,
+    });
+    const params = query(url);
+
+    expect(params.get("X-Amz-Expires")).toBe("300");
+    expect(params.get("response-content-disposition")).toBe(
+      'attachment; filename="qa-p1-small.txt"; filename*=UTF-8\'\'qa-p1-small.txt'
+    );
+    expect(params.get("response-content-type")).toBe("text/plain");
+  });
+});
+
+describe("contentDispositionFor", () => {
+  it("cannot be broken out of with quotes, newlines or backslashes", () => {
+    const header = contentDispositionFor('a"b\nc\\d.txt');
+    // No raw quote, CR, LF or backslash survives into the header.
+    expect(header).not.toMatch(/[\r\n]/);
+    expect(header.match(/"/g)).toHaveLength(2);
+    expect(header).toContain('attachment; filename="a_bc_d.txt"');
+    expect(header).toContain("filename*=UTF-8''");
+  });
+  it("keeps a non-ASCII name readable via RFC 5987", () => {
+    const header = contentDispositionFor("報告.pdf");
+    expect(header).toContain('filename="__.pdf"');
+    expect(header).toContain(
+      "filename*=UTF-8''%E5%A0%B1%E5%91%8A.pdf"
+    );
+  });
+  it("falls back to a name when the client sends only whitespace", () => {
+    expect(contentDispositionFor("   ")).toBe(
+      'attachment; filename="file"; filename*=UTF-8\'\'file'
+    );
+  });
+});
+
+describe("GROUP_FILE_CONTENT_TYPE", () => {
+  // The declared MIME type is a client-supplied string, so it is never signed.
+  // These two assertions are the contract: uploads store an inert type, and
+  // downloads are served as that same inert type with attachment disposition.
+  it("is the inert type used for uploads", () => {
+    expect(GROUP_FILE_CONTENT_TYPE).toBe("application/octet-stream");
+  });
+  it("is what a download is served as, not whatever was declared", async () => {
+    const url = await presignDownload({
+      client,
+      bucket: config.r2Bucket,
+      objectKey,
+      fileName: "payload.html",
+      contentType: GROUP_FILE_CONTENT_TYPE,
+      expiresIn: config.downloadTtlSeconds,
+    });
+    const params = query(url);
+    expect(params.get("response-content-type")).toBe("application/octet-stream");
+    expect(params.get("response-content-disposition")).toBe(
+      'attachment; filename="payload.html"; filename*=UTF-8\'\'payload.html'
+    );
+  });
+});
