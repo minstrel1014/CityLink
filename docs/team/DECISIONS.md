@@ -1307,3 +1307,42 @@ trusts the browser's declared size and MIME type. The real-object re-check Adam 
 (HeadObject content type, size ceiling, magic bytes) is not implemented anywhere in the current
 stack. This is now an accepted follow-up, not a defect: uploads are verified for size only, and any
 future hardening belongs to a separately reviewed server change.
+
+## 2026-11-24 18:14-18:22 — chat fixes published; version marker made verifiable
+
+Adam reported three things on the published site and confirmed item 1 and 2 of the previous list:
+"1. done 2.a 3. make the chat window longer ... why there is a view my course button ... when i upload
+in an excel file it show Something went wrong. Try again."
+
+**`SITE_ORIGIN` is set and verified.** `OPTIONS /functions/v1/group-file-signer/upload-url` with
+`Origin: https://citylink-vm2mka3y.manus.space` now returns
+`access-control-allow-origin: https://citylink-vm2mka3y.manus.space` instead of `*`. The bucket's
+own preflight also answers correctly (`204`, `GET, PUT, HEAD`, `content-type`), so the browser path
+is open on both hops.
+
+**The Excel failure, diagnosed from the data rather than guessed.** Two rows exist from Adam's
+attempts — `Tutorial 11.xlsx` (18,066 B) and `Bi-weekly Log template (1).docx` (38,897 B), both
+`pending`, both in the QA group — so `request_group_file_upload` succeeded and the failure came
+after it. "Something went wrong. Try again." is the string for an unanticipated error, which in this
+client can only come from a network-level throw: a browser blocked at CORS reports `Failed to fetch`,
+not a database token. Both hops now pass preflight, so a retry should complete. The message is no
+longer opaque either: a blocked network path says "Your browser could not reach file storage", and
+the one-pending-replacement index (F-P1-1) now maps to its own sentence instead of the generic one.
+
+**Published, two checkpoints.** `a0b368a` — taller conversation (the list reserves 52vh and may grow
+to 66vh, 46/60vh under 720px), "View My Courses" removed from the chat header, error mapping above.
+`f873a32` — the version marker. Both pushed to `origin/main` of the WebDev project and published.
+
+**The version marker was wrong twice, and is now verifiable.** It began as a hard-coded canonical SHA
+(`344c1058`) that described no deployed build. Deriving it from Git then produced `"sourceSha":
+"unknown"` on the live site, because the platform builds from a checkpoint archive with no `.git`.
+It is now rewritten after the build from the emitted JavaScript: `buildId` is the bundle's SHA-256
+prefix, and `asset`/`bundleSha256` travel with it. Verified on the live site: marker `3c808df2d4163711`
+equals the SHA-256 of `assets/index-DyIDBG3G.js` (960,238 B) fetched from the published origin.
+`sourceSha` stays `unknown` on platform builds — there is no commit there to read — and the file is
+no longer tracked, since it is generated.
+
+**Two loose ends handed back, not decided here.** Adam's two failed attempts left `pending` rows
+behind; they are invisible to the drawer but they occupy the pending slot, and deleting rows on
+Launch is a data change that needs his word. And "View My Courses" still appears on
+`AuthenticatedMyGroup.tsx` and `GroupChatPicker.tsx`; only the chat header was in scope here.
