@@ -60,17 +60,54 @@ that made the mistake:
    at the time: both projects renamed, refs unchanged, "every earlier record calling
    Test 'the migration target' is superseded as historical."
 
-## 5. Known documents that still carry the old mapping
+## 5. Older text that still carries the pre-F14 mapping
 
-Listed so a reader knows what to discount, not because they should be rewritten.
-Historical records stay as history; they are annotated, never silently edited.
+**General rule — this overrides the list below, and the list is only an illustration.**
+Any text written before 2026-11-23 01:50 that calls `wkzclgmhrtecnpexfesr` "disposable
+Test", or otherwise implies that ref is writable, is superseded by this register. That
+includes applied migration headers, historical handovers and stage documents. Read them
+as history; never act on them.
 
-| Document | Status |
+An exhaustive list would be stale the moment it was written. At the time of writing the
+repository contains **19 files** using the phrase and **5 applied migrations whose headers
+read like apply instructions**. Those five are the real risk, because a header is exactly
+the thing someone copies:
+
+| Applied migration | Line | Wording |
+|---|---|---|
+| `20261117043100_stage5_course_group_invite_candidates.sql` | 3 | "approved applying this migration to disposable Test. Never apply to Main." |
+| `20261117205600_stage5_course_detail_group_views.sql` | 3 | "separately approve applying it to disposable Test. Never apply to Main." |
+| `20261118050000_stage6_chat_recruitment.sql` | 2, 22 | "Forward-only migration for the disposable Test project only." / "Target: … only; never Main." |
+| `20261118083000_stage6_people_page_naming.sql` | 2 | "Authorized by Adam for the disposable Test project only (2026-11-18)." |
+| `20261119090000_group_hard_max.sql` | 27 | "targets the disposable Test project only after the …" |
+
+None of these is edited. They are applied migrations: rewriting them would change files
+whose digests may be cited in apply records, and would not change anything already applied.
+The correction lives here instead.
+
+Documents corrected on 2026-11-24, kept for reference rather than because they still
+mislead:
+
+| Document | Treatment |
 |---|---|
-| `PROJECT_INSTRUCTIONS.md` §"Database, secrets and Preview" (Project shared file, not in this repo) | Correction block inserted 2026-11-24; original text retained and marked superseded. |
-| `ENVIRONMENT_STATUS.md` §"Current permissions and blocked live environment" (Project shared file) | Corrected 2026-11-24; original sentence retained as a quote. |
-| `CityLink-Handover-2026-11-21.md` (Project shared file) | Superseded banner and inline markers added 2026-11-24. |
-| `CityLink-Whole-Project-Recreation-Prompt.md` (Project shared file) | Superseded banner and inline marker added 2026-11-24. |
-| `TODO.md` (two unchecked QA items), `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` | Corrected 2026-11-24 in this change; the TODO items are marked blocked rather than renamed, because there is no project called Test to run them against. |
-| `supabase/migrations/20261118050000_stage6_chat_recruitment.sql` line 22 | **Deliberately not edited.** It is an applied migration; applied migrations are never rewritten, and editing it would change a file whose digest may be cited elsewhere. Recorded here as historical instead. |
-| `docs/team/DECISIONS.md` | Had no F14 entry until 2026-11-24; one is added in this change. |
+| `PROJECT_INSTRUCTIONS.md` §"Database, secrets and Preview" (Project shared file) | Correction block inserted; original paragraphs retained and marked superseded. |
+| `ENVIRONMENT_STATUS.md` §"Current permissions and blocked live environment" (Project shared file) | Reversed sentence replaced; original retained as a quote. |
+| `CITYLINK_RESTORE_GUIDE.md` (Project shared file) | "The Test database" corrected to the frozen Prototype. |
+| `CityLink-Handover-2026-11-21.md`, `CityLink-Whole-Project-Recreation-Prompt.md` (Project shared files) | Superseded banner plus inline markers on the bullets that instruct a reader to use the frozen project. |
+| `TODO.md` (two unchecked QA items) | Marked blocked, not renamed: there is no project called Test to run them against. |
+| `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` | Header replaced with a HISTORICAL note. |
+| `docs/team/DECISIONS.md` | F14 entry added on 2026-11-24; the log previously had none. |
+
+## 6. Open items that this register cannot close
+
+1. **PR #59 records a false authorization.** Its `DECISIONS.md` entry states that Adam
+   authorized applying the P1 migration to `wkzclgmhrtecnpexfesr`. That ref must never be
+   migrated, so the entry has to be corrected before PR #59 merges: keep the fact (a
+   preflight was run there), remove the authorization meaning. It is not a label error.
+2. **PR #59 and PR #62 both append to `DECISIONS.md` at the same point.** Whichever merges
+   second needs a conflict resolution that keeps both entries. Verified by merge simulation
+   against `311f800`, not assumed.
+3. **The Project shared folder is not shared.** Two tasks in the same Project were given
+   different folder ids (`citylink-a4adfcac` and `citylink-4a664a02`) holding divergent
+   copies of these governance files. Until that is settled, treat this repository's
+   `docs/team/` as the authoritative channel and the shared folder as a convenience.
