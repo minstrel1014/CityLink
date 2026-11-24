@@ -42,7 +42,7 @@ create unique index if not exists group_chat_messages_ai_request
 
 **為什麼要拆（Role 6 N-4）。** `add column` 與 `check` 寫在同一條 `alter table` 裡，PostgreSQL 會在 **ACCESS EXCLUSIVE** 下全表掃描 `group_chat_messages`——那是一張 live 表（檔案功能已上線、聊天持續成長），掃描期間整個群組聊天室連讀取都被擋住。拆開之後：加欄位（PG11+ 的 `not null default` 不重寫表格）與 `add constraint … not valid` 只動目錄；`validate constraint` 只需 **SHARE UPDATE EXCLUSIVE**，寫入仍可進行。本檔是單交易（`begin`／`commit`），鎖仍持有到 commit，所以**要真正縮短鎖住時間，套用者應把 §3.1 拆成第二次部署**——這一節刻意把它獨立出來就是為了可拆。preflight 必須記錄實際數字（行數、`pg_total_relation_size`、鎖等待），而不是假設「應該很快」。**未套用前無法給出這些數字，本檔也沒有給。**
 
-**索引（Role 6 N-5）。** `finish_group_ai_request` 的冪等路徑要能以 `ai_request_id` 找到既有訊息，沒索引就是掃表；因此加 **partial index**（`where ai_request_id is not null`）——一般成員訊息永遠是 NULL，全值索引只是在長尾巴。
+**索引（Role 6 N-5）。** `finish_group_ai_request` 的冪等路徑要能以 `ai_request_id` 找到既有訊息，沒索引就是掃表；因此加 **unique partial index**（`where ai_request_id is not null`）——一般成員訊息永遠是 NULL，全值索引只是在長尾巴。
 
 **為什麼一定要 `author_kind`。** `sender_id` 在帳號刪除時因 `ON DELETE SET NULL` 變成 NULL，所以「`sender_id is null`」同時代表「AI」與「已刪除帳號」。單靠 NULL 無法區分，前端會把已刪除帳號的舊訊息標成 CityLink AI，等於替產品說出它沒說過的話。`author_kind` 讓兩者分開，而 `group_chat_messages_ai_has_no_sender` 只是把「AI 沒有 profile」寫成約束，不是用來辨識 AI。
 
@@ -455,7 +455,7 @@ Adam 在 2026-11-25 裁決：**S-1 選項 (a)**、**S-2 選項 (b)**、**S-3 核
 它的 commit 一落地，Section 3 那個 `ALTER TABLE … add column` 的 `ACCESS EXCLUSIVE` 就釋放。
 
 **部署 2**：**重跑同一條目標斷言**（S-9(b) 的硬性條件——第二次部署是第二次人工選錯專案的機會，2026-11-24 的事故就是這一類）、
-`validate constraint` 五條、partial index、兩支讀取函式與 private helper、`begin`／`claim`／`finish`（含 **S-1** 的
+`validate constraint` 五條、unique partial index、兩支讀取函式與 private helper、`begin`／`claim`／`finish`（含 **S-1** 的
 `null` 預設 + `coalesce`）、**新增 `get_group_ai_request_status`（S-2(b)）**、`clear`，以及這些物件的全部 revoke/grant。
 驗證只需 `SHARE UPDATE EXCLUSIVE`，寫入仍可進行，所以這段不會像合在一起那樣鎖住聊天室。
 

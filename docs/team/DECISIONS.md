@@ -1930,3 +1930,13 @@ preflight), gate 4 (Adam's dated authorisation naming both blobs) and gate 5 (sa
 expected; if one becomes necessary it is a new blob and needs its own authorisation. Local green is
 not applied: no Supabase project was connected, no preflight was run, nothing was applied, promoted,
 merged, deployed or published, and PR #67 stays draft.
+
+**Follow-up, same day — one word.** Role 6 left the contract's own rationale at §1 line 45 to a
+choice: call the index unique there, or keep the wording and record a deliberate exception. Adam
+ruled the first. Line 45 and the §11 change list now read "unique partial index"; the §11
+review-history narrative at line 398 is untouched, because it describes what was reviewed at the
+time and rewriting it would be the same error in the other direction. Only the contract moved: it
+becomes `13a4e8ccd5990d4cd443672e3a15adc6dab1b75c`, 528 lines, 96,716 bytes, sha256
+`a49abe8883dadc9da77f54dcf1e383e766abb3a4ba661ea458bafdd504ad48cd`. Deploy 2 is unchanged at
+`9700679905c11e3d2b5046080f6ebccdf06288729ba909da1e2ca6a1b90ad15e`, so the object an
+authorisation names did not move.
