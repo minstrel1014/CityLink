@@ -643,3 +643,88 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Not authorized by this entry:** any write to `wkzclgmhrtecnpexfesr`, any other Launch write,
   merge, deployment, publication, GitHub visibility change, or any QA write beyond what a
   separate decision permits.
+
+## 2026-11-24 — Kayk P1 target control: procedural (option a), with a cluster fingerprint captured at preflight
+
+- **Decided by Adam, 2026-11-24.** The P1 group-files migration
+  `docs/stage6/KAYK_FILE_AI_MIGRATION_PROPOSAL.sql` neither asserts nor can assert its own
+  target. Verified at head `a135cb6`, blob `baa08e65ab30e2df7e08ed796022982da5e34467`: zero
+  occurrences of `current_database()`, of a `DO` block, of `set_config`/`current_setting`, and
+  of `inet_server_addr()`; the executable body begins at `begin;`. A name-based assertion would
+  not help either, because `current_database()` returns `postgres` on both projects.
+- **Option (a) is adopted.** The control is procedural, and four records must name the same
+  target: (1) the operator-declared ref echoed as a preflight marker, in the shape already used
+  by `docs/capacity-successor/preflight/00_target_identity_and_engine.sql` `C-MRK-13`; (2) the
+  cluster fingerprint, which must be `pg_control_system().system_identifier` (see below);
+  (3) Adam's written authorization naming ref, commit head and blob path; (4) a post-apply
+  read-only verification.
+- **The version string cannot serve as the fingerprint — measured on Launch, 2026-11-24.**
+  `version()` returns `PostgreSQL 17.11 on aarch64-unknown-linux-gnu, compiled by gcc (GCC)
+  15.2.0, 64-bit`, with no build suffix; `server_version` is `17.11` and `server_version_num`
+  is `170011`. The build number (`17.11.0.003`) exists only as an API field, not in SQL. So the
+  `C-MAJ-02` shape as written in the capacity preflight distinguishes nothing between two
+  projects on the same minor version. `pg_control_system().system_identifier` is readable as
+  `postgres` and returned `7692131729119822239` on Launch; it is the only SQL-visible value
+  that separates one cluster from another.
+- **What the fingerprint establishes, and what it does not.** It detects drift between the
+  preflight and the apply — a read taken on one project and a migration run against another —
+  which is the failure mode that actually occurred on 2026-11-24. It does **not** establish that
+  the preflight itself ran on Launch, because the recorded value came from whichever cluster the
+  operator reached. It is a consistency check, not an identity proof, and must not be cited as
+  one.
+- **Transitional.** This option ends at the first authorized write to Launch. See the next entry.
+
+## 2026-11-24 — The first authorized Launch write creates the target marker; later migrations run fail-closed
+
+- **Decided by Adam, 2026-11-24.** The first authorized write to Launch
+  `pijslbchvstkoweslymr` is to create the target marker. After that, every later migration
+  asserts the marker and refuses when it is absent or when it names another ref. Option (a) is
+  therefore transitional and terminates at that write.
+- **Why the first write cannot be gated by the marker.** Creating the marker is itself a write,
+  so it runs under the procedural control recorded above. That is the only step that does.
+- **Minimum shape, drafted as `docs/stage6/CITYLINK_TARGET_MARKER_DRAFT.sql`, not applied.** A
+  single-row table in schema `private` naming the project ref, the cluster `system_identifier`
+  and the declaration provenance, revoked from `public`, `anon`, `authenticated` and
+  `service_role`; plus a function that raises a distinct SQLSTATE when the row is absent, when
+  the ref does not match, or when `pg_control_system().system_identifier` no longer matches the
+  recorded value. Every later migration calls it before its first statement.
+- **Limit, stated so it is not over-claimed.** A project clone or restore copies a marker. It
+  prevents applying to the wrong ref by accident; it does not prove identity against a
+  deliberate clone.
+
+## 2026-11-24 — P1: phantom current rows accepted as a known risk (Role 6 N-10)
+
+- **Decided by Adam, 2026-11-24.** `public.confirm_group_file_upload` is granted to
+  `authenticated` (proposal line 542) and treats the caller's `p_byte_size` as the HeadObject
+  measurement (line 313). A signed-in member can call the RPC directly, bypassing the server
+  endpoint, and mark a never-uploaded row `current`.
+- **Accepted, not fixed.** The consequence is bounded: no privilege escalation, no cross-group
+  read, no access to another member's file. The member spends their own group's 1 GiB and the
+  global 8 GiB quota on phantom `current` rows. The risk is recorded, not mitigated.
+- **What would reopen this.** If quota becomes shared across cohorts, or if the file list
+  becomes a trust surface for AI analysis, revisit. The options then are to stop granting
+  `confirm` to `authenticated`, or to require a one-time server-issued token.
+
+## 2026-11-24 — Authorization: P1 behaviour QA writes on Launch
+
+- **Authorized by Adam, 2026-11-24.** The seven P1 behaviour checks run on Launch
+  `pijslbchvstkoweslymr` itself, not on a branch and not locally, and the test data is kept.
+- **Accounts, all pre-existing and email-confirmed on Launch:** A
+  `citylink.qa2.20261123@example.com` (`8954315c-d7b1-4cd1-9ca6-d62186eefcda`) creates the group
+  and acts as leader and uploader; B `citylink.qa3.20261123@example.com`
+  (`7dfc7ddb-f08d-4553-9e09-d56e910e3faf`) joins as an ordinary member; C
+  `citylink.qa4.20261123@example.com` (`b6bc6791-5f15-4a39-ad4d-1617c89c17e3`) stays outside.
+  Adam's own account `citylink.qa.20261123@example.com`
+  (`9bfc6d04-ec73-41c7-a0a7-6e32dea86de5`) is deliberately not in the test group, so the
+  outsider check keeps a control.
+- **Scope of the writes:** one group whose name begins `QA-P1-`, its memberships, and rows in
+  the three P1 tables created through the six RPCs. One direct UPDATE is permitted, only for
+  check 6: setting `retention_expires_at` into the past on a QA row.
+- **Retention:** the test data is kept, not deleted. Recorded consequence: it stays on Launch
+  permanently and counts against the 8 GiB global and 1 GiB per-group quotas, so test files must
+  be small.
+- **Owner:** Eunice (CityLink — Independent QA and Documentation) runs the checks; the applying
+  task does not.
+- **Not authorized:** any write outside the `QA-P1-` group, any change to existing groups or
+  memberships, any DML on rows the QA did not create, and any use of a service-role key to mint
+  identities.
