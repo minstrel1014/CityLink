@@ -1,19 +1,30 @@
 -- CityLink — 群組聊天室檔案：P1 migration 提案
 --
--- 狀態：草案，供 Role 6 exact-head 審查。**尚未套用**。
+-- 狀態：草案，供 Role 6 exact-head 審查。**尚未套用**，且現行 head 尚無人審查。
 -- 套用需要 Adam 另行授權，並指名本檔的確切 blob。
 --
 -- 設計依據：docs/stage6/KAYK_R2_ADAPTER_DESIGN.md、KAYK_AI_FILE_TECHNICAL_CONTRACT_PROPOSAL.md
 -- Role 6 審查（2026-11-24）：無阻擋項；已補 A-1（文字欄位長度）、A-2（MIME 不一致不再靜默）、
 -- A-3（交易包裹），並另加 B-4 的唯一索引以避免同一檔案被兩個 pending 替換同時指向。
 
--- Test preflight（2026-11-24，Adam 授權的三個唯讀項目之外另讀 pg_default_acl）發現：
---   wkzclgmhrtecnpexfesr 的 ALTER DEFAULT PRIVILEGES FOR ROLE postgres 會在新建的
---   table／function／sequence 上自動授權給 anon、authenticated 與 service_role。本檔以
---   postgres 身分套用，因此只寫 public/anon/authenticated 的 revoke 會讓 service_role 的
---   預設授權留下來（含 service_role 的 BYPASSRLS）。第 4 節的註解原本宣稱「不給
---   service_role」，在真實 Supabase 專案上並不成立，所以每個 revoke 現在都指名 service_role。
---   重現：docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql。
+-- 套用目標（依 Adam 的 F14 決定，2026-11-23 01:50）：CityLink Launch
+--   pijslbchvstkoweslymr（capacity 文件所稱的 "Main"）。wkzclgmhrtecnpexfesr 自 F14
+--   起是**凍結的 Prototype**，明文不得 migrate，capacity gate 以
+--   group_capacity_gate_target_out_of_scope（45003）拒絕它。證據見
+--   docs/capacity-successor/CAPACITY_SUCCESSOR_MIGRATION_PACKAGE_ROLE6_20261122.md
+--   §4.1、§4.2、§11.5 與 CAPACITY_SUCCESSOR_PREFLIGHT_CHECKLIST_20261122.md 第 29 行。
+--
+-- 2026-11-24 的 catalog 讀取是在 wkzclgmhrtecnpexfesr 上做的，所以那些 preflight
+--   **對套用而言作廢**（目標錯誤，不是失敗、也不是證據），只保留為該 Prototype 當時
+--   狀態的記錄。對本檔有意義的是 K-1 這個機制：Supabase 專案的
+--   ALTER DEFAULT PRIVILEGES FOR ROLE postgres 會在新建的 table／function／sequence
+--   上自動授權給 anon、authenticated 與 service_role，而本檔以 postgres 身分套用，
+--   所以只寫 public/anon/authenticated 的 revoke 會讓 service_role 的預設授權留下來
+--   （service_role 另有 BYPASSRLS）。第 4 節舊註解宣稱「不給 service_role」在真實
+--   專案上並不成立，因此每個 revoke 現在都指名 service_role。Launch 是否帶著相同的
+--   預設權限**尚未驗證**，需在授權套用前對該專案重讀 pg_default_acl。
+--   重現（鏡射觀察到的預設權限，非指定專案）：
+--   docs/stage6/scripts/KAYK_P1_DEFAULT_PRIVILEGE_PROBE.sql。
 --
 -- 已套用的決定：300 秒 presigned TTL、日曆月 5 個月保留、8 GiB 全域上限、
 --   替換限現行版本上傳者（R6）、刪除允許上傳者或 leader（R6）、lazy expiry、不做掃描。

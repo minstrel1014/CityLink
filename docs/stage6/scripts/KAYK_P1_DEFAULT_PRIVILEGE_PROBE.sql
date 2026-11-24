@@ -1,11 +1,12 @@
 -- CityLink — P1 default-privilege probe (evidence tooling, NOT application SQL)
 --
--- Purpose: the Test project applies migrations as role `postgres`, and `postgres`
+-- Purpose: a Supabase project applies migrations as role `postgres`, and `postgres`
 -- has ALTER DEFAULT PRIVILEGES that auto-grant on newly created objects. The P1
 -- proposal revokes from `public, anon, authenticated` but never names
 -- `service_role`, so on a real Supabase project those auto-grants survive.
 -- A plain local PostgreSQL has no such default ACLs, which is why both the Kayk
--- harness and Role 6's harness measured service_role = false.
+-- harness and Role 6's harness measured service_role = false. Before any apply, re-read
+-- pg_default_acl on the actual target.
 --
 -- This probe reproduces Test's measured default privileges on a disposable
 -- PostgreSQL 17 cluster, applies the reviewed blob as `postgres`, and then reads
@@ -33,7 +34,8 @@ create database citylink_p1_defpriv_probe;
 -- Same stand-in schema the vitest apply test uses.
 \i server/fixtures/groupFilesStubSchema.sql
 
--- Mirror of Test wkzclgmhrtecnpexfesr, read from pg_default_acl on 2026-11-24:
+-- Mirror of the default privileges read from wkzclgmhrtecnpexfesr (frozen
+-- Prototype, out of scope since F14) in pg_default_acl on 2026-11-24:
 -- FOR ROLE postgres -> relations ALL, functions EXECUTE, sequences USAGE/SELECT/UPDATE
 -- to anon, authenticated and service_role; private schema usable by authenticated.
 grant usage on schema public to anon, authenticated, service_role;
