@@ -24,6 +24,17 @@
 --            具備「何時第一次接受」的證據語意（F-11）。
 --   S-4      檔頭 SQLSTATE 清單補 45N11，並由測試解析這份清單，而不是只查字串存在。
 --   S-9 (b)  拆成兩次部署，本檔是第 2 次，且**重跑第 0 節的目標斷言**。
+--   S-5      每日計數改寫成合約 §2.1 G-3 的原話：排除「從未被人接手過的 queued」，今天其餘的
+--            列一律計入。原本的 `processing/ready/failed 或 120 秒內` 是**另一句話**（Role 6
+--            S-5）。被對齊的是 SQL，不是決定——G-3 本身是 Adam 2026-11-24 已核准的口徑。
+--   S-6      兩個 context 迴圈改成「裝不下就 exit」的嚴格前綴（Role 6 建議），並在被 200 列
+--            掃描上限擋住時設 dropped_context ⇒「本次未包含較早的對話」不會再說錯方向。
+--            掃描上限刻意保留（不無限掃 live 表），這是第二審查者 item 1 的第二種修法。
+--   S-7      檔內重複的字面值 4000／2／10／200 由 stage6AiChatSqlContract.test.ts 釘住；
+--            這條在測試側，本檔只標清楚它們的位置與語意。
+--   S-8      finish 的 truncated 現在也承認 4,000 字元的左側鉗位，log 不會再宣稱「未截斷」。
+--   S-10     error_code 的 CHECK 在部署 1 的建表裡（建立即驗證，新表為空、不掃表）；
+--            本檔的 finish 只寫合約 §9 那兩個值，其他寫法會被約束擋掉。
 --
 -- 套用目標（唯一；依 Adam 的 F14 決定 2026-11-23 01:50 與其 2026-11-25 規則）：
 --   CityLink Launch ref pijslbchvstkoweslymr。Prototype wkzclgmhrtecnpexfesr 依 F14 凍結、
@@ -216,6 +227,7 @@ declare
   v_budget integer := 4000;
   v_chat_chars integer := 0;
   v_ai_kept integer := 0;
+  v_scanned integer := 0;
   v_kept uuid[] := '{}';
   v_dropped boolean := false;
   v_turns jsonb;
@@ -305,22 +317,23 @@ begin
     return;
   end if;
 
-  -- 限流（G-3 口徑：从未被接手的過期 queued 列不計入每日配額）。
+  -- 限流（S-5：以下兩句就是合約 §2.1 G-3 的原話，不再用「或 120 秒內」的變體）。
+  -- 計入今天的每一列，唯獨從未被人接手過的 queued 除外：那種列沒有產生過 provider
+  -- 呼叫、沒有花到錢，不該燒掉当天的配額（Adam 2026-11-24 的 G-3 決定）。已被 claim
+  -- 過的列一律計入，不論現在停在哪個狀態；in-flight 另有自己的判準（下面的 v_stale）。
   v_day_start := date_trunc('day', now());
 
   select count(*) into v_group_today
   from public.group_ai_requests q
   where q.group_id = p_group_id
     and q.created_at >= v_day_start
-    and (q.status in ('processing', 'ready', 'failed')
-      or q.created_at > now() - v_stale);
+    and not (q.status = 'queued' and q.claimed_at is null);
 
   select count(*) into v_user_today
   from public.group_ai_requests q
   where q.asked_by = v_actor
     and q.created_at >= v_day_start
-    and (q.status in ('processing', 'ready', 'failed')
-      or q.created_at > now() - v_stale);
+    and not (q.status = 'queued' and q.claimed_at is null);
 
   select count(*) into v_in_flight
   from public.group_ai_requests q
@@ -359,6 +372,10 @@ begin
   );
 
   -- 規則 2：最多 2 則最近的 AI 回答，與成員訊息共用同一個 4,000 額度，超出從最舊丟。
+  -- S-6（嚴格前綴，Role 6 建議的修法）：帶滿 2 則、或某一則裝不下，就 exit，不再回頭撿
+  -- 更舊的小訊息。原本的寫法是設旗標後**繼續**，留下的是一個有空洞的視窗，而規則 4 要加的
+  -- 提示「本次未包含較早的對話」就會說錯方向——它實際丟掉的是較晚的那幾則。
+  -- limit 10 在這裡永不構成沉默的缺口：兩個 exit 條件最多讓迴圈掃到第 3 列。
   for r in
     select m.id as mid, char_length(m.body) as cost
     from public.group_chat_messages m
@@ -368,16 +385,21 @@ begin
     order by m.created_at desc, m.id desc
     limit 10
   loop
-    if v_ai_kept < 2 and v_chat_chars + r.cost <= v_budget then
-      v_kept := v_kept || r.mid;
-      v_chat_chars := v_chat_chars + r.cost;
-      v_ai_kept := v_ai_kept + 1;
-    else
+    if v_ai_kept >= 2 or v_chat_chars + r.cost > v_budget then
       v_dropped := true;
+      exit;
     end if;
+    v_kept := v_kept || r.mid;
+    v_chat_chars := v_chat_chars + r.cost;
+    v_ai_kept := v_ai_kept + 1;
   end loop;
 
-  -- 規則 3：剩餘額度才給成員聊天，取最近的部分。
+  -- 規則 3：剩餘額度才給成員聊天，取最近的部分——同樣是嚴格前綴（S-6）。
+  -- 200 的掃描上限刻意保留：group_chat_messages 是 live 表，不該為了一次提問無限回溯。
+  -- 但命中上限時必須承認「還有更舊的沒被檢視」，否則在超短訊息的活躍群組裡 dropped_context
+  -- 會假陰，而 TypeScript assembler 沒有這個上限 ⇒ mock 與 live 行為不同（第二審查者 item 1，
+  -- 採他那兩個修法中的第二個：設旗標，而不是拿掉上限）。
+  v_scanned := 0;
   for r in
     select m.id as mid, char_length(m.body) as cost
     from public.group_chat_messages m
@@ -387,13 +409,17 @@ begin
     order by m.created_at desc, m.id desc
     limit 200
   loop
-    if v_chat_chars + r.cost <= v_budget then
-      v_kept := v_kept || r.mid;
-      v_chat_chars := v_chat_chars + r.cost;
-    else
+    v_scanned := v_scanned + 1;
+    if v_chat_chars + r.cost > v_budget then
       v_dropped := true;
+      exit;
     end if;
+    v_kept := v_kept || r.mid;
+    v_chat_chars := v_chat_chars + r.cost;
   end loop;
+  if not v_dropped and v_scanned >= 200 then
+    v_dropped := true;
+  end if;
 
   -- 規則 4 的條件在回答端加（notice），這裡只記錄 dropped_context。
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -491,7 +517,11 @@ begin
   update public.group_ai_requests q
     set status = case when p_error_code is null then 'ready' else 'failed' end,
         error_code = p_error_code,
-        truncated = coalesce(p_truncated, q.truncated),
+        -- S-8：4,000 的左側鉗位（下面插入訊息時的 left(...)）也是一次截斷。不承認它，
+        -- log 就會宣稱「未截斷」而客戶端拿到的文字确实被剪過。呼叫方傳 true 仍然有效，
+        -- 這個 or 只會把旗標往「有截斷」的方向加，不會往回減。
+        truncated = coalesce(p_truncated, q.truncated)
+          or char_length(btrim(coalesce(p_body, ''))) > 4000,
         dropped_context = coalesce(p_dropped_context, q.dropped_context),
         chat_chars = coalesce(p_chat_chars, q.chat_chars),
         file_chars = coalesce(p_file_chars, q.file_chars),

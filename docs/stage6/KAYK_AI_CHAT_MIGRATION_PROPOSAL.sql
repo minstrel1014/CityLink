@@ -35,7 +35,10 @@
 --   S-3      accept_ai_disclosure() 只在欄位仍是 NULL 時寫入，之後回傳既有值 ⇒ 這一欄重新
 --            具備「何時第一次接受」的證據語意（F-11）。
 --   S-4      檔頭 SQLSTATE 清單補 45N11，並由測試解析這份清單，而不是只查字串存在。
---   S-9 (b)  拆成兩次部署，本檔是第 2 次，且**重跑第 0 節的目標斷言**。
+--   S-9 (b)  拆成兩次部署，本檔是第 1 次（建表、加欄位、未驗證約束）；第 2 次重跑斷言。
+--   S-10     error_code 加 CHECK，只准合約 §9 的兩個值（本檔是唯一寫入這張表的建表處）。
+--   S-5／S-6／S-7／S-8 的改動都落在部署 2（限流口徑、context 迴圈、字面值釘選、truncated），
+--            本檔不受影響；這裡列出是為了讓人知道**兩檔都要跑**才算這輪改完。
 --
 -- 套用目標（唯一；依 Adam 的 F14 決定 2026-11-23 01:50 與其 2026-11-25 規則）：
 --   CityLink Launch ref pijslbchvstkoweslymr。Prototype wkzclgmhrtecnpexfesr 依 F14 凍結、
@@ -50,7 +53,7 @@
 --   P1 曾因貼上吃掉空行，使兩個函式的 prosrc 與授權檔不符，事後要補 create or replace。
 --     psql "$LAUNCH_URI" -v ON_ERROR_STOP=1 -v VERBOSITY=verbose -f \
 --        docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql
---   部署 1 回傳成功後才輪到部署 2；套用後照 Adam 的規則逐函式比對 md5(prosrc) 並貼出
+--   本檔（部署 1）回傳成功後才輪到 DEPLOY2；套用後照 Adam 規則逐函式比對 md5(prosrc) 並貼出
 --   結果，再把同一份 bytes 复制為 supabase/migrations/<timestamp>_kayk_ai_chat*.sql
 --   並補一列 ledger（比照 P1 的 20261124064100：只指向檔案）。**先套用、後 promote**。
 --
@@ -61,7 +64,8 @@
 --     / public.group_files（P1）
 --   * private.can_send_group_chat(uuid) / private.can_read_group_chat(uuid)
 --     —— supabase/migrations/20261118050000_stage6_chat_recruitment.sql
---   * 部署 1 的物件（本部署不重建它們，但第 3.1 節要驗證它們留下的約束）。
+--   * 本檔不依賴部署 2 的任何物件：順序只能是 1 → 2。反向執行時 DEPLOY2 會在 Section 3.1
+--     找不到約束（刻意不報錯的那段）並在引用 group_ai_requests 時失敗。
 --
 -- SQLSTATE 登記表（45N01、45N03–45N11）。刻意不借用 capacity 的 45003、P1 的 45K0x、
 --   marker 的 45M0x：一碼一因，log 才能說出是哪條線拒絕。**這份清單由
@@ -119,7 +123,12 @@ create table if not exists public.group_ai_requests (
   files jsonb not null default '[]'::jsonb,
   status text not null default 'queued'
     check (status in ('queued', 'processing', 'ready', 'failed')),
-  error_code text,
+  -- S-10（Role 6 建議加 CHECK）：合約 §9 只定義 provider_timeout／provider_failed 兩個值，
+  -- 自由文字會讓 log 的聚合口徑跟著寫入者漂移。建表時的 CHECK 不掃表、建立即驗證，所以放在
+  -- 部署 1 而不是部署 2。要新增錯誤碼時，改這裡、改合約 §9、改檔頭 SQLSTATE 表，三處一起。
+  error_code text
+    check (error_code is null
+      or error_code in ('provider_timeout', 'provider_failed')),
   dropped_context boolean not null default false,
   truncated boolean not null default false,
   chat_chars integer not null default 0 check (chat_chars >= 0),

@@ -1497,6 +1497,168 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
       ).toBe("0");
     });
   });
+  it("keeps the context a strict prefix when a recent message does not fit", () => {
+    // Role 6 S-6. Group 6 carries no chat rows in the fixture, so this window is built
+    // here: 3,000 chars newest, 1,500 next, 10 oldest. The newest fits and the second does
+    // not, so the honest answer is "newest only". Before the fix the loop kept scanning
+    // past the refusal and picked up the 10-char tail, leaving a hole in the middle while
+    // the notice promised only older history was missing.
+    provisioned(database => {
+      accept(database, FRESH);
+      exec(
+        database,
+        "insert into public.group_chat_messages (group_id, sender_id, " +
+          "sender_name_snapshot, body, author_kind, created_at) values " +
+          `('${OTHER_GROUP}','${FRESH}','Fresh', repeat('t', 10), 'member', ` +
+          "now() - interval '50 minutes')," +
+          `('${OTHER_GROUP}','${FRESH}','Fresh', repeat('m', 1500), 'member', ` +
+          "now() - interval '40 minutes')," +
+          `('${OTHER_GROUP}','${FRESH}','Fresh', repeat('b', 3000), 'member', ` +
+          "now() - interval '30 minutes');"
+      );
+      const run = askOnce(database, FRESH, OTHER_GROUP, "prefix", KEY(31));
+      expect(run.stderr).not.toContain("ERROR");
+      expect(
+        one(
+          database,
+          "select jsonb_array_length(turns)::text || '/' || dropped_context::text " +
+            "from public.group_ai_requests where idempotency_key = " +
+            `'${KEY(31)}'`
+        )
+      ).toBe("1/true");
+      expect(
+        one(
+          database,
+          "select left(e->>'body', 1) from public.group_ai_requests r, " +
+            "jsonb_array_elements(r.turns) e where r.idempotency_key = " +
+            `'${KEY(31)}'`
+        )
+      ).toBe("b");
+    });
+  });
+
+  it("admits that the 200-message scan window leaves a gap", () => {
+    // Second reviewer item 1, the same band as S-6: 200 short member messages all fit
+    // inside the 4,000-character budget, so nothing was refused by size — yet the scan
+    // stopped at its cap and anything older was never examined. The cap stays (a live
+    // table should not be walked backwards without limit) and dropped_context says so.
+    provisioned(database => {
+      accept(database, FRESH);
+      exec(
+        database,
+        "insert into public.group_chat_messages (group_id, sender_id, " +
+          "sender_name_snapshot, body, author_kind, created_at) " +
+          `select '${OTHER_GROUP}','${FRESH}','Fresh', repeat('s', 5), 'member', ` +
+          "now() - make_interval(mins => n) from generate_series(1, 200) as n;"
+      );
+      const run = askOnce(database, FRESH, OTHER_GROUP, "cap", KEY(32));
+      expect(run.stderr).not.toContain("ERROR");
+      expect(
+        one(
+          database,
+          "select jsonb_array_length(turns)::text || '/' || dropped_context::text " +
+            "from public.group_ai_requests where idempotency_key = " +
+            `'${KEY(32)}'`
+        )
+      ).toBe("200/true");
+    });
+  });
+
+  it("counts only claimed rows against the daily quota", () => {
+    // Role 6 S-5: the SQL now says the contract's sentence — every row of today's except a
+    // queued row nobody ever claimed. Ten never-claimed rows created seconds ago used to
+    // consume a member's whole day through the "or within 120 seconds" clause, even though
+    // they produced no provider call and cost nothing.
+    provisioned(database => {
+      accept(database, FRESH);
+      exec(
+        database,
+        "insert into public.group_ai_requests (group_id, asked_by, idempotency_key, " +
+          "question, status, created_at) " +
+          `select '${OTHER_GROUP}','${FRESH}', gen_random_uuid(), 'q', 'queued', now() ` +
+          "from generate_series(1, 10);"
+      );
+      const free = askOnce(database, FRESH, STALE_GROUP, "unclaimed", KEY(33));
+      expect(free.stderr).not.toContain("ERROR");
+      // Once claimed, the same rows represent work already paid for, so they count.
+      exec(
+        database,
+        `update public.group_ai_requests set claimed_at = now() ` +
+          `where group_id = '${OTHER_GROUP}';`
+      );
+      drain(database, STALE_GROUP);
+      const spent = askOnce(database, FRESH, STALE_GROUP, "claimed", KEY(34));
+      refused(spent, "45N06", "group_ai_rate_limited");
+      expect(spent.stderr).toContain("reason=user_daily");
+    });
+  });
+
+  it("lets the 4,000-character clamp admit that it truncated", () => {
+    // Role 6 S-8: the message insert clamps with left(..., 4000). A 4,001-character answer
+    // written as finish(id, body) used to log truncated = false while the stored body had
+    // in fact been cut, so the log understated what the member saw.
+    provisioned(database => {
+      accept(database, ASKER);
+      const run = askOnce(database, ASKER, GROUP, "clamp", KEY(35));
+      expect(run.stderr).not.toContain("ERROR");
+      const id = requestIdFrom(run);
+      exec(database, `select public.claim_group_ai_request('${id}');`);
+      const message = one(
+        database,
+        `select public.finish_group_ai_request('${id}', repeat('答', 4001))`
+      );
+      expect(
+        one(
+          database,
+          "select truncated::text || '/' || char_length(body)::text " +
+            "from public.group_chat_messages " +
+            `where id = '${message}'`
+        )
+      ).toBe("true/4000");
+      expect(
+        one(
+          database,
+          `select truncated::text from public.group_ai_requests where id = '${id}'`
+        )
+      ).toBe("true");
+    });
+  });
+
+  it("refuses an error_code outside the two documented values", () => {
+    // Role 6 S-10. The CHECK is written into deploy 1's CREATE TABLE, so it is validated at
+    // creation on an empty table and never scans. Null stays legal: most rows finish fine.
+    provisioned(database => {
+      accept(database, ASKER);
+      const run = askOnce(database, ASKER, GROUP, "codes", KEY(36));
+      expect(run.stderr).not.toContain("ERROR");
+      const id = requestIdFrom(run);
+      refused(
+        sql(
+          database,
+          `update public.group_ai_requests set error_code = 'provider_slow' ` +
+            `where id = '${id}';`
+        ),
+        "23514",
+        "group_ai_requests_error_code_check"
+      );
+      exec(
+        database,
+        `update public.group_ai_requests set error_code = 'provider_failed' ` +
+          `where id = '${id}';`
+      );
+      exec(
+        database,
+        `update public.group_ai_requests set error_code = null where id = '${id}';`
+      );
+      expect(
+        one(
+          database,
+          "select count(*) from public.group_ai_requests " +
+            "where error_code is not null and error_code <> 'provider_failed'"
+        )
+      ).toBe("0");
+    });
+  });
 });
 
 /** Stable idempotency keys per case, so a rerun cannot collide with itself. */

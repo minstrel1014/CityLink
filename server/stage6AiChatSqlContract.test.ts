@@ -34,6 +34,10 @@ const deploy2Path = path.resolve(
 );
 const deploy1 = readFileSync(proposalPath, "utf8");
 const deploy2 = readFileSync(deploy2Path, "utf8");
+const contractPath = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md"
+);
 /** The proposal is two deploys (Adam's S-9 ruling b); the static checks walk both. */
 const sql = deploy1 + "\n" + deploy2;
 const lines = sql.split("\n");
@@ -79,7 +83,9 @@ describe("ai chat migration proposal, statically", () => {
     // Same reasoning as the rate limits: the assembler and the RPC must not be able to
     // disagree about how much history leaves the building.
     expect(code).toContain(`v_budget integer := ${AI_CHAT_LIMITS.chatChars}`);
-    expect(code).toContain(`v_ai_kept < ${AI_CHAT_LIMITS.maxAiAnswers}`);
+    // S-6 (Role 6): the loop became a strict prefix, so the bound now reads as a stop
+    // condition. Same number, same constant, opposite comparison — pinned either way.
+    expect(code).toContain(`v_ai_kept >= ${AI_CHAT_LIMITS.maxAiAnswers}`);
     expect(code).toContain(
       `files_used between 0 and ${AI_CHAT_LIMITS.maxFiles}`
     );
@@ -387,8 +393,12 @@ describe("ai chat migration proposal, statically", () => {
     expect(groupBlock.length).toBeGreaterThan(40);
     expect(userBlock.length).toBeGreaterThan(40);
     for (const block of [groupBlock, userBlock]) {
-      expect(block).toContain("q.status in ('processing', 'ready', 'failed')");
-      expect(block).toContain("q.created_at > now() - v_stale");
+      // S-5 (Role 6): both daily counts now say the contract's sentence, so the exclusion
+      // must be visible in each of them and the 120-second variant must be gone.
+      expect(block).toContain(
+        "and not (q.status = 'queued' and q.claimed_at is null)"
+      );
+      expect(block).not.toContain("q.created_at > now() - v_stale");
     }
   });
 
@@ -523,5 +533,62 @@ describe("ai chat migration proposal, statically", () => {
     expect(sql).toContain("not convalidated");
     // Adam's lock-cost ruling is a preflight measurement duty, not an assumption.
     expect(sql).toMatch(/pg_total_relation_size/);
+  });
+
+  it("pins every repeated literal in both deploys, not only the rate limits", () => {
+    // Role 6 S-7: G-1 bound 20/10/1/120, but the same two files repeat the character
+    // budget 4,000 (question CHECK, question guard, answer clamp, and now the S-8 clause),
+    // the file cap 2 (column CHECK and guard) and the two scan windows 10/200. Each one is
+    // asserted here against the constant or documented value it must equal, so editing a
+    // copy in isolation fails the suite instead of shipping two answers.
+    const count = (needle: string) => code.split(needle).length - 1;
+    expect(AI_CHAT_LIMITS.chatChars).toBe(4000);
+    for (const form of [
+      `v_budget integer := ${AI_CHAT_LIMITS.chatChars}`,
+      `char_length(v_question) > ${AI_CHAT_LIMITS.chatChars}`,
+      `between 1 and ${AI_CHAT_LIMITS.chatChars}`,
+      `left(btrim(p_body), ${AI_CHAT_LIMITS.chatChars})`,
+      `or char_length(btrim(coalesce(p_body, ''))) > ${AI_CHAT_LIMITS.chatChars}`,
+    ]) {
+      expect(code, `missing pinned literal: ${form}`).toContain(form);
+    }
+    // The clamp must appear once — a second left(...) would mean two different limits.
+    expect(count(`left(btrim(p_body), ${AI_CHAT_LIMITS.chatChars})`)).toBe(1);
+    for (const form of [
+      `coalesce(array_length(file_ids, 1), 0) <= ${AI_CHAT_LIMITS.maxFiles}`,
+      `files_used between 0 and ${AI_CHAT_LIMITS.maxFiles}`,
+      `if v_file_count > ${AI_CHAT_LIMITS.maxFiles} then`,
+    ]) {
+      expect(code, `missing pinned file cap: ${form}`).toContain(form);
+    }
+    // The two scan windows are SQL-internal and stay that way: the TypeScript assembler
+    // does not cap its scan, which contract §3 records as a known mock/live difference.
+    // Pinning them here is what stops the 200 window from drifting unnoticed.
+    const AI_SCAN_CAPS = { aiAnswers: 10, memberMessages: 200 } as const;
+    expect(code).toContain(`limit ${AI_SCAN_CAPS.aiAnswers}`);
+    expect(code).toContain(`limit ${AI_SCAN_CAPS.memberMessages}`);
+    expect(code).toContain(
+      `if not v_dropped and v_scanned >= ${AI_SCAN_CAPS.memberMessages} then`
+    );
+    // S-5: the daily counts became the G-3 sentence, twice, and the 120-second variant is
+    // gone. v_stale keeps exactly one job, the in-flight window.
+    expect(
+      count("and not (q.status = 'queued' and q.claimed_at is null)")
+    ).toBe(2);
+    expect(code).not.toContain("q.status in ('processing', 'ready', 'failed')");
+    expect(count("now() - v_stale")).toBe(1);
+    // S-10: error_code's closed set is exactly the pair the contract documents, and both
+    // names still appear in the contract that the operator reads.
+    expect(code).toMatch(
+      /error_code text\s+check \(error_code is null\s+or error_code in \('provider_timeout', 'provider_failed'\)\)/
+    );
+    const codes = [
+      ...new Set([...code.matchAll(/'(provider_[a-z_]+)'/g)].map(m => m[1])),
+    ];
+    expect(codes.sort()).toEqual(["provider_failed", "provider_timeout"]);
+    const contract = readFileSync(contractPath, "utf8");
+    for (const token of codes) {
+      expect(contract, `contract does not document ${token}`).toContain(token);
+    }
   });
 });
