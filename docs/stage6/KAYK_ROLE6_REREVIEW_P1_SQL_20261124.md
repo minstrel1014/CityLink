@@ -17,12 +17,12 @@
 
 我逐項核對，並確認沒有順手改到不該改的地方。
 
-| 項目 | 狀態 |
-|---|---|
-| **A-1** 文字欄位長度限制 | ✓ `declared_mime` ≤ 255、`detected_mime` ≤ 255、`content_hash` ≤ 128（第 27、28、30 行） |
-| **A-2** MIME 不一致不再靜默 | ✓ 新增 `mime_mismatch boolean not null default false`（31 行），並在 confirm 時計算（301–305 行） |
-| **A-3** 交易包裹 | ✓ `begin;`（16 行）、`commit;`（529 行） |
-| **B-4** 同檔不可有兩個 pending 替換 | ✓ 也順手加了 `group_files_one_pending_replacement_idx`（52 行） |
+| 項目                                | 狀態                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **A-1** 文字欄位長度限制            | ✓ `declared_mime` ≤ 255、`detected_mime` ≤ 255、`content_hash` ≤ 128（第 27、28、30 行）          |
+| **A-2** MIME 不一致不再靜默         | ✓ 新增 `mime_mismatch boolean not null default false`（31 行），並在 confirm 時計算（301–305 行） |
+| **A-3** 交易包裹                    | ✓ `begin;`（16 行）、`commit;`（529 行）                                                          |
+| **B-4** 同檔不可有兩個 pending 替換 | ✓ 也順手加了 `group_files_one_pending_replacement_idx`（52 行）                                   |
 
 **確認沒有回歸：**
 

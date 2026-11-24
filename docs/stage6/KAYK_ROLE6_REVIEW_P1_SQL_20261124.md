@@ -17,12 +17,12 @@
 
 **這是一份品質很好的草案。** 我上一輪對設計文件提出的四個阻擋項，這份 SQL 全部吸收了：
 
-| 設計審查的阻擋項 | 這份草案的處理 |
-|---|---|
-| R1 不要用 service role | §4 明確只 grant 給 `authenticated`，並註明「不給 service_role」✓ |
-| R2 presigned 只能由 `file_id` 推導 | RPC 只回 `object_key` 給簽名端點，不回 URL；`object_key` 從資料庫產生，不接受用戶端輸入 ✓ |
-| R3 confirm 需要實測值 | `confirm_group_file_upload(p_file_id, p_byte_size, p_detected_mime)` ✓ |
-| R4 predicate 必須 active-only | `can_access_group_files` 只走 `is_active_group_member`，並用註解寫明「此差異是刻意的，不可統一」✓ |
+| 設計審查的阻擋項                   | 這份草案的處理                                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| R1 不要用 service role             | §4 明確只 grant 給 `authenticated`，並註明「不給 service_role」✓                                  |
+| R2 presigned 只能由 `file_id` 推導 | RPC 只回 `object_key` 給簽名端點，不回 URL；`object_key` 從資料庫產生，不接受用戶端輸入 ✓         |
+| R3 confirm 需要實測值              | `confirm_group_file_upload(p_file_id, p_byte_size, p_detected_mime)` ✓                            |
+| R4 predicate 必須 active-only      | `can_access_group_files` 只走 `is_active_group_member`，並用註解寫明「此差異是刻意的，不可統一」✓ |
 
 R6 也照建議落地了：替換限現行版本上傳者、刪除允許上傳者或 leader。R5 在檔頭記錄為「日曆月 5 個月保留」——若那是你確認過的，R5 就關閉了（但仍應進 `DECISIONS.md`）。
 
