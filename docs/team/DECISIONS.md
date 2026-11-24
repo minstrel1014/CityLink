@@ -1286,3 +1286,24 @@ publishing.
 requirement that confirm re-check the real object (HeadObject content type, size ceiling, magic
 bytes) is server work that neither the SQL bundle nor the signer performs yet. Uploads are
 therefore verified for size only.
+
+## 2026-11-24 17:46 — publication authorized; size-only verification accepted as a follow-up
+
+Adam, 17:46: "Go with (a), publish it 2.approved 3先列為 follow-up（記錄接受目前 size-only 驗證）".
+
+**(a) Publication.** The drawer at `1b0c984` was pushed to `origin/main` in the WebDev project
+`Vm2mKA3YornoSGba8WBzse`, which records a checkpoint and, because `publishing.auto_publish` is
+true, submits publication of the live site `citylink-vm2mka3y.manus.space`. This is the first
+publication of the P2 client half. It does not merge, deploy or publish anything in the canonical
+GitHub repository; the two repositories remain separate.
+
+**(2) `SITE_ORIGIN` approved.** The decision is taken; the write is not. No tool available to the
+coordinator can set function secrets — the Supabase MCP deploys and reads functions only, and there
+is no access token in the sandbox. The variable therefore remains unset and the function keeps
+answering `access-control-allow-origin: *` until it is entered in the dashboard.
+
+**(3) Size-only verification accepted, with the gap recorded rather than closed.** `confirm_group_file_upload`
+trusts the browser's declared size and MIME type. The real-object re-check Adam asked for earlier
+(HeadObject content type, size ceiling, magic bytes) is not implemented anywhere in the current
+stack. This is now an accepted follow-up, not a defect: uploads are verified for size only, and any
+future hardening belongs to a separately reviewed server change.
