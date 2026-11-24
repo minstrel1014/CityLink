@@ -1150,3 +1150,26 @@ These records were written on Roy’s `feature/roy-group-workflows` branch. They
 - **Still not authorized by any of this:** implementing the function, deploying it, changing the site,
   publishing it, or setting secrets on Adam's behalf. He named the shape, not the window. Plan:
   `docs/stage6/P2_EDGE_FUNCTION_AND_DRAWER_PLAN.md`.
+## 2026-11-24 — Edge Function implemented (PR #66), not deployed; the Express signer becomes reference only
+- **Adam authorized creating `supabase/functions/group-file-signer/` with two POST routes, no deploy, no
+  secrets, no site change.** Implemented exactly that: `upload-url` and `download-url`, body `{ file_id }`
+  only, caller's JWT forwarded to PostgREST, no service-role key anywhere.
+- **Structure chosen so the code could be verified before Deno runs it.** `handler.ts` is runtime-neutral
+  (standard `Request`/`Response`, dependencies injected) and covered by 14 tests; `signing.ts` uses bare
+  imports that `deno.json` maps to `npm:` specifiers, which is what makes the same file importable from
+  Node — and therefore round-trippable against the real bucket; `index.ts` is the Deno entry and is never
+  imported by a test. Splitting it this way is not tidiness: a function that can only be tested inside
+  Deno would have shipped on assertion alone.
+- **Live round-trip before deploy:** PUT `200`; PUT with a different `Content-Type` `403`; GET `200` with
+  `application/octet-stream` and `attachment; filename="__ 2026.pdf"; filename*=UTF-8''%E5%A0%B1%E5%91%8A%202026.pdf`;
+  object deleted. The `Content-Type` binding is now proven in three separate implementations — that is the
+  point, because it has already been wrong once.
+- **Unknown database messages are never echoed.** Only deliberate tokens map to 401/403/404/410; anything
+  else becomes `group_files_unavailable`. An echoed message would make the endpoint an oracle.
+- **`vitest.config.ts` gained `supabase/functions/**/*.test.ts`** — a test-scope change, not a toolchain or
+  lockfile change. `tsc` scope is untouched, so the Deno file cannot break `pnpm check`.
+- **PR #64 (Express signer) is now reference only.** It cannot be deployed to an Edge runtime, and keeping
+  two signers "live" would invite someone to ship the wrong one. Its tests and its `Content-Type` lesson
+  are the reason the Edge version is correct.
+- **Still gated, in order:** Adam sets the four R2 secrets in the dashboard; deploy the function under its
+  own authorization; build the drawer in the WebDev project; publish. Nothing here grants any of those.
