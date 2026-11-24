@@ -1346,3 +1346,41 @@ no longer tracked, since it is generated.
 behind; they are invisible to the drawer but they occupy the pending slot, and deleting rows on
 Launch is a data change that needs his word. And "View My Courses" still appears on
 `AuthenticatedMyGroup.tsx` and `GroupChatPicker.tsx`; only the chat header was in scope here.
+
+## 2026-11-24 18:26-18:38 — upload failure diagnosed as a newline; chat sizing; the marker covers every asset
+
+Adam reported "Your browser could not reach file storage. Check your connection and try again.", asked
+for the two orphan pending rows to be deleted, asked where the chat picker is, and asked for smaller
+message bubbles and a longer chat window.
+
+**The upload failure was a trailing newline in a secret, not code.** A signed URL minted for QA-A named
+the bucket `citylink-group-files%0A`. R2 answered `400` to the preflight and `403` to the PUT, and a
+browser reports a rejected preflight as an unreachable host — which is why the symptom looked like the
+network and why CORS on both hops kept passing. `env()` in the function now trims every value, so a
+pasted newline can no longer reach a signature. Deployed as version 4 (`ezbr_sha256 725d9c7d…`,
+`import_map_path: deno.json`); the commit is `950763c` on PR #66. Verified with a real one-byte PUT:
+`HTTP 200`, bucket segment `citylink-group-files`, probe object deleted afterwards. The pending row
+`0e968640…` was not confirmed — it is the 100 MB boundary case and stays pending by design.
+
+**Two orphan pending rows deleted**, as Adam directed ("2 delete them"): `d665c89e…`
+(`Tutorial 11.xlsx`) and `8d320795…` (`Bi-weekly Log template (1).docx`), both confirmed by `RETURNING`.
+They were invisible to the drawer but each occupied its group's single pending slot.
+
+**Chat sizing, published.** Bubbles are capped at 64% instead of 78%, with `6px 11px` padding and
+13.5px text; the conversation reserves `min(64vh, 640px)` and may grow to `min(78vh, 860px)`
+(`58vh`/`72vh` under 720px), up from `52/66vh`. Live build `2441b008bcfe99f2`.
+
+**The version marker now fingerprints every emitted asset, and deliberately not `index.html`.** The
+first version hashed only the JavaScript entry, so this stylesheet-only change shipped with an
+unchanged `buildId` — the bundle really was byte-identical, but the deployment was not, and a marker
+that cannot tell those apart is not a marker. `version.json` now carries an `assets` map of
+path → SHA-256 for everything under `assets/`, and `buildId` is the first 16 hex of one digest over
+all of them. `index.html` is excluded because the host rewrites it in flight (SEO tags, canonical link,
+manifest, editor script): the served document can never equal the built one, so hashing it would make
+every check fail for a reason unrelated to the deployment. The shell is checked instead by confirming
+the asset names it references are exactly the ones in the map. Verified live: both files match their
+recorded hashes, and `index.html` references only those two.
+
+**The chat picker is the `/group-chat` route** (`App.tsx`), which lists the groups a student can open a
+chat in; "View My Courses" also appears there (`GroupChatPicker.tsx:67`) and on the My Group page
+(`AuthenticatedMyGroup.tsx:660`). Only the chat header was in scope for the earlier removal.
