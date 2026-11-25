@@ -557,3 +557,29 @@
     min-height: 42px;
   }
 }
+/* Keep the composer on screen. The list was a fixed-height window, which pushed
+   the form below the fold, so the room looked like it had no input at all. The
+   panel is a column bounded by the viewport now; the list takes what is left
+   and scrolls inside it, and the header and form keep their own height. */
+.stage6-chat-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100dvh - 120px);
+}
+.stage6-chat-panel .stage6-chat-header,
+.stage6-chat-panel .stage6-chat-form,
+.stage6-chat-panel .stage6-load-older,
+.stage6-chat-panel .stage6-readonly-note {
+  flex: 0 0 auto;
+}
+.stage6-chat-panel .stage6-message-list {
+  flex: 1 1 auto;
+  min-height: 220px;
+  max-height: none;
+}
+.stage6-chat-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}

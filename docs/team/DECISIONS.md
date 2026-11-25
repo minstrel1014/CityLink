@@ -2595,3 +2595,25 @@ Adam, 15:42: the quota block 「quite clear right?」 (it was not) and 15:44: �
 **The quota line.** Three facts in one sentence, with both limits stated twice (once as text, once as the denominators), so the usage clause wrapped after 「・」. Now: numbers on their own line in tabular figures; below it only what the denominators cannot say — that the personal allowance is shared across all groups, and how long until the reset, rounded **up** so a countdown never promises an earlier reset than the server honours.
 **Checks.** `pnpm check` clean; `pnpm test` **875/875** (58 files; +2 mapper tests, +2 copy tests, one expectation updated because every message now carries `senderId`). Demo republished: `5adccc5` → `buildId e56bf3eb7fd13075`, `assets/index-DKmQqX5h.js`, and the served bundle contains `list_group_chat_messages_with_sender`, `stage6-message-own`, 「所有群組共用」 and 「後重置」.
 **A gap this exposed, stated rather than hidden.** `list_group_chat_messages_with_sender` exists on Launch with **no file in `supabase/migrations/` and no ledger row** — it was applied by an earlier round and never promoted. Until now nothing depended on it; the client now does. A fresh clone plus the eleven-plus migrations would therefore produce a database where the chat read fails. Promoting it needs one migration file containing its exact `pg_get_functiondef` text and one ledger row, which is a migration addition and so needs Adam's decision, not mine. It is also the reason this round changed no SQL: the function was already there, only unused.
+
+## 2026-11-25 16:05 — The demo lost its own work twice to a wholesale copy, and got it back
+
+**What Adam saw.** "the file upload disappeared and the ui not right", and then "the conversation should be changed to the course name and group name before". He was describing three things at once, and all three had the same cause.
+
+**Cause, measured in the demo repository.** `e09f928` (port the AI drawer) and `e653ed2` (reapply it) each wrote the canonical `GroupChatPage.tsx` over the demo's version. `5adccc5` did the same to `Stage6.css`. The demo is the product line and is ahead of the canonical repository, so each copy deleted whatever only the demo had:
+
+- the **Files** button and the `GroupFilesDrawer` mount in the chat header — the group-file upload and download entry point (`1b0c984` added it);
+- the **course: group** heading, and with it `loadGroupChatHeading` and `GroupChatHeading` in `supabaseStage6.ts`, which were dropped from that file too;
+- 286 lines of `Stage6.css`: the messenger-style bubbles, the room panel, the member plate, the create-group form, the groups search, and `.stage6-message-mine`.
+
+`git log -S"GroupFilesDrawer"` dates the loss to `e09f928`; the revert and reapply preserved it because both used the same copied file.
+
+**Fix.** The demo page was rebuilt from its own last good version (`964f885`) and the AI drawer was re-applied on top of it, not the other way round. `Stage6.css` was restored from `5adccc5^` and the new rules appended. `loadGroupChatHeading` and `GroupChatHeading` were restored verbatim from `68dc187`. The header now reads `Course: Group` again, the Files button is back, and the composer stays on screen because the panel is a column bounded by the viewport with the list scrolling inside it, instead of a fixed 76vh window that pushed the form below the fold.
+
+Own messages keep the sender-aware read (`list_group_chat_messages_with_sender`), and the bubble uses the demo's own right-hand style.
+
+**Rule this establishes.** The canonical repository is a baseline, not a source of truth for the demo. A change that starts in canonical and is wanted in the demo is **ported additively** — the specific hunks — never by copying a whole file over one that has lived longer. Before any copy into the demo, the file's history in the demo repository decides whether a copy is safe at all.
+
+**Divergence this exposes, for release review.** The published demo carries features the canonical repository does not have at `e0c9140`: `GroupFilesDrawer` and its styles, the course/group heading loader, direct messages, the recruitment composer and the group threads list. PR #67 cannot be described as "what is deployed" until that gap is either ported or explicitly accepted.
+
+**Verified live.** Demo commit `9aa42a9`, `buildId 6dcc6ffd33adc03b`, `assets/index-DzUXqZYw.js`; the served CSS contains the bounded-panel rule and the served bundle contains `stage6-message-own`, `stage6-chat-header-actions` and `GroupFilesDrawer`. `pnpm check` clean, `pnpm test` 660/660 across 45 files in the demo checkout.
