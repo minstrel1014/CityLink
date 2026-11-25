@@ -529,3 +529,76 @@ Adam 2026-11-25 以一句話裁決剩下的五項：「**全部照 Role 6 建議
 **測試（apply 27 → 28、static 維持 24，改的是既有那支的斷言强度）：** 新增「keeps the quota day on UTC whatever the session timezone is」——十列寫在今天 00:30 UTC，連線 `set time zone 'Etc/GMT+8'`（UTC−8），期望 45N06 `user_today=10` 且 `retry_after` 在 1..86400；同一場景再以一般 UTC 連線跑一次，結果相同。**鑑別力是量出來的不是推論的：** 把本檔換回上一版 blob 在同一 harness 重跑，該測試在 `refused()` 那一步失敗（`expected +0 not to be +0`，即那一次提問被放行），靜態側的釘選也同時失敗。完整套件：`pnpm check` 0、`pnpm test` **54 檔／824 測試**、apply 套件在 **PG 16.15** 與 **PG 17.12** 各 28/28。
 
 **本輪仍然沒有做的事：** 未連任何 Supabase 專案、未跑 preflight、未套用、未 merge、未轉 ready、未部署、未發布。Role 6 的 exact-head 複查仍未發生，五關的順序不變。
+
+### 11.9 第四批裁決（2026-11-25）：讀檔需要 object key，提出部署 5 草案（未套用）
+
+Adam 的五項回答（`1. a 2. you do it, now 3. can qo task do it? 4. no 5. authorized`）裡，第 2 項要我把「執行器拿得到檔案位元組」這一層也一起交。程式那半在同一天改完（§12）；資料庫這半只能以**草案**存在，因為它動的是 Launch 上已經 live 的 `claim_next_group_ai_request()`。
+
+| 物件                | blob                                                 | 行數 | bytes | sha256（前 16）    | 狀態             |
+| ------------------- | ---------------------------------------------------- | ---- | ----- | ------------------ | ---------------- |
+| 部署 5（草案）      | `c8adef5ac663fccc59243d733322ea2eceb060c9`           | 199  | 9,584 | `57a2a19bdbb286b5` | **未套用**       |
+| 部署 1（現行 live） | `57e4c5265da487073683436fa385a4ce79a06403`（299 行） | 299  | —     | `4effbf5d69bbf92d` | 已套用並 promote |
+| 部署 2（現行 live） | `2c66691b2e1f780498f1cca1e9c603a5a2053364`（721 行） | 721  | —     | `9700679905c11e3d` | 已套用並 promote |
+| 部署 3（現行 live） | `5046eee286d24bf582e03339a460cd4a3ac0a2c3`（76 行）  | 76   | —     | `d2870c5d5d124dd2` | 已套用並 promote |
+
+**為什麼是部署 5 而不是改客戶端-visible 的 RPC。** `begin_group_ai_request` 存的 `files` 只有 `{id, name}`（部署 2 §4），而 `public.group_files` 對 `service_role` 是 `revoke all`（P1 第 282 行，刻意的）。把 key 加在**入列時**會同時改變認證客戶端看得見的回傳內容；加在 **claim 時**只有 `service_role` 看得見，舊客戶端的讀取契約一字不變。
+
+**草案里的 fail-closed 條款**（逐條都有對應測試，見 `server/stage6AiChatDeploy5Applies.test.ts`）：
+
+1. 只有 `status = 'current'`、`deleted_at is null`、`retention_expires_at > now()` 的檔案才給 key。問題排隊之後檔案才被取代或過期的話，worker 讀不到——保留期是決定，不是 worker 可以多續一天的東西。
+2. 元素不會消失。key 給不了時仍保留 `{id, name, objectKey: null}`，因為 F-8 的判據是 `files_used < files_requested`；把元素踢掉會讓警告消失，那是假陰。
+3. `files` 不是陣列時不丟例外（`jsonb_typeof` 保護 `jsonb_array_elements`），否則一行壞資料會卡住整條佇列。
+4. Section 0 一樣是 `select private.assert_citylink_target('pijslbchvstkoweslymr');`，換別台的 marker 就 45M02 中止。
+5. 授權狀態與 P1／部署 1-4 相同：需要 Role 6 exact-head 審查、Adam 指名 blob 的書面授權、同窗口 preflight，才談得上套用。本輪**沒有**連任何 Supabase 專案。
+
+## 12. 檔案讀取：執行器現在讀 PDF／DOCX／純文字（Adam 2026-11-25 裁決 1=a、2=now）
+
+### 12.1 規則來源
+
+- 裁決 1「a」：解析器放在 Edge Function 裡面（不是在上傳時預先抽文字、也不是叫客戶端抽）。
+- 裁決 2「you do it, now」：連線到位元組的那一段（signer／presign）由本任務一起交付，不再等 PR #66。
+- 產品判據不變：檔案讀不到時回答照樣送出，前面加 `（部分選取檔案沒有可讀文字）`；只有**真的** 0 字元才加這句話。
+
+### 12.2 格式由位元組決定，不由 content-type
+
+`supabase/functions/group-ai-executor/extraction.ts` 的 `detectFormat()`：`%PDF-` → pdf；`PK\x03\x04` 且前 64 KB 內出現 `word/` → docx；能通过嚴格 UTF-8 解碼且沒有文字以外控制字元 → text；其他一律 null。
+
+舊版問的是 storage 回報的 `content-type`，比對 `/^text\/|json|csv|markdown/`，`application/pdf` 直接被判為不可讀——這就是 Adam 那份 PDF（144,358 B、2 頁、未加密、有文字層）得到「沒有可讀文字」的直接原因。實測對照（同一支 PDF、同一個 stub signer）：舊閘門回 `null`，新版回 679 字元。
+
+### 12.3 上限與預算
+
+| 名稱                   | 值          | 來源／對照                            |
+| ---------------------- | ----------- | ------------------------------------- |
+| `FILE_CHAR_BUDGET`     | 10,000 字元 | `AI_CHAT_LIMITS.fileChars`（§3 預算） |
+| `EXTRACTION_MAX_BYTES` | 20 MiB      | `server/ai/extraction/extractText.ts` |
+| `EXTRACTION_MAX_PAGES` | 300 頁      | 同上                                  |
+
+兩個上限從兩邊夾同一個風險：PDF 的記憶體跟著解壓後的頁面走，不是跟著檔案大小走。超過任一邊是**拒絕**，不是讀一半。字元數以 code point 計（`Array.from`），與資料庫的 `char_length()` 一致，不會因為中文在 UTF-16 裡算兩個而暗中超額。
+
+### 12.4 位元組來源與優先序
+
+1. `FILE_SIGNER_URL`（PR #66 那支 signer）：POST `/download-url`，body `{file_id}`。該端點目前**沒有** service-role 路徑，所以對本呼叫者會回 401；試一次很便宜，等那條線落地就自動可用。
+2. `R2_ACCOUNT_ID`／`R2_BUCKET`／`R2_ACCESS_KEY_ID`／`R2_SECRET_ACCESS_KEY`／`R2_REGION`（預設 `auto`）：在函式內用 WebCrypto 簽一支 60 秒的 SigV4 presigned GET。四個名稱要全有或全無，只設一半會留一行 `storage_partially_configured`（只寫缺的名字，永不寫值）。
+3. 兩者都沒有 → `null`，也就是舊行為：照樣回答，只是沒有附件。
+
+**不在選項裡：自己拼 `groups/<group>/<file>`。** 那是上傳 RPC 的實作細節，而且今天每一條交出 key 的路徑都先過 `private.can_access_group_files`；在這裡推算等於繞過那條稽核線，命名一改就壞。
+
+### 12.5 依賴
+
+`npm:unpdf@2.2.2`（透過同資料夾的 `deno.json` 對應）。**不使用 mammoth**：1.13 的 `lib/promises.js` 用 `{}.toString.call(process)` 判斷是不是 Node，而 Deno 的相容層回 `[object process]`，於是走 Node 專屬分支，實測拋 `ExternalPromise.resolve is not a function`（Deno 2.9.8，`server/fixtures/ai/notes.docx`，2026-11-25）。DOCX 改為自讀 ZIP（`DecompressionStream("deflate-raw")`）與 WordprocessingML，段落之間空一行，與 mammoth 的輸出**逐字相同**（測試比對兩者，421 字元）。節點端的上傳管線照舊用 mammoth，沒有動。
+
+### 12.6 生效條件（重要）
+
+這一段只是分支上的程式。**沒有部署，也沒有設定任何 secret**：
+
+1. 有人把 `group-ai-executor` 部署到專案（函數目前線上是 version 7 的舊碼，仍帶文字閘門）。
+2. 要真的讀到附件，還需要 `FILE_SIGNER_URL` 或那四個 `R2_*`；走 R2 這條又需要部署 5 先套用（否則 claim 不帶 object key）。
+3. 部署與 secret 都是 Adam 的獨立決定，不在本輪授權內。
+
+### 12.7 已跑的驗證
+
+- `deno check`（Deno 2.9.8）對 `index.ts`＋`extraction.ts`：0 錯誤。
+- 真 Deno 執行（非 Node）：`notes.pdf` → 679 字元；`notes.docx` → 421 字元；純文字照讀；xlsx 形狀的 ZIP 與 PNG 形狀的位元組 → null；10,500 個中文字剪到 10,000。
+- vitest 新檔 `server/stage6AiChatExecutorFileExtraction.test.ts` 20 條、`server/stage6AiChatExecutorContract.test.ts` 12 條（原 8 條加 4 條）、`server/stage6AiChatDeploy5Applies.test.ts` 8 條。
+- 完整套件：`pnpm check` 0、`pnpm test` **63 檔／905 測試**、`pnpm build` 0；apply 套件在 **PG 16.15** 與 **PG 17.12** 全綠（後者 3 檔／44 測試）。
+- 沒有把 Adam 那份 PDF 放進 repo：公開 repo、第三人作業、文件属性含真實姓名；留作本機證據。

@@ -2643,3 +2643,84 @@ Own messages keep the sender-aware read (`list_group_chat_messages_with_sender`)
 **Condition attached.** Coverage is accepted, not proven sufficient. If a later review finds a behaviour the 15+4 pair does not exercise — draft protection across an account or course change is the most likely candidate, since three "obsolete render guards" were among the retired tests — the remedy is one bounded task against `RecruitmentPostComposer.test.ts`, not a reopening of this decision.
 
 **Same round, separately authorised.** Adam also approved restoring the reviewed F2 stale-build guard to the published demo with the exact string `CityLink needs an update. Refresh before creating a group.`, a rebuild, a publish and live verification, with no automatic reload, retry, forced refresh or draft storage. The demo's `buildId` is now decided before the build and compiled into the bundle, because a post-build content digest cannot be compared with the bundle that contains it; the digest moved to `deploymentId`.
+
+## 2026-11-25 23:05 — Adam rules on why the group AI could not read his PDF: extraction moves into the Edge Function, the byte-source layer ships with it, and deploy 5 is drafted but not applied
+
+**The question, and the honest answer it got.** Adam asked 為什麼 chatroom 內的 ai 不能分析檔案 and pasted the answer the live
+group AI had given him: `（部分選取檔案沒有可讀文字）` followed by a reply that named only the members in the group. The notice was
+not a model hallucination and not a provider failure. `supabase/functions/group-ai-executor/index.ts` had two gates in front of the
+prompt assembly: `FILE_SIGNER_URL` was unset (`if (!env.fileSignerUrl) return null;`), and the MIME allowlist
+`/^text\/|json|csv|markdown/` refused `application/pdf` outright. The function's own comment said it plainly — "a spreadsheet or a PDF
+returns null, which the caller turns into the 'no readable text' notice". The caller computes
+`missingFiles = filesUsed < (request.files?.length ?? 0)` and prefixes `（部分選取檔案沒有可讀文字）`. So the model genuinely received no
+file content, and the answer Adam read was the truthful report of that.
+
+**Adam's five rulings, verbatim: `1. a 2. you do it, now 3. can qo task do it? 4. no . 5 authorized`.**
+
+1. **(a)** — the PDF/DOCX parser goes **inside the Edge Function executor**, not at upload time and not in a second service.
+2. **"you do it, now"** — the file-bytes / signer layer ships in this same round, so the executor can actually fetch objects.
+3. **"can qo task do it?"** — answered in the reply to Adam rather than here: a signed-in `.txt` probe is legitimate live QA work for
+   Eunice's lane, but the equivalent was reproduced locally in this round with a stub signer and both a `.txt` and a `.pdf`, so no
+   other task is a dependency and none was messaged.
+4. **"no"** — the stray committed temporary artefacts at the repository root (`payload_d1.json`, `payload_d2.json`, `evidence_e1.sh`,
+   `gate2scan.sh`, `inspect67.sh`, `scripts/tmp-usage-rpc-local-proof.sh`) are **left exactly where they are**. They were scanned for
+   secrets before this round and contain no key, token or connection string; removing them is not authorised and was not done.
+5. **"authorized"** — the read-only "live migrations ↔ certified blobs" comparison was produced; it is a documentation deliverable in
+   this task's files, and no database was contacted to make it.
+
+**What the executor does now.** `supabase/functions/group-ai-executor/extraction.ts` is a new runtime-neutral module: bytes come from
+`FILE_SIGNER_URL` when set, otherwise from a presigned R2 `GET` built in-function with hand-rolled SigV4 over WebCrypto using
+`R2_ACCOUNT_ID`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and optional `R2_REGION` (default `auto`). Format is decided
+from **magic bytes**, not from a declared MIME type: `%PDF-` is a PDF, `PK\x03\x04` containing `word/` is a DOCX, otherwise the bytes are
+decoded as strict UTF-8 text. Caps mirror the Node-side extractor already in the repository
+(`EXTRACTION_MAX_BYTES = 20 MiB`, `EXTRACTION_MAX_PAGES = 300`) and the shared chat budget (`fileChars: 10_000`), so the total text handed
+to the model from files can never exceed what Adam fixed on 2026-11-24. A file that cannot be read produces a reason, never an exception:
+one bad file cannot fail the whole answer, and the F-8 notice `（部分選取檔案沒有可讀文字）` appears only when the read really yielded
+zero characters. The old MIME gate is gone; `index.ts` no longer returns early when the signer is unconfigured, it warns
+`storage_partially_configured` and still reads text-shaped files.
+
+**A dependency finding that changed the implementation.** `mammoth@1.13` cannot run in Deno: it throws
+`ExternalPromise.resolve is not a function` because its `isNode()` test matches Deno's `[object process]`, and its `arrayBuffer` option is
+ignored by `lib/unzip.js`. Rather than ship a parser that fails at runtime, DOCX reading is implemented directly — ZIP central-directory
+parse, `DecompressionStream("deflate-raw")`, then WordprocessingML to text with one blank line per paragraph — and its output is asserted
+**character-for-character equal to mammoth's** on the committed `notes.docx` fixture (421 characters). PDF uses `unpdf@2.2.2`, pinned in
+the new `supabase/functions/group-ai-executor/deno.json`.
+
+**Evidence, recorded separately from the claims.**
+
+| Check | Result |
+| --- | --- |
+| `deno check index.ts extraction.ts` (Deno 2.9.8) | exit 0 |
+| real Deno extraction probe | `notes.pdf` → 679 chars, `notes.docx` → 421 chars, plain text read, xlsx-shaped ZIP and PNG-shaped bytes refused, 10,500 CJK characters clipped to 10,000, presigned URL well-formed |
+| `server/stage6AiChatExecutorFileExtraction.test.ts` | new suite, 20 tests, real fixtures |
+| `server/stage6AiChatExecutorContract.test.ts` | 8 → 12 tests |
+| `server/stage6AiChatDeploy5Applies.test.ts` | new suite, 8 tests, local PostgreSQL only |
+| `corepack pnpm check` / `corepack pnpm build` | exit 0 |
+| `corepack pnpm test` | 63 files, 905 tests, 0 failed |
+| apply suites, rerun at the final tree | 4 apply files / **49 tests** pass on **PostgreSQL 17.12** (port 5433) and the same **49** on **PostgreSQL 16.15** (port 5432) |
+| `corepack pnpm exec prettier --check` on every changed file | exit 0; `.sql` is excluded by `.prettierignore` |
+
+The presigned URL is cross-checked two ways in tests: for **structure** against `@aws-sdk/s3-request-presigner`, and for **signature**
+against an independent `node:crypto` SigV4 implementation, with an assertion that the secret never appears in the URL. The deploy-5 draft
+also fixed a real PL/pgSQL mistake found only by applying it: `return query` must precede the `with` clause.
+
+**Deploy 5 is a proposal and nothing more.** `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY5.sql`, blob
+`c8adef5ac663fccc59243d733322ea2eceb060c9`, 199 lines, 9,584 bytes, SHA-256 `57a2a19bdbb286b5fd6510124a37578035e9cab580b2b7d11b4f4d5958205797`.
+It hands the already-certified claim function the object key, because `begin_group_ai_request` stores only `{id, name}` per file and
+`public.group_files` is `revoke all … from … service_role` on purpose — the worker cannot read the key from the table, and re-deriving
+`'groups/' || group_id || '/' || file_id` in the worker would silently read a replacement file or an expired one. Keys are therefore
+withheld for non-`current`, deleted or expired rows, and the payload stays an array (`coalesce` to an empty array) so one bad row cannot
+stall the queue. **Not applied.** It needs Role 6's exact-head review and Adam's dated authorisation naming that blob before anything is
+written to Launch, and the order of the five gates is unchanged.
+
+**Privacy decision recorded here, not silently.** Adam's own uploaded file (`Assignment2(2).pdf`, 144,358 bytes, 2 pages, unencrypted,
+text-based, 1,704 characters extracted by the repository's Node extractor) is third-party coursework. The repository is public, so it is
+**not** committed as a fixture; it stays local evidence. The acceptance regressions use the committed `notes.pdf` / `notes.docx` instead.
+The measurement also disposes of the last remaining doubt about the cause: the file was never the problem — the code reading it was.
+
+**What this round did not do.** No Supabase project was contacted. No SQL was applied. Nothing was deployed or published, so **this fix is
+not live yet**: it takes effect only after someone uploads `supabase/functions/group-ai-executor` and sets `FILE_SIGNER_URL`, or the four
+`R2_*` secrets — a separate Adam decision, with the secret values entering only through the secure secrets UI and never into chat, files,
+commit messages or the repository. PR #67 stays draft, the base is unchanged, no second PR was opened, PR #59 was not touched, the
+coordinator's `feature/coordinator-edge-signer` branch and PR #66 were not touched, and there was no merge, no "Ready for review", no
+cleanup of the stray temp files, and no message sent to any other task.
