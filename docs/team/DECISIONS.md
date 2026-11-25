@@ -2633,3 +2633,13 @@ Own messages keep the sender-aware read (`list_group_chat_messages_with_sender`)
 **Verified.** `pnpm check` clean; `pnpm test` 872/872 across 61 files; `pnpm build:static` succeeds and emits `dist/public/version.json`. Commits `1c1fb62` (client) and `046f8f1` (SQL) on `feature/kayk-ai-analysis`; PR #67 remains draft.
 
 **Still different on purpose:** `TODO.md`, `.gitignore`, `.prettierignore`, `vite.config.ts` formatting, and `docs/stage6/CHAT_RECRUITMENT_MIGRATION_PROPOSAL.sql` keep this repository's text. Nothing in this port was applied to any database: the two migrations were already live, and these files only record them.
+
+## 2026-11-25 16:51 — The 15+4 replacement is accepted as the test contract
+
+**Adam, 16:48.** Accept the 15+4 replacement contract, record in `DECISIONS.md` and in the PR description that this is a **test-architecture replacement**, and if behaviour coverage later proves insufficient, open a separate `RecruitmentPostComposer` test-strengthening task rather than folding it into unrelated work.
+
+**What that settles.** `GroupWorkspacePage.capacity.test.ts` keeps the demo's 15 tests; `RecruitmentPostComposer.test.ts` keeps 4. The 24-test version written against the inline form is retired, not deleted from history: it remains at `8822860`. The replacement is a change of *where* the behaviour is tested — the page composes through a component, so the form's behaviour is tested against the component and the page keeps the integration-level assertions — not a claim that the same 24 assertions still run.
+
+**Condition attached.** Coverage is accepted, not proven sufficient. If a later review finds a behaviour the 15+4 pair does not exercise — draft protection across an account or course change is the most likely candidate, since three "obsolete render guards" were among the retired tests — the remedy is one bounded task against `RecruitmentPostComposer.test.ts`, not a reopening of this decision.
+
+**Same round, separately authorised.** Adam also approved restoring the reviewed F2 stale-build guard to the published demo with the exact string `CityLink needs an update. Refresh before creating a group.`, a rebuild, a publish and live verification, with no automatic reload, retry, forced refresh or draft storage. The demo's `buildId` is now decided before the build and compiled into the bundle, because a post-build content digest cannot be compared with the bundle that contains it; the digest moved to `deploymentId`.
