@@ -577,8 +577,8 @@ Adam 的五項回答（`1. a 2. you do it, now 3. can qo task do it? 4. no 5. au
 
 ### 12.4 位元組來源與優先序
 
-1. `FILE_SIGNER_URL`（PR #66 那支 signer）：POST `/download-url`，body `{file_id}`。該端點目前**沒有** service-role 路徑，所以對本呼叫者會回 401；試一次很便宜，等那條線落地就自動可用。
-2. `R2_ACCOUNT_ID`／`R2_BUCKET`／`R2_ACCESS_KEY_ID`／`R2_SECRET_ACCESS_KEY`／`R2_REGION`（預設 `auto`）：在函式內用 WebCrypto 簽一支 60 秒的 SigV4 presigned GET。四個名稱要全有或全無，只設一半會留一行 `storage_partially_configured`（只寫缺的名字，永不寫值）。
+1. `FILE_SIGNER_URL`（PR #66 那支 signer）：POST `/download-url`，body `{file_id}`。**2026-11-26 讀過 Launch 上實際部署的 `group-file-signer`（version 7）原始碼修正了這段說法**：它確實已部署且 ACTIVE，但仍然不能給 worker 用——檔頭寫著「No service-role key is used anywhere. Every database call carries the caller's own JWT」，兩條路徑（`group_file_upload_target`／`request_group_file_download`）都要 `auth.uid()`，所以 service-role 呼叫者只會拿到 401。試一次很便宜，等那條線補上 service-role 路徑就自動可用。
+2. `R2_BUCKET`／`R2_ACCESS_KEY_ID`／`R2_SECRET_ACCESS_KEY` 加**主機名稱任一**：`R2_ENDPOINT`（Launch 上既存、signer 用的那個名字）或 `R2_ACCOUNT_ID`。函式內用 WebCrypto 簽一支 60 秒的 SigV4 presigned GET。規則：`R2_ENDPOINT` 優先；兩個名字都沒有 → 不簽，丟 `storage_unconfigured`（比簽一個錯的 host 好）；host 一律小寫，因為 `host` 是被簽的 header，而 HTTP client 送的 Host 就是小寫；每個值都 `.trim()`——從儀表板貼上的 secret 常帶尾端換行，bucket 或 host 裡多一個換行，R2 回 403（deployed signer 自己的註解記了這件事）。缺東西時留一行 `storage_partially_configured`，**只寫缺的名字，永不寫值**。這代表 Adam 不需要新增任何 secret：Supabase 一個專案共用一套 function secrets，端点名與憑證已經在那邊了。
 3. 兩者都沒有 → `null`，也就是舊行為：照樣回答，只是沒有附件。
 
 **不在選項裡：自己拼 `groups/<group>/<file>`。** 那是上傳 RPC 的實作細節，而且今天每一條交出 key 的路徑都先過 `private.can_access_group_files`；在這裡推算等於繞過那條稽核線，命名一改就壞。
@@ -589,16 +589,44 @@ Adam 的五項回答（`1. a 2. you do it, now 3. can qo task do it? 4. no 5. au
 
 ### 12.6 生效條件（重要）
 
-這一段只是分支上的程式。**沒有部署，也沒有設定任何 secret**：
+**2026-11-26 更新：部署已進行（Adam「1. authorise」），但讀檔還差 deploy 5。**
 
-1. 有人把 `group-ai-executor` 部署到專案（函數目前線上是 version 7 的舊碼，仍帶文字閘門）。
-2. 要真的讀到附件，還需要 `FILE_SIGNER_URL` 或那四個 `R2_*`；走 R2 這條又需要部署 5 先套用（否則 claim 不帶 object key）。
-3. 部署與 secret 都是 Adam 的獨立決定，不在本輪授權內。
+1. `group-ai-executor` 在 Launch 從 version 7 → 9 → **10**（四個檔：`index.ts`、`extraction.ts`、
+   `prompt.ts`、`deno.json`；`verify_jwt` 仍 true；`import_map` 由 false 變 true）。每個檔都從
+   `get_edge_function` 回傳的原始碼重新算 md5，與 repo 推送後的 blob **逐位元組相同**。
+2. **沒有建立、列出或讀取任何 secret**。改用專案上既有的 `R2_ENDPOINT` 名字，所以不需要新金鑰。
+3. 要真的讀到附件仍需要**部署 5 先套用**：`begin_group_ai_request` 只存 `{id, name}`，而
+   `public.group_files` 刻意 revoke 給 `service_role`，所以 claim 不帶 object key，也就沒有東西可以簽。
+   在那之前，附檔案的回答照舊帶 `（部分選取檔案沒有可讀文字）`——這句話現在是**正確的**。
+4. 先部署函式、後套 SQL 是安全的：payload 沒有 key 時代碼走今天的路徑（只答不讀檔），不會报错。
 
 ### 12.7 已跑的驗證
 
 - `deno check`（Deno 2.9.8）對 `index.ts`＋`extraction.ts`：0 錯誤。
 - 真 Deno 執行（非 Node）：`notes.pdf` → 679 字元；`notes.docx` → 421 字元；純文字照讀；xlsx 形狀的 ZIP 與 PNG 形狀的位元組 → null；10,500 個中文字剪到 10,000。
-- vitest 新檔 `server/stage6AiChatExecutorFileExtraction.test.ts` 20 條、`server/stage6AiChatExecutorContract.test.ts` 12 條（原 8 條加 4 條）、`server/stage6AiChatDeploy5Applies.test.ts` 8 條。
-- 完整套件：`pnpm check` 0、`pnpm test` **63 檔／905 測試**、`pnpm build` 0；apply 套件在 **PG 16.15** 與 **PG 17.12** 全綠（後者 3 檔／44 測試）。
+- vitest 新檔 `server/stage6AiChatExecutorFileExtraction.test.ts` 24 條、`server/stage6AiChatExecutorPrompt.test.ts` 13 條（2026-11-26 新增）、`server/stage6AiChatExecutorContract.test.ts` 13 條、`server/stage6AiChatDeploy5Applies.test.ts` 8 條。
+- 完整套件（head `5610769`）：`pnpm check` 0、`pnpm test` **64 檔／923 測試**、`pnpm build` 0、`deno check` 對三個 .ts 模組 0 錯誤；apply 套件在 **PG 16.15** 與 **PG 17.12** 全綠（49 測試／邊）。
 - 沒有把 Adam 那份 PDF 放進 repo：公開 repo、第三人作業、文件属性含真實姓名；留作本機證據。
+
+### 12.8 對話標記（2026-11-26）：`authorKind`／`authorName`，不是 `sender_name`
+
+Launch 實讀（唯讀 SELECT）：最新兩筆請求的 `turns` 有 8、9 則，成員的原話都在裡面，`dropped_context`
+與 `（本次未包含較早的對話）` 逐筆對得上，所以**不是佇列或预算的問題**。問題在渲染那一層：`index.ts`
+讀 `turn.sender_name`，而佈署中的 `begin_group_ai_request` 寫的是 `'authorName'`／`'authorKind'`
+（deploy 2 第 438 行）。結果每一行——包含 CityLink AI 自己先前的回答——都變成匿名的「成員」，而且模型
+不知道總共收到幾行。學生只打了「123」「hello world」這種單字訊息時，這就是一筆「沒有人發言過」的回答
+的形狀，也正是 Eunice 報告裡 D-2／D-3 標記失敗的原因。
+
+規則（現在由 `prompt.ts` 實作並被測試執行，不再是註解）：
+
+1. **標記來自 `authorKind`，不是名字**：`authorKind='ai'` 一律印 `CityLink AI`，因為成員可以把顯示名稱
+   改成「CityLink AI」（裁決 C-2），用名字判斷會讓 AI 的舊回答被當成某個學生的主張。
+2. **camelCase 為主、snake_case 為fallback**：佈署中的函式送 camelCase；舊鍵仍被接受，避免哪天 payload
+   換形狀時整段對話無聲消失。
+3. **空的行不輸出**：只有 `「成員：」` 沒有內文的行會被丟掉，不會佔用 4,000 字元額度，也不會讓模型看到
+   一堆空標籤。
+4. **說明筆數**：`最近的對話（共 N 則，依時間排列）`。系統提示同時禁止「說群組沒有發言過或記錄是空的」，
+   只准說「其中沒有與問題相關的內容」。
+5. **空白收斂**：連續空白（含貼上的換行）收斂成一個空格，一則訊息不會變成好幾行、也不會白花額度。
+6. 提示的**唯一來源**是 `supabase/functions/group-ai-executor/prompt.ts`；靜態測試會擋下 `index.ts` 裡
+   再長出一份第二副本。

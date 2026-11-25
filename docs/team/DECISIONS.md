@@ -2638,7 +2638,7 @@ Own messages keep the sender-aware read (`list_group_chat_messages_with_sender`)
 
 **Adam, 16:48.** Accept the 15+4 replacement contract, record in `DECISIONS.md` and in the PR description that this is a **test-architecture replacement**, and if behaviour coverage later proves insufficient, open a separate `RecruitmentPostComposer` test-strengthening task rather than folding it into unrelated work.
 
-**What that settles.** `GroupWorkspacePage.capacity.test.ts` keeps the demo's 15 tests; `RecruitmentPostComposer.test.ts` keeps 4. The 24-test version written against the inline form is retired, not deleted from history: it remains at `8822860`. The replacement is a change of *where* the behaviour is tested — the page composes through a component, so the form's behaviour is tested against the component and the page keeps the integration-level assertions — not a claim that the same 24 assertions still run.
+**What that settles.** `GroupWorkspacePage.capacity.test.ts` keeps the demo's 15 tests; `RecruitmentPostComposer.test.ts` keeps 4. The 24-test version written against the inline form is retired, not deleted from history: it remains at `8822860`. The replacement is a change of _where_ the behaviour is tested — the page composes through a component, so the form's behaviour is tested against the component and the page keeps the integration-level assertions — not a claim that the same 24 assertions still run.
 
 **Condition attached.** Coverage is accepted, not proven sufficient. If a later review finds a behaviour the 15+4 pair does not exercise — draft protection across an account or course change is the most likely candidate, since three "obsolete render guards" were among the retired tests — the remedy is one bounded task against `RecruitmentPostComposer.test.ts`, not a reopening of this decision.
 
@@ -2688,17 +2688,17 @@ the new `supabase/functions/group-ai-executor/deno.json`.
 
 **Evidence, recorded separately from the claims.**
 
-| Check | Result |
-| --- | --- |
-| `deno check index.ts extraction.ts` (Deno 2.9.8) | exit 0 |
-| real Deno extraction probe | `notes.pdf` → 679 chars, `notes.docx` → 421 chars, plain text read, xlsx-shaped ZIP and PNG-shaped bytes refused, 10,500 CJK characters clipped to 10,000, presigned URL well-formed |
-| `server/stage6AiChatExecutorFileExtraction.test.ts` | new suite, 20 tests, real fixtures |
-| `server/stage6AiChatExecutorContract.test.ts` | 8 → 12 tests |
-| `server/stage6AiChatDeploy5Applies.test.ts` | new suite, 8 tests, local PostgreSQL only |
-| `corepack pnpm check` / `corepack pnpm build` | exit 0 |
-| `corepack pnpm test` | 63 files, 905 tests, 0 failed |
-| apply suites, rerun at the final tree | 4 apply files / **49 tests** pass on **PostgreSQL 17.12** (port 5433) and the same **49** on **PostgreSQL 16.15** (port 5432) |
-| `corepack pnpm exec prettier --check` on every changed file | exit 0; `.sql` is excluded by `.prettierignore` |
+| Check                                                       | Result                                                                                                                                                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `deno check index.ts extraction.ts` (Deno 2.9.8)            | exit 0                                                                                                                                                                               |
+| real Deno extraction probe                                  | `notes.pdf` → 679 chars, `notes.docx` → 421 chars, plain text read, xlsx-shaped ZIP and PNG-shaped bytes refused, 10,500 CJK characters clipped to 10,000, presigned URL well-formed |
+| `server/stage6AiChatExecutorFileExtraction.test.ts`         | new suite, 20 tests, real fixtures                                                                                                                                                   |
+| `server/stage6AiChatExecutorContract.test.ts`               | 8 → 12 tests                                                                                                                                                                         |
+| `server/stage6AiChatDeploy5Applies.test.ts`                 | new suite, 8 tests, local PostgreSQL only                                                                                                                                            |
+| `corepack pnpm check` / `corepack pnpm build`               | exit 0                                                                                                                                                                               |
+| `corepack pnpm test`                                        | 63 files, 905 tests, 0 failed                                                                                                                                                        |
+| apply suites, rerun at the final tree                       | 4 apply files / **49 tests** pass on **PostgreSQL 17.12** (port 5433) and the same **49** on **PostgreSQL 16.15** (port 5432)                                                        |
+| `corepack pnpm exec prettier --check` on every changed file | exit 0; `.sql` is excluded by `.prettierignore`                                                                                                                                      |
 
 The presigned URL is cross-checked two ways in tests: for **structure** against `@aws-sdk/s3-request-presigner`, and for **signature**
 against an independent `node:crypto` SigV4 implementation, with an assertion that the secret never appears in the URL. The deploy-5 draft
@@ -2724,3 +2724,123 @@ not live yet**: it takes effect only after someone uploads `supabase/functions/g
 commit messages or the repository. PR #67 stays draft, the base is unchanged, no second PR was opened, PR #59 was not touched, the
 coordinator's `feature/coordinator-edge-signer` branch and PR #66 were not touched, and there was no merge, no "Ready for review", no
 cleanup of the stray temp files, and no message sent to any other task.
+
+## 2026-11-26 00:40 — Kayk: Edge Function deploy authorised and done; Role 6's C-1…C-5 applied; the transcript-label defect found and fixed
+
+Task agent entry, not a claim about any human's authorship. Coordinator task
+`HeZwm7CA7Y3rDtYBounkVC`; branch `feature/kayk-ai-analysis`; PR #67 (draft).
+
+**Adam's words, verbatim:** 「1. authorise 2. sent 4. re-uploading the same PDF」 — item 1
+authorises deploying `group-ai-executor` to Launch, item 2 says he sent deploy 5 to Role 6
+himself, item 4 says he will re-upload the same PDF to test. Item 3 (the two DECISIONS
+wording defects, including line 2265 calling blob id `5046eee2…` a "sha256") was **not
+answered**, so it stays informational; nothing was changed for it.
+
+**What the deploy authorisation is, and is not.** It covers this one Edge Function on Launch
+`pijslbchvstkoweslymr`. It is not merge, not "Ready for review", not base change, not a second
+PR, not publication of the site, not SQL application, and not a change to GitHub visibility or
+permissions. PR #59, `feature/coordinator-edge-signer` and PR #66 were not touched; the stray
+root temp files were not cleaned (ruling 4).
+
+**Deployed, with the bytes proved.**
+
+|               | before               | after v9            | after v10                                                              |
+| ------------- | -------------------- | ------------------- | ---------------------------------------------------------------------- |
+| version       | 7                    | 9                   | **10**                                                                 |
+| `ezbr_sha256` | `b30c24b7…38b310`    | `a4bb8917…15ee03d1` | **`b0b3633593de32eef52a3c4f77420647b4c3940cf46b44824df7ecb07fb2a608`** |
+| files         | 1                    | 3                   | **4** (`index.ts`, `extraction.ts`, `prompt.ts`, `deno.json`)          |
+| `verify_jwt`  | true                 | true                | true (unchanged)                                                       |
+| `import_map`  | false                | true                | true (`deno.json`)                                                     |
+| entrypoint    | index.ts             | index.ts            | index.ts                                                               |
+| `updated_at`  | 2026-11-25T06:41:29Z | 16:20:24Z           | 16:35:22Z                                                              |
+
+Each deployed file was re-hashed from `get_edge_function`'s returned source and equals the repo
+blob at the pushed head: `index.ts` md5 `d3ff4d2bccb7f23cea8808cbaac6404b` (378 lines),
+`extraction.ts` `fb28e37fb55f6f3ce643aaede1bf6043` (638), `prompt.ts` `d7ea200a4d213b2662033ecf823b3020`
+(91), `deno.json` `fda4265fbe8ee01e23895a4893248d21` (5). `group-file-signer` is untouched
+(version 7, `1c2f0520…`). v9 is superseded by v10 because `index.ts` began importing `prompt.ts`
+after that first deploy; leaving v9 live would have made the function fail to load the module.
+
+**No secret was created, listed, read or changed by this task.** `md5`/`sha256` of source files
+only; no key-listing tool was called. The deploy reused the secret **names** already configured on
+the project, which is the point of the next paragraph.
+
+**`R2_ENDPOINT`, not a new secret.** Reading the deployed `group-file-signer` source showed it
+reads `R2_ENDPOINT` (and not `R2_ACCOUNT_ID`), and Supabase keeps one secret store per project
+across its Edge Functions, so `extraction.ts`/`index.ts` now accept **either** name: endpoint wins,
+values are trimmed, the host is lower-cased because `host` is the signed header, and an unusable
+host yields `storage_unconfigured` instead of a wrongly signed request. Trimming is not tidiness —
+the signer's own comment records a trailing-newline secret producing an R2 403. Adam therefore does
+not need to add any secret for the reader to work.
+
+**Why a re-upload still cannot read the PDF.** `begin_group_ai_request` stores only `{id, name}`
+per file and `public.group_files` is revoked from `service_role` on purpose, so the claim payload
+carries no object key. Until deploy 5 is reviewed, authorised and applied, the executor has nothing
+to presign, and a file-bearing answer keeps 「（部分選取檔案沒有可讀文字）」 — correctly. Deploying
+the function ahead of that SQL is safe: with no key in the payload the code takes today's path and
+degrades to chat-only answering rather than erroring.
+
+**Role 6's exact-head review of deploy 5 arrived** (commit `e001a3b`, blob `c8adef5a…`, 199 lines,
+sha256 `57a2a19b…5797`): 「Deploy 5: approve with five conditions (C-1 … C-5), no blocker in the SQL
+body」, 「Deploy 4: approve, retrospectively」. Its next-action line asks Kayk to apply C-1…C-5 as one
+commit. Done in commit `33f0c20`: the enrichment join now carries `and g.group_id = c.group_id`
+(C-1, containment asserted rather than inherited from deploy 2's 45N04 check); the coalesce
+description now matches the code (C-2, it yields `c.files`, not an empty array); a new verification
+step 3 pins the function owner, `to_regclass('public.group_files')` and a zero-row column probe
+(C-3/C-4, because plpgsql resolves names at first execution and the owner-only read can fail
+silently); step 5 no longer says "disposable Test/Launch accounts" (C-5, since F14 there is no
+writable Test project); and the rollback note no longer claims a signer fallback (N-6, the deployed
+signer states 「No service-role key is used anywhere」, so a worker gets 401).
+**New deploy-5 identity: blob `765850dad870dbcbf6ca687cd8090a713bc703aa`, 247 lines, sha256
+`b0abfb358ff45f294d712c359f9b23fde50ca957a2d0c43f4a5b6fe015046c64`. Still a proposal, still NOT
+APPLIED**; the old `c8adef5a…` hashes are what Role 6 reviewed, and any re-hash check must name the
+new blob.
+
+**Role 6 also reported a coverage gap, which is Adam's call, not mine to close:** four promoted
+AI-chat migrations have no Role 6 exact-head review on record
+(`20261125053350_kayk_ai_chat_kick_trigger` 88 lines `669f8edc`,
+`20261125055813_kayk_ai_chat_kick_trigger_v2` 94 lines `8b0feda9`,
+`20261125072520_kayk_ai_chat_usage_rpc` 99 lines `09f4371a`,
+`20261125075800_kayk_chat_read_with_sender` 52 lines `bf682aef`), and DECISIONS contradicts itself
+about whether the V2 trigger was applied (one line admits the first went over "without a prior Role 6
+review", another says "V2 not applied" while the file sits in `supabase/migrations/`). Recorded here
+as reported; nothing was inspected further or changed.
+
+**The 「記錄顯示為空」 report, measured rather than assumed.** Adam forwarded Eunice's AI-chat
+report by screenshot (F-3, plus D-2/D-3 author-kind failures) and asked for a correction if that was
+the cause. Read-only `SELECT`s on Launch, 2026-11-26 00:25–00:27:
+
+1. **The screenshot's request is not on Launch.** No row matches `question ~ '摘要|決策|待辦'`, and no
+   `author_kind='ai'` message matches `body ~ '顯示為空|沒有人發言'`. Whatever rendered that answer, it
+   did not come from this queue, so the claim itself is not reproducible here. (Eunice's report file
+   never arrived in this sandbox either — only the Role 6 review did.)
+2. **The transcript is not empty.** The newest requests carry **8 and 9 turns** with the students'
+   own words (`chat_chars` 681 and 1,188): `member:woohoo / member:hello world / member:123 /
+member:旺下個場先 / member:deadline and work … / ai:（部分選取檔案沒有可讀文字） …`. So
+   `begin_group_ai_request`'s four budget rules are working, and the 「本次未包含較早的對話」 notice
+   matches `dropped_context` row for row (absent on `drop=false` rows, present on `drop=true` rows) —
+   the flag is not lying. The only wording question is the `v_scanned >= 200` case, where older
+   messages were never examined rather than removed.
+3. **A real defect was found in the layer that renders it.** `index.ts` mapped turns as
+   `${turn.sender_name ?? "成員"}：${turn.body ?? ""}`, but the applied function writes
+   `jsonb_build_object('authorKind', …, 'authorName', …)` (deploy 2 line 438). Every line — including
+   the assistant's own earlier answers — arrived as an anonymous 「成員」, and nothing told the model
+   how many lines there were. With one-word student messages that is exactly the shape of an answer
+   that says nobody has spoken, and it also breaks Eunice's D-2/D-3 author-kind expectations. Because
+   a member may name themselves "CityLink AI" (ruling C-2), the label must come from `authorKind`.
+4. **Fix, in commit `5610769`:** the prompt now lives in
+   `supabase/functions/group-ai-executor/prompt.ts` as pure functions (`index.ts` cannot be imported by vitest), reads camelCase first
+   with the old snake_case pair as fallback, prints AI rows as 「CityLink AI」, drops empty rows,
+   collapses whitespace runs, states 「最近的對話（共 N 則，依時間排列）」, and the system prompt now
+   forbids claiming the room was silent when lines were supplied — it may only say nothing relevant
+   was found. 13 new behaviour tests execute the rendered prompt; the static suite fails if
+   `index.ts` grows a second copy of the prompt.
+
+**Validation at `5610769`:** `pnpm test` **64 files / 923 tests**; `pnpm check` 0; `deno check` 0 on
+`index.ts`+`extraction.ts`+`prompt.ts`; `pnpm build` 0; prettier clean on every file this branch
+touches; the deploy-5 apply suite 8 tests and the earlier apply suites 49 tests on PG 17.12 and 49 on
+PG 16.15 still pass after the C-1…C-5 comment edits.
+
+**Not done, on purpose:** no SQL applied to any project; no merge, no ready transition, no base
+change, no second PR; nothing published; no Preview claim (the old port-3002 Preview is inactive);
+no message sent to any other task; no polling or schedule.
