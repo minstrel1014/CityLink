@@ -2336,3 +2336,24 @@ that the two secrets are in place on Launch. He chose option A for the assistant
 `CityLink AI`, so no SQL change, no new blob and no constraint edit — the name a student sees above an AI
 reply is unchanged, and "CityLink Assistant" is not used anywhere in the product. The model id remains a
 configuration value; switching it later is a dashboard edit, not a code change.
+
+**First end-to-end answers, 2026-11-25 12:20Z.** Adam invoked `group-ai-executor` from the dashboard tester
+and got five answers: the two requests left over from Eunice's first pass plus three queued later. Verified
+from the database rather than from the HTTP response — all five are `status = ready`, `error_code` is null,
+and each has **exactly one** `group_chat_messages` row with `author_kind = 'ai'`, `sender_name_snapshot =
+'CityLink AI'` and `ai_request_id` pointing at its request. Message lengths 52–143 characters, well inside
+the 2,500 cap. Three of the five carried `dropped_context = true` with `chat_chars = 3206`, and their bodies
+begin with the dropped-context notice, so notice-before-cap ordering holds in practice, not only in tests.
+
+**The 401 detour, recorded because it cost three rounds.** The tester's first box is the header _name_, so
+`Bearer` went out as a header called `Bearer` and `Authorization` arrived empty. Before that surfaced, two
+real defects were found and fixed: `atob` rejects an unpadded base64url payload, so the role-claim check
+refused every valid token; and one deploy claimed to add a diagnostic that a failed string replacement had
+silently dropped, which is why the first 401 body was bare. The refusal now returns the caller's role and the
+token length, which is what separated "wrong key" from "no header at all".
+
+**Still open.** Questions with attached files remain untestable: the executor can only read text-shaped
+attachments, and the signer's service-role route does not exist yet, so a spreadsheet or PDF yields the
+"no readable text" notice. `turns` rows carry `{id, body}` and no sender name, so prompts currently attribute
+every turn to "成員"; that is a prompt-fidelity gap, not a correctness bug, and it is worth fixing when the
+executor gets its next revision.
