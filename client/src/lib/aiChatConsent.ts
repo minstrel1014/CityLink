@@ -178,6 +178,27 @@ export const AI_CHAT_COPY = {
     groupLimit: number
   ) =>
     `今天已用 ${userToday}／${userLimit} 次・此群組 ${groupToday}／${groupLimit} 次`,
+  /**
+   * The second line under the numbers. It says only what the denominators cannot:
+   * that the personal allowance is shared across groups, and how long until it
+   * resets. Repeating both limits here as well made one line carry three facts
+   * and wrap mid-phrase.
+   */
+  usageShared: (perUserPerDay: number, resetIn: string) =>
+    `每人每天 ${perUserPerDay} 次・所有群組共用・${resetIn}後重置`,
+  /** Shown before the first successful read, when there are no numbers to show. */
+  usageLimitsOnly: (perUserPerDay: number, perGroupPerDay: number) =>
+    `每人每天 ${perUserPerDay} 次（所有群組共用）、每群組 ${perGroupPerDay} 次`,
+  /** "約 16 小時" — a duration, because a UTC timestamp is not a mental unit. */
+  resetIn: (seconds: number) => {
+    // Rounded up, never down: a countdown that says 16 hours when 16.6 remain
+    // invites a retry that fails. Same reasoning as the refusal clock, which
+    // rounds to the next minute so it never prints 07:59 for an 08:00 reset.
+    const total = Math.max(1, Math.ceil(seconds));
+    if (total >= 3600) return `約 ${Math.ceil(total / 3600)} 小時`;
+    if (total >= 60) return `約 ${Math.ceil(total / 60)} 分鐘`;
+    return `約 ${total} 秒`;
+  },
   providerFailed: "CityLink AI 暫時無法回答，請稍後再試。",
   // Distinct from providerFailed on purpose: the request exists and may still be
   // answered. Saying "failed" would be a lie in the other direction.

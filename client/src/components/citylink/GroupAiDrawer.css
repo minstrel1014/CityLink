@@ -244,6 +244,21 @@
   color: #94a3b8;
 }
 
+/* The live numbers own their line. Appending them to the limit sentence with a
+   `・` made one line carry three facts and wrap mid-clause ("・此群組 4／20 次"
+   landing on its own line), which is what made the block hard to scan. */
+.citylink-ai-drawer__usage {
+  display: block;
+  font-weight: 600;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.citylink-ai-drawer__usage + .citylink-ai-drawer__meta-detail {
+  display: block;
+  margin-left: 0;
+}
+
 .citylink-ai-drawer__meta-warn {
   margin-left: 6px;
   color: #b45309;

@@ -63,6 +63,13 @@ export interface GroupChatMessage {
   body: string;
   createdAt: string;
   authorKind: "member" | "ai";
+  /**
+   * Who wrote it, so the room can put your own message on your side. Null when
+   * the read did not carry it (the four-column function) or the profile was
+   * deleted; never inferred from the display name, which is a snapshot the
+   * sender chose and may even be "CityLink AI".
+   */
+  senderId: string | null;
 }
 
 export interface GroupChatCursor {
@@ -139,6 +146,7 @@ type RpcName =
   | "get_current_term_group_member_profile"
   | "get_group_chat_access"
   | "list_group_chat_messages"
+  | "list_group_chat_messages_with_sender"
   | "send_group_chat_message"
   | "list_group_recruitment_posts_capacity"
   | "create_group_recruitment_post"
@@ -452,10 +460,48 @@ export function mapGroupChatMessages(value: unknown): GroupChatMessage[] {
       // tagged locally. Rendering must never infer "AI" from the sender name:
       // a member may set their display name to "CityLink AI".
       authorKind: "member" as const,
+      senderId: null,
     };
   });
 }
 
+/**
+ * The five-column sibling of `mapGroupChatMessages`.
+ *
+ * `list_group_chat_messages_with_sender` returns the same rows plus `sender_id`,
+ * which is the only reliable way to know a message is yours: comparing display
+ * names would break for anyone who renamed, and a member may legitimately be
+ * called "CityLink AI".
+ */
+export function mapGroupChatMessagesWithSender(
+  value: unknown
+): GroupChatMessage[] {
+  return parseRows(value, "group chat messages").map(row => {
+    allowOnlyKeys(row, [
+      "message_id",
+      "sender_name",
+      "body",
+      "created_at",
+      "sender_id",
+    ]);
+    const createdAt = requiredString(row, "created_at");
+    if (!Number.isFinite(Date.parse(createdAt))) {
+      throw new Error("The group chat contains an invalid timestamp.");
+    }
+    const senderId = row.sender_id;
+    if (senderId !== null && typeof senderId !== "string") {
+      throw new Error("The group chat contains an invalid sender_id value.");
+    }
+    return {
+      id: requiredString(row, "message_id"),
+      senderName: requiredString(row, "sender_name"),
+      body: requiredString(row, "body"),
+      createdAt,
+      authorKind: "member" as const,
+      senderId,
+    };
+  });
+}
 export function mapCurrentTermGroupMembers(
   value: unknown
 ): PageResult<CurrentTermGroupMember, GroupMemberCursor> {
@@ -748,6 +794,24 @@ export async function listGroupChatMessages(
   );
 }
 
+/**
+ * Reads the room with sender ids, so "mine" is a fact rather than a guess.
+ * Same cursor, same page size, same gate: only the returned columns differ.
+ */
+export async function listGroupChatMessagesWithSender(
+  userId: string,
+  groupId: string,
+  before?: GroupChatCursor
+) {
+  return mapGroupChatMessagesWithSender(
+    await callRpc(userId, "list_group_chat_messages_with_sender", {
+      p_group_id: groupId,
+      p_before_created_at: before?.createdAt ?? null,
+      p_before_id: before?.id ?? null,
+      p_limit: CHAT_PAGE_SIZE,
+    })
+  );
+}
 export async function listGroupFiles(userId: string, groupId: string) {
   return mapGroupFiles(
     await callRpc(userId, "list_group_files", { p_group_id: groupId })

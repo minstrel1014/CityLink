@@ -153,7 +153,28 @@ describe("usage panel wiring, statically", () => {
     expect(AI_CHAT_COPY.usageToday(3, 10, 4, 20)).toContain("此群組 4／20 次");
     // The fallback must stay distinguishable: it is old evidence, not a live read.
     expect(drawer).toContain("上次查詢：今天已用");
-    expect(drawer).toContain('usagePhase !== "ready" && usage');
+    // The fallback lives inside the branch where no live numbers exist.
+    expect(drawer).toContain('usagePhase === "ready" && liveUsage ? (');
+    expect(drawer).toContain("usage && (");
+  });
+
+  it("keeps the numbers on their own line instead of one run-on sentence", () => {
+    // The limits are not restated beside the numbers: the denominators are the
+    // limits, and repeating them is what made the line wrap mid-clause.
+    expect(drawer).toContain('className="citylink-ai-drawer__usage"');
+    expect(drawer).toContain("AI_CHAT_COPY.usageShared(");
+    expect(drawer).toContain("AI_CHAT_COPY.resetIn(");
+    expect(AI_CHAT_COPY.usageShared(10, "約 16 小時")).toBe(
+      "每人每天 10 次・所有群組共用・約 16 小時後重置"
+    );
+    expect(AI_CHAT_COPY.usageShared(10, "約 16 小時")).not.toContain("每群組");
+  });
+
+  it("turns seconds into a duration rather than a UTC timestamp", () => {
+    expect(AI_CHAT_COPY.resetIn(59_753)).toBe("約 17 小時");
+    expect(AI_CHAT_COPY.resetIn(2_700)).toBe("約 45 分鐘");
+    expect(AI_CHAT_COPY.resetIn(45)).toBe("約 45 秒");
+    expect(AI_CHAT_COPY.resetIn(0)).toBe("約 1 秒");
   });
 
   it("never renders zero for a failed read", () => {

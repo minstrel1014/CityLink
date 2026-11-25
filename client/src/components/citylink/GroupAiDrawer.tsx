@@ -304,43 +304,53 @@ export default function GroupAiDrawer({
         <div>
           <dt>每日額度</dt>
           <dd>
-            每人 {AI_RATE_LIMITS.perUserPerDay} 次（所有群組共用）、每群組{" "}
-            {AI_RATE_LIMITS.perGroupPerDay} 次
-            <span className="citylink-ai-drawer__meta-detail">
-              UTC 00:00 重置
-            </span>
-            {usagePhase === "ready" && liveUsage && (
-              <span className="citylink-ai-drawer__meta-detail">
-                {AI_CHAT_COPY.usageToday(
-                  liveUsage.userToday,
-                  liveUsage.userLimit || AI_RATE_LIMITS.perUserPerDay,
-                  liveUsage.groupToday,
-                  liveUsage.groupLimit || AI_RATE_LIMITS.perGroupPerDay
+            {usagePhase === "ready" && liveUsage ? (
+              <>
+                <span className="citylink-ai-drawer__usage">
+                  {AI_CHAT_COPY.usageToday(
+                    liveUsage.userToday,
+                    liveUsage.userLimit || AI_RATE_LIMITS.perUserPerDay,
+                    liveUsage.groupToday,
+                    liveUsage.groupLimit || AI_RATE_LIMITS.perGroupPerDay
+                  )}
+                </span>
+                <span className="citylink-ai-drawer__meta-detail">
+                  {AI_CHAT_COPY.usageShared(
+                    AI_RATE_LIMITS.perUserPerDay,
+                    AI_CHAT_COPY.resetIn(liveUsage.retryAfterSeconds)
+                  )}
+                </span>
+              </>
+            ) : (
+              <>
+                {AI_CHAT_COPY.usageLimitsOnly(
+                  AI_RATE_LIMITS.perUserPerDay,
+                  AI_RATE_LIMITS.perGroupPerDay
                 )}
-              </span>
+                {usagePhase === "loading" && (
+                  <span className="citylink-ai-drawer__meta-detail">
+                    {AI_CHAT_COPY.usageLoading}
+                  </span>
+                )}
+                {usagePhase === "unavailable" && (
+                  <span className="citylink-ai-drawer__meta-detail">
+                    {AI_CHAT_COPY.usageUnavailable}
+                  </span>
+                )}
+                {/* Only shown when the live read did not produce numbers: the
+                    refusal detail is then the best evidence, and it says so. */}
+                {usage && (
+                  <span className="citylink-ai-drawer__meta-warn">
+                    上次查詢：今天已用 {usage.userToday ?? "?"}／
+                    {AI_RATE_LIMITS.perUserPerDay} 次（此群組{" "}
+                    {usage.groupToday ?? "?"}／{AI_RATE_LIMITS.perGroupPerDay}）
+                  </span>
+                )}
+              </>
             )}
             {usagePhase === "ready" && liveUsage && liveUsage.inFlight > 0 && (
               <span className="citylink-ai-drawer__meta-warn">
                 {AI_CHAT_COPY.usageInFlight}
-              </span>
-            )}
-            {usagePhase === "loading" && (
-              <span className="citylink-ai-drawer__meta-detail">
-                {AI_CHAT_COPY.usageLoading}
-              </span>
-            )}
-            {usagePhase === "unavailable" && (
-              <span className="citylink-ai-drawer__meta-detail">
-                {AI_CHAT_COPY.usageUnavailable}
-              </span>
-            )}
-            {/* Only shown when the live read did not produce numbers: the refusal
-                detail is then the best evidence, and it is labelled as old. */}
-            {usagePhase !== "ready" && usage && (
-              <span className="citylink-ai-drawer__meta-warn">
-                上次查詢：今天已用 {usage.userToday ?? "?"}／
-                {AI_RATE_LIMITS.perUserPerDay} 次（此群組{" "}
-                {usage.groupToday ?? "?"}／{AI_RATE_LIMITS.perGroupPerDay}）
               </span>
             )}
           </dd>

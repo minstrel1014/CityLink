@@ -9,7 +9,7 @@ import {
   CHAT_PAGE_SIZE,
   getGroupChatAccess,
   getStage6ErrorMessage,
-  listGroupChatMessages,
+  listGroupChatMessagesWithSender,
   listGroupFiles,
   MAX_CHAT_MESSAGE_LENGTH,
   sendGroupChatMessage,
@@ -90,7 +90,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
         const permitted = await getGroupChatAccess(userId, groupId);
         if (!isCurrent()) return;
         setAccess(permitted);
-        const page = await listGroupChatMessages(userId, groupId);
+        const page = await listGroupChatMessagesWithSender(userId, groupId);
         if (!isCurrent()) return;
         // The file list is live (P1 is applied), but it must not decide whether
         // chat opens: a failure here leaves the drawer without files and says so.
@@ -129,7 +129,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     setOlderBusy(true);
     setFeedback("");
     try {
-      const page = await listGroupChatMessages(userId, groupId, {
+      const page = await listGroupChatMessagesWithSender(userId, groupId, {
         createdAt: cursorMessage.createdAt,
         id: cursorMessage.id,
       });
@@ -189,7 +189,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       )
         return;
       setDraft("");
-      const latest = await listGroupChatMessages(userId, groupId);
+      const latest = await listGroupChatMessagesWithSender(userId, groupId);
       if (
         generation.current !== expectedGeneration ||
         userIdRef.current !== userId ||
@@ -312,11 +312,18 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
             <ol className="stage6-message-list" aria-live="polite">
               {messages.map(message => (
                 <li
-                  className={
-                    message.authorKind === "ai"
-                      ? "stage6-message stage6-message-ai"
-                      : "stage6-message"
-                  }
+                  className={[
+                    "stage6-message",
+                    message.authorKind === "ai" ? "stage6-message-ai" : "",
+                    // Own messages sit on the reader's side, like every chat
+                    // they already use. The identity comes from sender_id; the
+                    // display name is a snapshot and cannot decide this.
+                    message.senderId && message.senderId === userId
+                      ? "stage6-message-own"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   key={message.id}
                 >
                   <div className="stage6-message-meta">

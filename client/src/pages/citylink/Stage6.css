@@ -326,6 +326,17 @@
   border-radius: 9px;
   background: #fcfdfb;
 }
+/* Your own message sits on your side, the way every chat app does it. The
+   identity comes from sender_id, never from the display-name snapshot. */
+.stage6-message-own {
+  justify-self: end;
+  max-width: 84%;
+  border-color: #d7e4c4;
+  background: #eef4e6;
+}
+.stage6-message-own .stage6-message-meta {
+  justify-content: flex-end;
+}
 .stage6-message-meta {
   align-items: baseline;
 }
