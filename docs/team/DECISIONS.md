@@ -2377,3 +2377,15 @@ port, not as a review.
 holds the Prototype key; the live bundle proves otherwise — it references `pijslbchvstkoweslymr`, contains
 `sb_publishable_`, and has no Prototype ref and no legacy JWT. The description is stale text, not a stale
 value, and it should be corrected the next time that secret is touched.
+
+**The ported drawer was a mock, and the demo has been rolled back.** Adam's first real use of the published
+drawer returned a fourteen-paragraph essay in answer to "just reply ok if received". `GroupAiDrawer.tsx`
+imports `composeMockReply` from `shared/aiChatMockReply` and produces the reply in the browser: it never calls
+`begin_group_ai_request`, never queues, never reaches the executor. The port therefore published a page that
+invented answers and attributed them to `CityLink AI`. Reverted on the demo's `main` as `964f885`, which
+removed the button again and triggered automatic publication.
+
+**The lesson recorded rather than repeated:** "the button is live" was verified by grepping the built bundle
+for a string, not by using the feature. A string in a bundle proves the code shipped, never that it works.
+The real client path — `begin`, poll `get_group_ai_request_status`, read the message from the chat — does not
+exist yet, and no further demo publication happens until it does and has been exercised once end to end.
