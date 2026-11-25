@@ -2319,3 +2319,14 @@ describes an intention that has no storage behind it yet. A signed download URL 
 a file it must parse itself. That is a real design choice rather than an implementation detail — extraction
 in the executor means every answer path carries an xlsx/PDF parser, while extraction at upload time means a
 schema change and a backfill — and it is recorded here as open, not silently decided.
+
+**The executor is deployed, and it cannot answer yet.** Adam authorised the deployment at 11:42 on 2026-11-25
+("authorized"). `group-ai-executor` was deployed to Launch `pijslbchvstkoweslymr` through the Supabase
+connector's `deploy_edge_function`: function id `446f45a0-bf3c-4106-bde4-ee4e5ce65100`, version 1, status
+ACTIVE, `verify_jwt = true`. The function authenticates its caller itself by comparing the bearer token to the
+service-role key, so `verify_jwt` is a second lock rather than the only one.
+
+It will return `executor_not_configured` until two secrets exist, and no connector tool can set Edge Function
+secrets: `XAI_API_KEY` and `XAI_MODEL` have to be entered in the Supabase dashboard by Adam. That is the
+fail-closed path working as designed, not a defect — an executor that quietly answered with a default model
+would be worse. The model id is a configuration value, so changing it later is not a code change.
