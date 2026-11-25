@@ -243,18 +243,34 @@ async function handleOne(
  * the `role` claim is enough here — and the string comparison stays as the
  * fallback for the legacy shared secret.
  */
+function callerRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    // JWTs strip base64 padding; atob rejects an unpadded payload.
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { role?: string };
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the caller is the service role.
+ *
+ * Comparing the raw string against `SUPABASE_SERVICE_ROLE_KEY` alone is brittle:
+ * a project that rotates to asymmetric signing keys issues a different service
+ * JWT, and an exact-match check would reject a caller the platform has already
+ * authenticated. The platform verifies the signature (`verify_jwt`), so reading
+ * the `role` claim is enough here — and the string comparison stays as the
+ * fallback for the legacy shared secret.
+ */
 function isServiceCaller(token: string, env: ExecutorEnv): boolean {
   if (token.length === 0) return false;
   if (token === env.serviceKey) return true;
-  const parts = token.split(".");
-  if (parts.length !== 3) return false;
-  try {
-    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const payload = JSON.parse(atob(padded)) as { role?: string };
-    return payload.role === "service_role";
-  } catch {
-    return false;
-  }
+  return callerRole(token) === "service_role";
 }
 
 Deno.serve(async (request: Request) => {
