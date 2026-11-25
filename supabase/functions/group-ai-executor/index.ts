@@ -292,9 +292,16 @@ Deno.serve(async (request: Request) => {
     ""
   );
   if (!isServiceCaller(presented, env)) {
-    return new Response(JSON.stringify({ error: "unauthorized" }), {
-      status: 401,
-    });
+    // The role is a claim inside a token the caller already sent, not a secret,
+    // and reporting it turns "it does not work" into a diagnosis.
+    return new Response(
+      JSON.stringify({
+        error: "unauthorized",
+        role: callerRole(presented),
+        token_length: presented.length,
+      }),
+      { status: 401 }
+    );
   }
 
   const { createClient } = await import("npm:@supabase/supabase-js@2");
