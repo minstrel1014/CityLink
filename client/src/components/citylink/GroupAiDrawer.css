@@ -88,6 +88,47 @@
   border-radius: 10px;
 }
 
+/* The seven statements are reference text, not the main event: keep them
+   small and scrollable so the question box stays on screen. */
+.citylink-ai-drawer__consent {
+  gap: 6px;
+  padding: 8px 10px;
+  max-height: min(38vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.citylink-ai-drawer__consent-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.citylink-ai-drawer__consent-list li {
+  margin: 0;
+}
+
+.citylink-ai-drawer__consent .citylink-ai-drawer__agree {
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .citylink-ai-drawer__consent {
+    max-height: 34vh;
+  }
+
+  .citylink-ai-drawer__consent-list {
+    font-size: 0.68rem;
+  }
+}
+
 .citylink-ai-drawer__files legend {
   font-size: 0.8rem;
   font-weight: 600;

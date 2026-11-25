@@ -46,7 +46,8 @@ function describeRefusal(failure: {
 }): string {
   if (failure.code === "45N06") {
     if (failure.reason === "in_flight") return AI_CHAT_COPY.inFlight;
-    if (failure.retryAfter) return AI_CHAT_COPY.rateLimited(failure.retryAfter);
+    if (failure.retryAfter)
+      return AI_CHAT_COPY.rateLimited(failure.retryAfter, failure.reason);
   }
   if (failure.code === "45N09") return AI_CHAT_COPY.disclosureRequired;
   return `${failure.code}: ${failure.message}`;

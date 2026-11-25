@@ -191,4 +191,15 @@ describe("answer notices have one pinned order and one source of truth", () => {
     expect(consent.AI_CHAT_COPY.rateLimited(15)).toContain("15");
     expect(consent.AI_CHAT_COPY.rateLimited(1)).toContain("1 秒");
   });
+
+  it("says whose allowance ran out and when it comes back", () => {
+    const copy = consent.AI_CHAT_COPY.rateLimited(65607, "group_daily");
+    expect(copy).toContain("18 小時");
+    expect(copy).toContain("全組共用");
+    expect(copy).toMatch(/\d{2}:\d{2}/);
+    expect(copy).not.toContain("45N06");
+    const mine = consent.AI_CHAT_COPY.rateLimited(65607, "user_daily");
+    expect(mine).toContain("你今天");
+    expect(mine).not.toContain("全組共用");
+  });
 });

@@ -174,7 +174,7 @@ export const AI_CHAT_COPY = {
    * in-flight question, most of a day for the daily caps. Printing "45N06 · 65607s"
    * told the reader nothing, so the drawer turns it into a sentence.
    */
-  rateLimited: (retryAfter: number) => {
+  rateLimited: (retryAfter: number, reason?: string | null) => {
     const seconds = Math.max(1, Math.round(retryAfter));
     const wait =
       seconds >= 3600
@@ -182,7 +182,19 @@ export const AI_CHAT_COPY = {
         : seconds >= 60
           ? `${Math.round(seconds / 60)} 分鐘`
           : `${seconds} 秒`;
-    return `今天在這裡問得太多了，請約 ${wait}後再試。`;
+    // "About 18 hours" is true but useless, and it matters whose allowance ran
+    // out: the per-user cap is one reader's, the group cap is everyone's.
+    const clock = new Date(Date.now() + seconds * 1000).toLocaleTimeString(
+      "zh-TW",
+      { hour: "2-digit", minute: "2-digit", hour12: false }
+    );
+    const who =
+      reason === "group_daily"
+        ? "這個群組今天的 AI 提問次數已用完（額度由全組共用）"
+        : reason === "user_daily"
+          ? "你今天在這裡的 AI 提問次數已用完（每人每天有上限，其他群組不受影響）"
+          : "今天的 AI 提問次數已用完";
+    return `${who}，約 ${wait}後、${clock} 左右重置。`;
   },
   inFlight: "CityLink AI 還在回答上一個問題，請稍等一會再問。",
   agreeAll: "我已閱讀並同意以上全部",
