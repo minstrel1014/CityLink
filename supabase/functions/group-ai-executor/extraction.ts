@@ -56,9 +56,26 @@ export type ClaimedFile = {
   objectKey?: string | null;
 };
 
-/** Object-storage credentials, read from the function's environment. */
+/**
+ * Object-storage credentials, read from the function's environment.
+ *
+ * Two ways to name the host, and only one of them is required:
+ *
+ * - `endpoint` — `R2_ENDPOINT`, the variable the already-deployed
+ *   `group-file-signer` uses on Launch (`https://<account>.r2.cloudflarestorage.com`).
+ *   Reusing that name means the executor needs **no new secret**: Supabase Edge
+ *   Function secrets are shared by the project's functions, so the credentials
+ *   created for uploads and downloads are the same ones a worker presigning a
+ *   GET needs.
+ * - `accountId` — `R2_ACCOUNT_ID`, from which the same host is derived. Kept
+ *   because it is the shorter description of the same fact.
+ *
+ * The host is what SigV4 signs, so both routes must agree exactly. Taking the
+ * host from the endpoint rather than re-typing it is what keeps them agreeing.
+ */
 export type StorageConfig = {
-  accountId: string;
+  endpoint?: string | null;
+  accountId?: string | null;
   bucket: string;
   accessKeyId: string;
   secretAccessKey: string;
@@ -82,12 +99,19 @@ export type FileSourceEnv = {
  * worker cannot look a storage key up by itself. Two ways out, tried in order, and
  * both optional:
  *
- * 1. `FILE_SIGNER_URL` — the signing endpoint from PR #66: POST `/download-url`
- *    with a file id, then fetch the returned URL. That endpoint has no
- *    service-role route yet, so today it answers 401 to this caller; the attempt
- *    is one cheap request and keeps the worker ready for that branch.
+ * 1. `FILE_SIGNER_URL` — the signing endpoint: POST `/download-url` with a file
+ *    id, then fetch the returned URL. Read from the deployed source rather than
+ *    assumed: `group-file-signer` is live on Launch (version 7, ACTIVE) and its
+ *    `index.ts` states "No service-role key is used anywhere. Every database
+ *    call carries the caller's own JWT", while its two routes call
+ *    `group_file_upload_target` and `request_group_file_download`, both of which
+ *    need `auth.uid()`. So this route answers 401 to a worker holding only the
+ *    service-role key; the attempt costs one request and stays ready for the
+ *    branch that adds a service-role route.
  * 2. `R2_*` credentials — presign a short-lived GET here. Needs the object key,
- *    which the claim payload does not carry until the deploy-5 proposal is applied.
+ *    which the claim payload does not carry until the deploy-5 proposal is
+ *    applied. The host comes from `R2_ENDPOINT` when it is set (it is, on
+ *    Launch, for the signer) and from `R2_ACCOUNT_ID` otherwise.
  *
  * What is deliberately absent: deriving `groups/<group>/<file>` from the ids. The
  * key is a fact about a stored object; the server already puts
@@ -217,12 +241,43 @@ async function hmacSha256(
  * `now` is injectable so that comparison is deterministic; production callers
  * leave it out. The secret never appears in the result and nothing here logs.
  */
+/**
+ * The host SigV4 signs, from whichever of the two settings is present.
+ *
+ * `R2_ENDPOINT` wins because it is the literal value the deployed signer uses,
+ * and a trailing newline in a pasted secret is a real, measured failure mode
+ * there — so the value is trimmed, then parsed rather than string-matched. A
+ * port is kept if someone points at a proxy. Null means "no usable host", which
+ * the caller turns into a refusal rather than a bad signature.
+ */
+export function storageHost(storage: StorageConfig): string | null {
+  const endpoint = (storage.endpoint ?? "").trim();
+  if (endpoint) {
+    try {
+      const url = new URL(endpoint);
+      // Lowercased on purpose. `host` is the one header SigV4 signs here, and an
+      // HTTP client sends it in lower case whatever the URL said, so signing a
+      // mixed-case host would describe a request nobody will make.
+      return url.hostname ? url.host.toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  }
+  const account = (storage.accountId ?? "").trim();
+  return account ? `${account}.r2.cloudflarestorage.com`.toLowerCase() : null;
+}
+
 export async function presignedGetUrl(
   objectKey: string,
   storage: StorageConfig,
   now: Date = new Date()
 ): Promise<string> {
-  const host = `${storage.accountId}.r2.cloudflarestorage.com`;
+  const host = storageHost(storage);
+  if (!host) {
+    // Not a guess and not a silent fallback: an unusable host would produce a
+    // signature over the wrong `host` header and a confusing 403 from R2.
+    throw new Error("storage_unconfigured");
+  }
   const canonicalUri =
     "/" +
     uriEncode(storage.bucket, true) +

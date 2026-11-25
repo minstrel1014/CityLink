@@ -143,6 +143,7 @@ describe("group AI executor, statically", () => {
     // account id must never appear in this folder's source.
     for (const name of [
       "R2_ACCOUNT_ID",
+      "R2_ENDPOINT",
       "R2_BUCKET",
       "R2_ACCESS_KEY_ID",
       "R2_SECRET_ACCESS_KEY",

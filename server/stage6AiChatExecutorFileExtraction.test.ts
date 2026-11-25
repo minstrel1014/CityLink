@@ -23,6 +23,7 @@ import {
   fileBytes,
   ooxmlText,
   presignedGetUrl,
+  storageHost,
   uriEncode,
 } from "../supabase/functions/group-ai-executor/extraction.ts";
 
@@ -263,8 +264,12 @@ describe("executor byte sources", () => {
     );
     expect(buffer).not.toBeNull();
     expect(requested).toHaveLength(1);
+    // Lower case: `storageHost` normalises the host before it is signed, because
+    // `host` is the signed header and an HTTP client sends it lower case. The
+    // fixture account id is deliberately mixed case so this would fail if the
+    // normalisation were ever dropped.
     expect(requested[0]).toContain(
-      "ACCOUNTID.r2.cloudflarestorage.com/citylink-group-files/"
+      "accountid.r2.cloudflarestorage.com/citylink-group-files/"
     );
     // The secret is an HMAC key, never a query parameter.
     expect(requested[0]).not.toContain(STORAGE.secretAccessKey);
@@ -350,7 +355,11 @@ describe("executor presigning", () => {
       "GET",
       canonicalUri,
       query,
-      `host:${STORAGE.accountId}.r2.cloudflarestorage.com\n`,
+      // Lower case, the way an HTTP client sends `Host` and the way
+      // `storageHost` normalises it. Signing a mixed-case host would describe a
+      // request nobody actually makes, so this is the expectation, not a
+      // convenience.
+      `host:${STORAGE.accountId.toLowerCase()}.r2.cloudflarestorage.com\n`,
       "host",
       "UNSIGNED-PAYLOAD",
     ].join("\n");
@@ -413,6 +422,92 @@ describe("executor presigning", () => {
     expect(uriEncode("groups/x/y", false)).toBe("groups/x/y");
     expect(uriEncode("groups/x/y", true)).toBe("groups%2Fx%2Fy");
     expect(uriEncode("文件 v1", true)).toBe("%E6%96%87%E4%BB%B6%20v1");
+  });
+
+  it("takes the host from R2_ENDPOINT, the name the deployed signer already uses", async () => {
+    // Measured fact from Launch, 2026-11-25: `group-file-signer` reads
+    // R2_ENDPOINT, not R2_ACCOUNT_ID. Supabase shares one secret store across a
+    // project's functions, so following that name means the executor needs no
+    // new secret to presign a GET.
+    const viaEndpoint: StorageConfig = {
+      endpoint: "https://ACCOUNTID.r2.cloudflarestorage.com",
+      bucket: STORAGE.bucket,
+      accessKeyId: STORAGE.accessKeyId,
+      secretAccessKey: STORAGE.secretAccessKey,
+      region: STORAGE.region,
+    };
+    expect(storageHost(viaEndpoint)).toBe("accountid.r2.cloudflarestorage.com");
+    const url = new URL(await presignedGetUrl(OBJECT_KEY, viaEndpoint));
+    expect(url.host).toBe("accountid.r2.cloudflarestorage.com");
+    expect(url.pathname).toContain(STORAGE.bucket);
+  });
+
+  it("prefers the endpoint over the account id, and keeps a port", () => {
+    expect(
+      storageHost({
+        endpoint: "http://127.0.0.1:9000",
+        accountId: "ACCOUNTID",
+        bucket: STORAGE.bucket,
+        accessKeyId: STORAGE.accessKeyId,
+        secretAccessKey: STORAGE.secretAccessKey,
+        region: STORAGE.region,
+      })
+    ).toBe("127.0.0.1:9000");
+  });
+
+  it("trims a pasted secret's newline instead of signing for another host", () => {
+    // The signer's own comments record the hour this cost it: a trailing newline
+    // produced a signed URL for a bucket with a newline in the name, and R2
+    // answered 403. Trimming is the fix, so it is tested, not assumed.
+    expect(
+      storageHost({
+        endpoint: "https://accountid.r2.cloudflarestorage.com\n",
+        bucket: STORAGE.bucket,
+        accessKeyId: STORAGE.accessKeyId,
+        secretAccessKey: STORAGE.secretAccessKey,
+        region: STORAGE.region,
+      })
+    ).toBe("accountid.r2.cloudflarestorage.com");
+    expect(
+      storageHost({
+        accountId: "  ACCOUNTID  ",
+        bucket: STORAGE.bucket,
+        accessKeyId: STORAGE.accessKeyId,
+        secretAccessKey: STORAGE.secretAccessKey,
+        region: STORAGE.region,
+      })
+    ).toBe("accountid.r2.cloudflarestorage.com");
+  });
+
+  it("refuses to sign a host it cannot name, and that refusal is not fatal", async () => {
+    // An unusable host must not become a signature over the wrong `host` header
+    // and a confusing 403 from R2. And because `fileBytes` swallows it, one
+    // misconfigured deployment degrades the answer instead of failing it.
+    const noHost: StorageConfig = {
+      bucket: STORAGE.bucket,
+      accessKeyId: STORAGE.accessKeyId,
+      secretAccessKey: STORAGE.secretAccessKey,
+      region: STORAGE.region,
+    };
+    expect(storageHost(noHost)).toBeNull();
+    expect(
+      storageHost({
+        ...noHost,
+        endpoint: "not a url",
+      })
+    ).toBeNull();
+    await expect(presignedGetUrl(OBJECT_KEY, noHost)).rejects.toThrow(
+      "storage_unconfigured"
+    );
+    const buffer = await fileBytes(
+      {
+        id: "22222222-2222-4222-8222-222222222222",
+        name: "notes.pdf",
+        objectKey: OBJECT_KEY,
+      },
+      { serviceKey: "k", fileSignerUrl: null, storage: noHost }
+    );
+    expect(buffer).toBeNull();
   });
 });
 

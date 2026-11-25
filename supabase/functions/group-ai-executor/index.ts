@@ -65,32 +65,53 @@ function readEnv(): ExecutorEnv {
   const xaiKey = Deno.env.get("XAI_API_KEY") ?? "";
   const xaiModel = Deno.env.get("XAI_MODEL") ?? "";
   const fileSignerUrl = Deno.env.get("FILE_SIGNER_URL") ?? null;
-  // Object-storage credentials are all-or-nothing and optional: without them the
-  // function still answers, it just cannot read attachments. Saying so out loud
-  // when someone set half of them is what turns "the PDF is ignored" from a
-  // mystery into one log line. Only the missing *names* are reported, never a
-  // value.
+  // Object-storage credentials are optional: without them the function still
+  // answers, it just cannot read attachments. Saying so out loud when someone set
+  // half of them is what turns "the PDF is ignored" from a mystery into one log
+  // line. Only the missing *names* are reported, never a value.
+  //
+  // Every value is trimmed, and that is not tidiness: a secret pasted from a
+  // dashboard carries a trailing newline, and a newline inside a bucket name or a
+  // host signs a request for something R2 answers with 403 — a failure the
+  // deployed signer's own comments record as having cost an hour to diagnose.
+  // Learning it from their note rather than again is the point.
   const storageParts: Record<string, string> = {
-    R2_ACCOUNT_ID: Deno.env.get("R2_ACCOUNT_ID") ?? "",
-    R2_BUCKET: Deno.env.get("R2_BUCKET") ?? "",
-    R2_ACCESS_KEY_ID: Deno.env.get("R2_ACCESS_KEY_ID") ?? "",
-    R2_SECRET_ACCESS_KEY: Deno.env.get("R2_SECRET_ACCESS_KEY") ?? "",
+    R2_BUCKET: (Deno.env.get("R2_BUCKET") ?? "").trim(),
+    R2_ACCESS_KEY_ID: (Deno.env.get("R2_ACCESS_KEY_ID") ?? "").trim(),
+    R2_SECRET_ACCESS_KEY: (Deno.env.get("R2_SECRET_ACCESS_KEY") ?? "").trim(),
   };
+  const endpoint = (Deno.env.get("R2_ENDPOINT") ?? "").trim();
+  const accountId = (Deno.env.get("R2_ACCOUNT_ID") ?? "").trim();
   const storageMissing = Object.keys(storageParts).filter(
     name => !storageParts[name]
   );
+  // Either name is enough to know the host, and `R2_ENDPOINT` is what Launch
+  // already sets for the signer — Supabase shares one secret store across the
+  // project's functions — so the usual answer here is "nothing new to add".
+  const hostMissing = !endpoint && !accountId;
   const storage: StorageConfig | null =
-    storageMissing.length === 0
+    storageMissing.length === 0 && !hostMissing
       ? {
-          accountId: storageParts.R2_ACCOUNT_ID,
+          endpoint: endpoint || null,
+          accountId: accountId || null,
           bucket: storageParts.R2_BUCKET,
           accessKeyId: storageParts.R2_ACCESS_KEY_ID,
           secretAccessKey: storageParts.R2_SECRET_ACCESS_KEY,
-          region: Deno.env.get("R2_REGION") || "auto",
+          region: (Deno.env.get("R2_REGION") ?? "").trim() || "auto",
         }
       : null;
-  if (storageMissing.length > 0 && storageMissing.length < 4) {
-    console.warn(`storage_partially_configured: ${storageMissing.join(", ")}`);
+  // Reported only when somebody clearly meant to configure storage and stopped
+  // short: names missing while at least one part is present.
+  const partlyConfigured =
+    storage === null &&
+    (storageMissing.length > 0 || hostMissing) &&
+    (storageMissing.length < 3 || !hostMissing);
+  if (partlyConfigured) {
+    const names = [...storageMissing];
+    if (hostMissing && storageMissing.length === 0) {
+      names.push("R2_ENDPOINT or R2_ACCOUNT_ID");
+    }
+    console.warn(`storage_partially_configured: ${names.join(", ")}`);
   }
   // Fail closed and loudly: a missing model id must not fall back to a guess.
   const missing = [
