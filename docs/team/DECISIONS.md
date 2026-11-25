@@ -2844,3 +2844,64 @@ PG 16.15 still pass after the C-1…C-5 comment edits.
 **Not done, on purpose:** no SQL applied to any project; no merge, no ready transition, no base
 change, no second PR; nothing published; no Preview claim (the old port-3002 Preview is inactive);
 no message sent to any other task; no polling or schedule.
+
+## 2026-11-26 01:05 — Authorization: apply Kayk AI-chat deploy 5 on Launch (Adam, conditional grant now satisfied)
+
+**Adam's words, verbatim:** 「2. authorize when the review shows ready」 — item 2 of the previous
+handoff, which asked him to decide when to apply deploy 5 and to authorise it in writing. He attached
+Role 6's diff-only re-check in the same message, and that re-check **shows ready**: 「**Certify — no
+blocker, and C-1 … C-5 are all closed.** The citable identity for Adam's authorisation is blob
+`765850dad870dbcbf6ca687cd8090a713bc703aa`, 247 lines, sha256
+`b0abfb358ff45f294d712c359f9b23fde50ca957a2d0c43f4a5b6fe015046c64`.」 Two nits (N-8, N-9) are
+comment-level and, in Role 6's words, 「neither needs to change the blob before authorisation」. The
+condition is therefore satisfied and this entry is the written authorisation it was waiting for.
+
+**Authorised:** applying `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY5.sql` at commit
+`2f9481a440275d0fdd0cafafd3e385a67a8f0831`, blob `765850dad870dbcbf6ca687cd8090a713bc703aa`, 247 lines,
+13,170 bytes, sha256 `b0abfb358ff45f294d712c359f9b23fde50ca957a2d0c43f4a5b6fe015046c64`, to Launch
+`pijslbchvstkoweslymr` only, in one transaction, after a same-window read-only preflight including the
+three probes of its own step 3. **This authorises the apply only**: not merge, not ready-for-review, not
+a base change, not a second PR, not deployment of the site or demo, not publication, not any other
+migration, and not any write to the frozen Prototype `wkzclgmhrtecnpexfesr`. Authorising a different
+blob later voids this sentence, which is the whole point of naming a hash.
+
+**Blob identity re-measured after the review, not inherited from it:** `git ls-remote` returned
+`2f9481a440275d0fdd0cafafd3e385a67a8f0831` (unchanged since Role 6 read it),
+`git rev-parse HEAD:docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY5.sql` = `765850dad870dbcbf6ca687cd8090a713bc703aa`,
+`wc -l` = 247, and `sha256sum` = `b0abfb358ff45f294d712c359f9b23fde50ca957a2d0c43f4a5b6fe015046c64` —
+all three agree with the first line of Role 6's report. One `create or replace function` statement in
+the file; the extracted `$function$` body is 2,345 bytes, md5 `b875ed064620cc2b057edf3d691ca9d0`,
+sha256 `410518c57c8b4b9bf2a3c37817f8294c2b49b8e5218f5e9a8a6188ac43109821`, and contains
+`and g.group_id = c.group_id`. That md5 is the value expected from `md5(prosrc)` after the apply.
+
+**Gate 2 (no other branch editing the same object), measured here rather than assumed:** 66 remote
+heads; `git grep -q 'claim_next_group_ai_request'` against every one of them returns a hit on
+`feature/kayk-ai-analysis` only. Open PRs #65/#66/#67 are draft and none of the others carries that
+name. The coordinator task's own confirmation was not sought, because this task does not message other
+tasks; the branch evidence above is the substitute and is stated as such.
+
+**Gate 3 (read-only preflight, 2026-11-26 01:01–01:02, same window as the apply).**
+
+| probe                               | result                                                                                                                                                                                                                                                                                                     | expected                                                                |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `current_database()`                | `postgres`                                                                                                                                                                                                                                                                                                 | the project's own database                                              |
+| `private.citylink_target`           | one row: `project_ref = pijslbchvstkoweslymr`, `system_identifier = 7692131729119822239`, `declared_by Adam`, F14 note, `declared_at 2026-11-24T06:37:44Z`                                                                                                                                                 | names Launch, and it is the only row                                    |
+| `pg_control_system()`               | `7692131729119822239`                                                                                                                                                                                                                                                                                      | **equals the marker** — identity, which the guard itself cannot prove   |
+| live `md5(prosrc)` before           | `e0fbc90ed6e3d838641ec7fba5302f22`                                                                                                                                                                                                                                                                         | deploy 3's body: the object being replaced is what promotion says it is |
+| owner / `prosecdef` / config        | `postgres` / true / `search_path=""`                                                                                                                                                                                                                                                                       | C-4's pin; a `rolbypassrls` owner can read the revoked table            |
+| signature                           | `RETURNS TABLE(id, group_id, question, turns, files, chat_chars, file_chars, files_used, dropped_context)`, no arguments                                                                                                                                                                                   | unchanged, so the executor's call site is unaffected                    |
+| `has_function_privilege`            | service_role **true**, authenticated **false**, anon **false**                                                                                                                                                                                                                                             | the revoke/grant ends where it starts                                   |
+| `to_regclass('public.group_files')` | present                                                                                                                                                                                                                                                                                                    | C-3                                                                     |
+| columns                             | `id, group_id, object_key, original_name, declared_mime, detected_mime, byte_size, content_hash, mime_mismatch, uploaded_by, replaces_file_id, status, analysis_status, retention_expires_at, retention_basis, created_at, confirmed_at, deleted_at`                                                       | every name the body resolves exists, including all six it reads         |
+| queue state                         | `queued = 0`, `processing = 0`                                                                                                                                                                                                                                                                             | nothing in flight is disturbed by replacing the function                |
+| ledger                              | `supabase_migrations.schema_migrations` holds `kayk_p1_group_files 20261124064100`, deploy1 `20261125011616`, deploy2 `20261125011637`, deploy3 `20261125025624`, deploy4 `20261125031926`, kick `20261125053350`, kick_v2 `20261125055813`, usage_rpc `20261125072520`, read_with_sender `20261125075800` | no deploy5 row yet, as expected                                         |
+
+**A by-product of this preflight, for Role 6's item 3:** the ledger **does** contain
+`20261125055813_kayk_ai_chat_kick_trigger_v2`, so the file that DECISIONS described as "V2 not applied"
+is recorded as applied there. The contradiction Role 6 reported is real, and the ledger side of it is now
+measured on Launch rather than inferred from the repository. Correcting the prose is the coordinator's
+record to make; this entry does not rewrite the earlier one.
+
+**No write had happened when this entry was committed.** The apply follows in the same window, from the
+file's bytes transferred as a file rather than pasted (the P1 blank-line defect), and `author_kind` is
+not touched by this migration — the ALTER that takes a lock was deploy 1, already applied.
