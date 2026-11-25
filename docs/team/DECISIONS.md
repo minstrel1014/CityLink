@@ -2218,3 +2218,31 @@ only) was generated 2026-11-23 17:53 UTC. It contains none of `group_files`, `gr
 `group_ai_requests`, `group_ai_context`, `ai_request_id` or `author_kind`, so it predates P1, the bundle and
 the AI pair. Despite the filename it is not a live baseline and must not be used to judge whether an object
 exists. Kept as history; not edited.
+
+## 2026-11-25 — Signed-in QA result: 45 live calls, zero deviations
+
+Eunice ran the authorised single-account and multi-account pass on Launch between 01:33 and 01:37 UTC,
+against a fresh clone at `a5ff1a1`. Forty-five RPC calls through PostgREST with real password sign-in; the
+cluster gate `7692131729119822239` was re-checked immediately before the first write.
+
+**Result: no defects.** Every gate, error token and authority boundary matched the applied SQL and the
+contract: the disclosure gate (`45N09`) before first use, write-once acceptance, idempotent replay with the
+same key and `45N07` on a changed question, the in-flight gate `45N06` with `retry_after=15`, `45N03`/`45N11`
+for empty and over-long questions, `45N05`/`45N04` for file count and ineligible files, `clear` as a
+timestamp-only lower bound with the next request's `turns` empty, and cursor paging across both directions.
+
+**Authority boundaries held in both directions.** A `removed` former member could read messages and request
+status but not begin or clear (`45N01`); a never-member got the same generic `P0001` refusal for both a real
+and a non-existent group; an unknown request id returned `[]` rather than an error, so existence does not
+leak. `authenticated` calling `claim` or `finish` was refused with `42501` (HTTP 403), `anon` with `42501`
+(HTTP 401) on all seven public functions.
+
+**Retained state, deliberately.** Two `group_ai_requests` rows stay `queued` because no executor exists; they
+stop holding the in-flight slot after 120 seconds and are excluded from daily counts while unclaimed. One
+`group_ai_context` row records the clear. Two disclosure timestamps. No chat message, file, group or
+membership was created or modified.
+
+**Explicitly not tested.** End-to-end AI replies (no executor), the positive paths of `claim`/`finish`
+(service_role only, and no service key was used), true concurrency, daily quota trip-wires, the `left`
+membership state (only `removed` was available), and abandoned groups. The report separates executed,
+statically reviewed and inferred throughout.
