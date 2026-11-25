@@ -2905,3 +2905,51 @@ record to make; this entry does not rewrite the earlier one.
 **No write had happened when this entry was committed.** The apply follows in the same window, from the
 file's bytes transferred as a file rather than pasted (the P1 blank-line defect), and `author_kind` is
 not touched by this migration — the ALTER that takes a lock was deploy 1, already applied.
+
+### 2026-11-26 01:06 — Deploy 5 applied on Launch; gate 5 complete, bytes proven by two hashes
+
+Adam's authorisation above was exercised. Applied to **Launch `pijslbchvstkoweslymr` only**, in one
+request, as one transaction, in the same window as the preflight. The frozen Prototype was never
+contacted by any call in this window.
+
+- **Transfer.** The file's bytes went to the database through a script-built JSON payload
+  (`python3 json.dump` then `manus-mcp-cli … execute_sql --input-file`), with a round-trip assert that
+  the payload's SQL equalled the raw file bytes before submission. Nothing was pasted, so the P1
+  blank-line loss did not recur. Measured proof: the live body's blank-pair count equals the file's.
+- **In-transaction guard.** The single returned value was the empty success result of
+  `private.assert_citylink_target('pijslbchvstkoweslymr')`. No 45M01/45M02/45M03/45M04 fired.
+- **Before:** `md5(prosrc)` = `e0fbc90ed6e3d838641ec7fba5302f22` (deploy 3's body, the object replaced).
+- **After:** `md5(prosrc)` = `b875ed064620cc2b057edf3d691ca9d0`, `length(prosrc)` = 2,345 — exactly the
+  body extracted from the certified blob. Independently, `encode(digest(prosrc,'sha256'),'hex')` =
+  `410518c57c8b4b9bf2a3c37817f8294c2b49b8e5218f5e9a8a6188ac43109821`, equal to the file's extracted body,
+  so the equality rests on two hash families plus length rather than md5 alone.
+- **Unchanged as required:** owner `postgres`, `prosecdef` true, `proconfig` `{search_path=""}`;
+  EXECUTE for `service_role` true and `authenticated`/`anon` false; the nine-column result shape with no
+  arguments; exactly one `pg_proc` row for the name. `position('and g.group_id = c.group_id')` and
+  `position('objectKey')` are both present in the live body (Role 6's C-1 landed).
+- **No queue damage.** `queued` 0 → 0 and `processing` 0 → 0 across the `limit 0` shape probe, table total
+  22 rows, so the probe is inert on this cluster as Role 6 measured on PG 17.12; this cluster reports 17.11.
+- **Promote (after the apply, in that order).** Byte-identical copy committed at
+  `supabase/migrations/20261125170607_kayk_ai_chat_deploy5.sql`, sha256 `b0abfb35…046c64` matching the
+  proposal, 247 lines. Ledger row inserted with the P1 convention: version `20261125170607`, name
+  `kayk_ai_chat_deploy5`, empty `statements`/`rollback` arrays (it points at the file, it does not
+  duplicate it), `created_by` `citylink-kayk-task-20261125-postapply`.
+- **Edge Function not redeployed.** `group-ai-executor` is still version 10
+  (`ezbr_sha256 b0b3633593de32eef52a3c4f77420647b4c3940cf46b44824df7ecb07fb2a608`, verify_jwt true,
+  import_map true); `group-file-signer` still version 7. No secret was created, listed or read.
+- **Validation after the promote:** `corepack pnpm test` 64 files / 923 tests passed, `pnpm check` clean,
+  `pnpm build` clean, `deno check` clean on `index.ts`/`prompt.ts`/`extraction.ts`, prettier clean on the
+  touched docs, working tree otherwise clean.
+- **Two wording corrections recorded rather than argued.** (1) The rule "the authorised file contains no
+  `update`" is true only of its top-level statements: the function body carries one
+  `update public.group_ai_requests … status='processing', claimed_at=now()` (line 133), inherited unchanged
+  from deploy 3 — it is the claim itself and runs when the worker calls the function, not at apply time.
+  (2) The proposal's verification comment cites Role 6's measurement on PostgreSQL 17.12 while Launch
+  reports 17.11; inertness was re-measured directly on the live cluster, so the conclusion holds.
+- **Still not authorised and not done:** merge, Ready for review, base change, a second PR, site or demo
+  deployment, publication, GitHub visibility/permission changes, and any further migration.
+
+**Consequence for Adam's item 4 (「re-uploading the same PDF」).** With deploy 5 applied _and_ the function
+at version 10, the claim now carries `objectKey`, so the executor has something to read for the first
+time. A successful file-reading answer should show `files_used=1`, a non-zero `file_chars`, and no
+「（部分選取檔案沒有可讀文字）」. Until this window, that notice was correct behaviour, not a defect.

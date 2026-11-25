@@ -589,7 +589,7 @@ Adam 的五項回答（`1. a 2. you do it, now 3. can qo task do it? 4. no 5. au
 
 ### 12.6 生效條件（重要）
 
-**2026-11-26 更新：部署已進行（Adam「1. authorise」），但讀檔還差 deploy 5。**
+**2026-11-26 更新：部署 1–5 全部已套用於 Launch；讀檔鏈路已完整。**
 
 1. `group-ai-executor` 在 Launch 從 version 7 → 9 → **10**（四個檔：`index.ts`、`extraction.ts`、
    `prompt.ts`、`deno.json`；`verify_jwt` 仍 true；`import_map` 由 false 變 true）。每個檔都從
@@ -598,7 +598,16 @@ Adam 的五項回答（`1. a 2. you do it, now 3. can qo task do it? 4. no 5. au
 3. 要真的讀到附件仍需要**部署 5 先套用**：`begin_group_ai_request` 只存 `{id, name}`，而
    `public.group_files` 刻意 revoke 給 `service_role`，所以 claim 不帶 object key，也就沒有東西可以簽。
    在那之前，附檔案的回答照舊帶 `（部分選取檔案沒有可讀文字）`——這句話現在是**正確的**。
-4. 先部署函式、後套 SQL 是安全的：payload 沒有 key 時代碼走今天的路徑（只答不讀檔），不會报错。
+4. **2026-11-26 01:06：部署 5 已套用（唯一目標 Launch `pijslbchvstkoweslymr`，同一交易、同一窗口）。**
+   `claim_next_group_ai_request` 的 `md5(prosrc)` 由 `e0fbc90e…`（deploy 3）變為
+   `b875ed064620cc2b057edf3d691ca9d0`，`length(prosrc)` 2,345；再以
+   `encode(digest(prosrc,'sha256'),'hex')` = `410518c5…09821` 獨立覆核，與送審 blob 抽出的函式體相同。
+   權限、擁有者、`prosecdef`、`search_path`、九欄回傳形狀皆未變動；佇列 0 筆、processing 0 筆，
+   `limit 0` 探測沒有吃掉任何列。同一份 bytes 已 promote 為
+   `supabase/migrations/20261125170607_kayk_ai_chat_deploy5.sql`（sha256 `b0abfb35…046c64`），
+   ledger 補一列指向該檔、不重複存 statements。因此第 3 點原本的「claim 不帶 object key」已失效：
+   現在 claim 會帶 `objectKey`，附檔真的能被讀取；`（部分選取檔案沒有可讀文字）` 只在字數確實為 0 時才該出現。
+5. 先部署函式、後套 SQL 是安全的：payload 沒有 key 時代碼走今天的路徑（只答不讀檔），不會报错。
 
 ### 12.7 已跑的驗證
 
