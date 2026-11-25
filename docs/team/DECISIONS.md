@@ -2484,3 +2484,17 @@ Adam's 13:47 message: 「give me a box to tick to agree all the above and automa
 **Canonical and demo.** Canonical `1537e58` on `feature/kayk-ai-analysis`; PR #67 stays **draft**. Demo `4527263` on `main`, checkpoint recorded, auto-publish submitted; live `version.json` `buildId=aa6b35d80f44fd81`, `builtAt=2026-11-25T05:54:28.803Z`, asset `assets/index-DCnlhzsH.js` (958,771 bytes), verified to contain `我已閱讀並同意以上全部`, the per-group-once sentence, and the in-flight sentence, and to contain **no** `45N06 ·` concatenation.
 
 **Still open.** The kick-trigger V2 (`bdb3fcb3…`, `timeout_milliseconds` 10000 → 60000) remains **unapplied** and still needs its own authorisation; the 10-second timeout it fixes is a separate matter from the daily cap Adam hit.
+
+## 2026-11-25 14:07 — Consent block shrunk; the cap sentence now says whose allowance it is
+
+Adam, 14:04: 「it shows 今天在這裡問得太多了，請約 18 小時後再試。」and「the font size too big for the consent, occupied the space for the input window」.
+
+**The consent block was unstyled.** The `<ul>` I introduced had no rule of its own, so it inherited the browser's default list typography at body size: seven paragraphs of body text filled the drawer and pushed the question box out of view. It now has `font-size: .72rem`, `line-height: 1.4`, a tighter gap, and `max-height: min(38vh, 280px)` with its own scroll (`34vh` and `.68rem` under 640px). The drawer still scrolls as a whole, but the consent section can no longer claim the input area.
+
+**The sentence named the wrong owner, and I had just written it that way.** `begin_group_ai_request` refuses when `v_group_today >= 20 or v_user_today >= 10`, and its `reason` is `group_daily` only when the _group_ count is the one that tripped, otherwise `user_daily`. My 13:56 copy said 「額度由全組共用」unconditionally, which would have been false for exactly the case Adam hit. `rateLimited` now takes the reason: `user_daily` → 「你今天在這裡的 AI 提問次數已用完（每人每天有上限，其他群組不受影響）」, `group_daily` → 「這個群組今天的 AI 提問次數已用完（額度由全組共用）」, neither → a neutral sentence. Both carry the local reset clock (`zh-TW`, 24h) instead of leaving the reader to convert "about 18 hours".
+
+**What Adam actually hit: the per-user cap, not the group's.** Read-only counts on Launch for the current UTC day: group `5f550313…` 9, group `935978a0…` 2, group `31e77eb7…` 2 — no group near 20. Per user: `8954315c…` **11**, `9bfc6d04…` 2. So the 10-per-user ceiling was the one that fired, and most of those eleven came from my own end-to-end testing this morning. The reset is UTC midnight, i.e. 08:00 Taipei.
+
+**Consequence, stated plainly.** Adam cannot ask again from that account until 08:00 Taipei, and nothing in this round changes that: the caps are server-side constants in the applied RPC, and raising them would be a SQL revision requiring its own authorisation, Role 6 review, preflight and migration cycle. Deleting rows to free quota would be a Launch write and is not authorised. The cheap path is another account (each has its own 10) or waiting.
+
+**Checks.** `pnpm check` clean; `pnpm test` **856/856** (57 files; +1 from the cap-copy test); `build:static` ok. Canonical `4c0a958`; demo `684d761`, auto-published `buildId=15c8bcf62c3c51ca`, `assets/index-QN85zCsN.js` + `assets/index-txmrmRpr.css`, both read back and confirmed to carry the new copy and the `.72rem`/`max-height` rules.
