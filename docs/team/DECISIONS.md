@@ -2395,6 +2395,7 @@ exist yet, and no further demo publication happens until it does and has been ex
 **Adam's instruction (12:20).** Replace `composeMockReply` in `GroupAiDrawer.tsx` with the real path, delete the mock from the client, remember the consent choice, update the contract and its test together, verify locally, republish once. Option A earlier: leave the button visible while it is wired. Option "yes": stop asking on every question.
 
 **Committed `d1aea07`** on `feature/kayk-ai-analysis` (PR #67 stays draft):
+
 - `client/src/lib/aiChatRequests.ts` (new): `beginGroupAiRequest`, `getGroupAiRequestStatus`, `acceptAiDisclosure`, `waitForAiAnswer`, `newIdempotencyKey`. No content decisions; the server owns question, context and limits.
 - `GroupAiDrawer`: submit → `begin_group_ai_request` → bounded poll → `onClose()`. It no longer renders a local answer, because the executor already wrote one into `group_chat_messages`; injecting a copy would duplicate it on the next read. The unused answer panel and the mock import are gone. `shared/aiChatMockReply.ts` survives only for `server/ai/provider/mock.ts` (dev provider), which is not the client path.
 - Consent: `citylink.ai-disclosure.v1` in `localStorage`; `initialConsentState()` pre-ticks when remembered; `rememberConsent()` returns whether the device had already agreed. `accept_ai_disclosure` is called only on the first acceptance because it overwrites the timestamp (open item S-3), so the "first acceptance" record stays true.
@@ -2418,6 +2419,7 @@ exist yet, and no further demo publication happens until it does and has been ex
 Adam reported that the Edge Function page has no Schedules option and asked for the real application-native routes before anything is applied. Only `select` statements were run against Launch.
 
 **Facts established on `pijslbchvstkoweslymr`.**
+
 - `shared_preload_libraries` already contains `pg_cron` and `pg_net`, and `cron.database_name = postgres`. The libraries are loaded; only the extensions are missing, so enabling them needs no restart.
 - `pg_cron` 1.6.4 and `pg_net` 0.20.4 are available but **not installed**; `supabase_vault` 0.3.1 **is** installed with zero secrets; `pgmq` and `http` are available.
 - Neither `pg_cron` nor `pg_net` is `trusted`, and both appear in `supautils.privileged_extensions`, so `create extension` from the connector's `postgres` role is expected to fail with `42501`; the Dashboard (as `supabase_admin`) is the supported path. This is inferred from configuration, not tested, because testing it would be a write.
@@ -2464,3 +2466,21 @@ Adam reported that the Edge Function page has no Schedules option and asked for 
 **Demo.** `cbc38ac`, build `8ba5a8a28d6afc9d`, asset `index-BYHqhKKB.js`: the still-pending copy is live, the mock is still absent.
 
 **Not done.** V2 not applied; no Role 6 review of the trigger; the three leftover queued rows untouched; the sender-name and xlsx/PDF gaps unchanged.
+
+## 2026-11-25 13:56 — Consent is one agree-all box, remembered per user per group; refusals read as sentences
+
+Adam's 13:47 message: 「give me a box to tick to agree all the above and automatically agree all. and this should only be ask once for every user in each group chat room」and「it show 45N06 · 65607s after submit」.
+
+**What changed (client only, no SQL, no migration, no secret).**
+
+- The drawer used to render seven separate checkboxes, one per disclosure statement, and asked again on every question. It now renders the statements as a read-only list with **one** box, `我已閱讀並同意以上全部`; ticking it sets every statement id, so the same `isConsentComplete` gate still decides whether asking is allowed.
+- Memory is keyed `${prefix}:${userId}:${groupId}` instead of one global key, so the same person is asked once per group and is asked again in a different group or under a different account. Storage stays `localStorage` on that device: another device or cleared site data asks again. The server-side record (`profiles.ai_disclosure_accepted_at`, F-11) is unchanged and remains authoritative when the two disagree.
+- Contract §7 item 5 was rewritten to match (per-user-per-group, one box) and the note that followed it now says the interface _does_ remember, scoped per group, rather than implying it never does.
+
+**The `45N06 · 65607s` Adam saw was not a fault.** 65607 seconds is ≈18 hours and is the **group daily cap** being reported, not a timeout or a transport failure. Showing the raw code plus a raw second count was the actual defect, so `describeRefusal` now maps refusals to sentences: `45N06` with `reason=in_flight` → `CityLink AI 還在回答上一個問題，請稍等一會再問。`; `45N06` with a retry window → a humanised 秒/分鐘/小時 sentence; `45N09` → the disclosure-required sentence. `BeginResult` now carries `reason` (parsed from `/reason=([a-z_]+)/`) so the drawer can tell the three cases apart without string-matching the whole detail.
+
+**Checks (this worktree, exact head below).** `corepack pnpm check` clean; `corepack pnpm test` **855 passed / 855** (57 files; was 852 before this round, +3 net from the new consent tests); `corepack pnpm build:static` succeeded with only the pre-existing >500 kB chunk warning. New tests: agreeing in group A leaves group B and another user unticked; `agreeAll` copy pinned; the retired 「每次提問都會再要求」wording asserted absent.
+
+**Canonical and demo.** Canonical `1537e58` on `feature/kayk-ai-analysis`; PR #67 stays **draft**. Demo `4527263` on `main`, checkpoint recorded, auto-publish submitted; live `version.json` `buildId=aa6b35d80f44fd81`, `builtAt=2026-11-25T05:54:28.803Z`, asset `assets/index-DCnlhzsH.js` (958,771 bytes), verified to contain `我已閱讀並同意以上全部`, the per-group-once sentence, and the in-flight sentence, and to contain **no** `45N06 ·` concatenation.
+
+**Still open.** The kick-trigger V2 (`bdb3fcb3…`, `timeout_milliseconds` 10000 → 60000) remains **unapplied** and still needs its own authorisation; the 10-second timeout it fixes is a separate matter from the daily cap Adam hit.
