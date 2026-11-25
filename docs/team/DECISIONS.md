@@ -2246,3 +2246,44 @@ membership was created or modified.
 (service_role only, and no service key was used), true concurrency, daily quota trip-wires, the `left`
 membership state (only `removed` was available), and abandoned groups. The report separates executed,
 statically reviewed and inferred throughout.
+
+## 2026-11-25 — Provider changed to xAI; Role 6's deploy-3 review closed out; deploy 4 authorised
+
+**The provider is now xAI, not OpenRouter/DeepSeek.** Adam chose an xAI API key on 2026-11-25 for the
+executor that will answer queued questions, and approved the disclosure rewrite at 11:03. The earlier
+record of 2026-11-24 (decision 4, OpenRouter calling `deepseek/deepseek-v3.2`) described the provider as it
+was understood then; it is superseded **for the group-AI-chat answer path only**, and the historical design
+documents that mention OpenRouter are left unedited as records of that date. The model id is supplied to the
+executor through an environment variable rather than written into code, so a model change is a
+configuration change and not a code change. Commit `8f9f948` rewrites the one live consent statement
+("these contents leave CityLink and go to an external provider: xAI (United States), processed in the United
+States") and updates contract §7 item 2 to match; the two verbatim-pinned statements are untouched, and a
+test now asserts that OpenRouter, DeepSeek and "mainland China" no longer appear, so the copy cannot drift
+back silently.
+
+**Role 6's deploy-3 review found no blocker in the bytes, and asked for two things that were already past.**
+It reviewed blob `5046eee2…` (the same sha256 that was applied) and confirmed the output columns against
+deploy 1's table, the `begin;`-before-DDL ordering, the `revoke` naming all four roles, and — the finding
+that mattered most — that `finish_group_ai_request` still accepts a `processing` row, so a claimed request
+cannot be stranded. Its two pre-authorisation items (C-1, an apply-test pin; C-2, the contract naming the new
+function) arrived after Adam's 10:55 authorisation and after the 02:56:24Z apply, so they were completed as
+follow-ups rather than preconditions; that ordering is recorded here rather than smoothed over. `8f9f948`
+adds three apply cases and two static pins, and the applies suite now runs **32/32 on PostgreSQL 17.12**,
+which also closes the earlier gap that all apply evidence came from 16.15 while both Supabase targets run 17.
+
+**Deploy 4 is the index Role 6 raised as C-3, and Adam chose to add it.** His words at 11:11 on 2026-11-25:
+"2. add it as deploy 4". The file is `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY4.sql`, 25 lines,
+sha256 `f37b264e176f0303f49554994342c6978dc8cba520bae05f307001f6c6816796`; it creates
+`group_ai_requests_queued` on `(created_at, id) where status = 'queued'`, the predicate the claim filters on
+literally. Measured on a throwaway PostgreSQL 17.12 cluster: the index is created with that predicate and the
+claim query plans as `Index Scan using group_ai_requests_queued`; with an empty table the planner still
+prefers a sequential scan, which is correct and is why the plan was taken with `enable_seqscan = off` — the
+claim being proven is that the index is _usable_, not that an empty table needs it.
+
+**D-1: questions with attached files are not yet answerable, and Adam chose option b.** Deploy 3 returns the
+`files` array, but no service-role path can turn a file id into content or an object key: `group_files` is
+revoked from `service_role`, the two P1 read functions are granted to `authenticated` only, and the signer
+Edge Function has never been deployed. Adam's choice of option b means deploying a service-role signing path,
+which needs its own deployment authorisation and is not covered by any record above. Until it exists, a
+question with a file is claimed and then stalls; the QA brief must say so, or the first report will read as
+"AI file reading is broken".
