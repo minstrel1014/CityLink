@@ -2030,3 +2030,41 @@ formatting are preserved byte-for-byte in transit but are not exercised through 
 
 **Scope.** This deviation covers this window only. It is not a precedent for later migrations: a
 future window that has a working `psql` route should use the shape the gate-4 entry names.
+
+## 2026-11-25 — Gate-4 application record: the AI-chat pair is live on Launch
+
+Applied at 01:16 UTC (09:16 Asia/Taipei) through the connector route recorded in the deviation entry
+above. Both files carried their own `begin;` … `commit;`; neither returned an error.
+
+- **Deploy 1** (`4effbf5d…179d`) ran at 01:16:16Z and returned the in-file target assertion as empty,
+  which is the pass signal. It created `group_ai_context`, `group_ai_requests`, the columns
+  `group_chat_messages.author_kind`, `group_chat_messages.ai_request_id`,
+  `group_chat_messages.truncated` and `profiles.ai_disclosure_accepted_at`, and the function
+  `accept_ai_disclosure`.
+- **Deploy 2** (`97006799…15e`) ran at 01:16:37Z with the same assertion pass. No `23505` was raised;
+  the unique index installed without meeting pre-existing row state.
+- **After apply.** `notify pgrst, 'reload schema';` executed. All eight function bodies md5-match the
+  authorised files: `accept_ai_disclosure` `e3f6a2d9…`, `begin_group_ai_request` `ba844e1c…`,
+  `claim_group_ai_request` `888ddbb8…`, `clear_group_ai_context` `75bc9fb0…`,
+  `finish_group_ai_request` `2f0fa8af…`, `get_group_ai_request_status` `51c4caf3…`,
+  `list_group_chat_messages_ai` `7121d7a0…`, `private.list_group_chat_messages_page` `7557d1ec…`.
+- **Index.** `group_chat_messages_ai_request` is
+  `CREATE UNIQUE INDEX … USING btree (ai_request_id) WHERE (ai_request_id IS NOT NULL)`.
+- **Rows untouched.** `group_chat_messages` held 4 rows before and after; `group_ai_context` and
+  `group_ai_requests` hold 0.
+- **Grants observed.** `authenticated` holds EXECUTE on `accept_ai_disclosure`,
+  `begin_group_ai_request`, `clear_group_ai_context`, `get_group_ai_request_status` and
+  `list_group_chat_messages_ai`; not on `claim_group_ai_request` or `finish_group_ai_request`
+  (server-only), and not on `private.list_group_chat_messages_page`. `anon` holds EXECUTE nowhere.
+  Neither role holds table privileges on `group_ai_context` or `group_ai_requests`.
+- **Promotion.** The same bytes were copied from the commit blobs to
+  `supabase/migrations/20261125011616_kayk_ai_chat_deploy1.sql` and
+  `supabase/migrations/20261125011637_kayk_ai_chat_deploy2.sql`; sha256 was re-checked after the copy
+  and both still match the authorised values. Ledger rows of the same versions were added with
+  `created_by = 'citylink-coordinator-20261125-postapply'`, the P1 pattern.
+- **Pre-existing asymmetry, not caused by this window.** The ledger held 13 rows against 12 repo
+  files before this window: `20261124082200 coordinator_group_file_read_functions` has a ledger row
+  and no migration file. Recorded here so the next reader does not mistake it for a gate-4 artefact.
+
+Scope: nothing else was written. No PR state change, no merge, no deployment, no publication and no
+signed-in QA.
