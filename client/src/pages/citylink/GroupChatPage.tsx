@@ -4,7 +4,6 @@ import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
 import GroupAiDrawer from "@/components/citylink/GroupAiDrawer";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
-import { AI_AUTHOR_NAME } from "@shared/chatAuthor";
 import type { ChatTurn } from "@shared/aiChatContext";
 import {
   CHAT_PAGE_SIZE,
@@ -350,18 +349,11 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               status: "current" as const,
               retentionExpiresAt: file.retentionExpiresAt,
             }))}
-            onClose={() => setAiOpen(false)}
-            onAiMessage={body => {
-              setMessages(current => [
-                ...current,
-                {
-                  id: `local-ai-${current.length}-${Date.now()}`,
-                  senderName: AI_AUTHOR_NAME,
-                  body,
-                  createdAt: new Date().toISOString(),
-                  authorKind: "ai",
-                },
-              ]);
+            onClose={() => {
+              setAiOpen(false);
+              // The answer is a server row written by the executor, so closing
+              // re-reads the thread instead of appending a second local copy.
+              setReloadToken(value => value + 1);
             }}
           />
 
