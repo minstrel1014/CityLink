@@ -2330,3 +2330,9 @@ It will return `executor_not_configured` until two secrets exist, and no connect
 secrets: `XAI_API_KEY` and `XAI_MODEL` have to be entered in the Supabase dashboard by Adam. That is the
 fail-closed path working as designed, not a defect — an executor that quietly answered with a default model
 would be worse. The model id is a configuration value, so changing it later is not a code change.
+
+**Model and display name settled, 2026-11-25 11:54.** Adam accepted `grok-4.7` as `XAI_MODEL` and confirmed
+that the two secrets are in place on Launch. He chose option A for the assistant's display name: it stays
+`CityLink AI`, so no SQL change, no new blob and no constraint edit — the name a student sees above an AI
+reply is unchanged, and "CityLink Assistant" is not used anywhere in the product. The model id remains a
+configuration value; switching it later is a dashboard edit, not a code change.
