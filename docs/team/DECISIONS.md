@@ -2115,3 +2115,39 @@ schema change.
 this entry is the record that the gap is known and why. If a reviewed backfill is ever wanted, it must be
 generated from `pg_get_functiondef` at a named head, reviewed as new SQL, and labelled a reconstruction —
 never presented as the bytes that ran.
+
+## 2026-11-25 — Post-apply recheck: Role 6's preconditions, three answered by read-only queries
+
+Role 6 reviewed the window record against head `ad54c20` and found no contradiction with its gate-1
+certification. It raised six preconditions before signed-in QA. Three are answered here with raw read-only
+output from Launch; the rest are decisions, not measurements.
+
+**PRE-1 — can the definer functions bypass RLS?** Yes. `postgres` has `rolsuper = false` and
+**`rolbypassrls = true`**; `service_role` is the same shape; `authenticated` and `anon` are both false. Every
+read and write in this feature passes through a `postgres`-owned SECURITY DEFINER function, so the
+zero-policy RLS on `group_ai_context` and `group_ai_requests` does not block the feature. DDL success would
+not have proved this; the role flag does.
+
+**PRE-3 — `service_role` in the grant matrix.** `service_role` holds EXECUTE on exactly
+`claim_group_ai_request` and `finish_group_ai_request`, and on none of the other six, including
+`private.list_group_chat_messages_page`. `postgres` holds EXECUTE on all eight. That is the intended split:
+the two server-only functions are reachable only by the service role.
+
+**PRE-4 — the new chat constraints are validated.** All ten constraints on `public.group_chat_messages`
+report `convalidated = true`, including `group_chat_messages_author_kind`, `…_ai_has_no_sender`,
+`…_ai_name`, `…_ai_request_only_for_ai` and `…_ai_request_fkey`. The validation loop in deploy 2 therefore
+ran to completion rather than being skipped.
+
+**Correction to the window record.** The `23505` contingency was untested by construction, not merely
+"not triggered": `ai_request_id` is a column this pair added, so all four pre-existing rows held NULL and
+the unique index never faced a legacy duplicate. It must not later be cited as a verified failure path.
+
+**Not fixed, on purpose.** Deploy 1 line 292 contains the simplified character `必须` in a comment. It
+stays. Editing an applied blob would break the identity between the docs file, the promoted migration and
+the bytes that actually ran, which is the property worth more than the typo. Zero functional cost.
+
+**Still open, and Adam's to decide.** PRE-2: no service-side executor exists for `claim` / `finish` — the
+repository has no non-test caller and `supabase/functions/` is empty — so a request a student creates stays
+`queued` and an end-to-end AI reply is not testable today. PRE-5: `supabase/schema.sql` contains none of the
+five new objects (0 hits for `group_ai_requests`, `group_ai_context`, `ai_request_id`), so a local rebuild
+from it produces a schema without them.
