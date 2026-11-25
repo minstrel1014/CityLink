@@ -156,6 +156,11 @@ export const AI_CHAT_COPY = {
   disclosureRequired:
     "請先確認已閱讀 AI 揭露（伺服器會記錄你已看過，但不記錄其他資料）。",
   providerFailed: "CityLink AI 暫時無法回答，請稍後再試。",
+  // Distinct from providerFailed on purpose: the request exists and may still be
+  // answered. Saying "failed" would be a lie in the other direction.
+  stillPending:
+    "尚未完成。CityLink AI 仍在處理這個問題，重新載入對話可查看結果。",
+  reloadThread: "重新載入對話",
   rateLimited: (retryAfter: number) =>
     `今天在這裡問得太多了，請 ${retryAfter} 秒後再試。`,
   clearContext: "清空 context",

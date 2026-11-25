@@ -57,6 +57,7 @@ export default function GroupAiDrawer({
   const [contextStartsAt, setContextStartsAt] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(false);
 
   const eligibleFiles = useMemo(
     () => files.filter(file => file.status === "current"),
@@ -86,6 +87,7 @@ export default function GroupAiDrawer({
     }
     setBusy(true);
     setFeedback("");
+    setPending(false);
     const alreadyAccepted = rememberConsent();
     try {
       // `accept_ai_disclosure` overwrites the timestamp (open item S-3), so it is
@@ -114,7 +116,14 @@ export default function GroupAiDrawer({
         onClose();
         return;
       }
-      setFeedback(state.errorCode ?? AI_CHAT_COPY.providerFailed);
+      if (state.status === "failed") {
+        setFeedback(state.errorCode ?? AI_CHAT_COPY.providerFailed);
+      } else {
+        // Still queued or processing when the wait ran out. The request is real
+        // and the answer may still arrive, so this is not reported as a failure.
+        setPending(true);
+        setFeedback(AI_CHAT_COPY.stillPending);
+      }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error));
     } finally {
@@ -200,6 +209,11 @@ export default function GroupAiDrawer({
         <p className="citylink-ai-drawer__feedback" role="alert">
           {feedback}
         </p>
+      )}
+      {pending && (
+        <button type="button" className="secondary" onClick={onClose}>
+          {AI_CHAT_COPY.reloadThread}
+        </button>
       )}
 
       <div className="citylink-ai-drawer__actions">

@@ -2428,3 +2428,17 @@ Adam reported that the Edge Function page has no Schedules option and asked for 
 **Routes, in the order I would take them.** (A) Enable `pg_cron` + `pg_net`, put the service-role key in Vault, and schedule `net.http_post` to the function every minute, reading the key from `vault.decrypted_secrets` at run time — the key never appears in SQL text, repo, chat or browser. (B) Same plumbing but the function accepts a function-scoped shared token instead of the service-role key, which shrinks the blast radius and needs an executor redeploy. (C) A Database Webhook on `insert into group_ai_requests`, which is event-driven rather than polling, but stores its headers in the trigger definition where `postgres` can read them. (D) An external scheduler (Cloudflare Worker cron) with the key as a Worker secret — not application-native.
 
 **Not done.** No extension enabled, no secret created, no job scheduled, no schema change, no function redeploy.
+
+## 2026-11-25 13:13 — One-shot kick: designed and tested, not applied
+
+**Adam's 13:08 scope.** Trigger the executor from the backend event that `begin_group_ai_request` produces, once, best-effort, no pg_cron, no sweep, no polling, no retry; a failed kick must not roll back the request; no service-role or xAI key in the browser; keep the claim/finish gates; do not assume a Schedules UI; stop at every authorization point; add mock/unit tests.
+
+**Design.** `after insert on public.group_ai_requests when (new.status = 'queued')` → `private.kick_group_ai_executor()` → one `net.http_post` to `group-ai-executor`, bearer token read from `vault.decrypted_secrets` at run time. The whole body is wrapped in `begin … exception when others then raise warning`, so a transport failure cannot abort the insert that created the request. No executor change and no redeploy: the function already accepts a service-role caller, and the trigger presents one. `pg_cron` is not used. Rejected: Database Webhook (secret would live in the trigger definition), client-side kick (browser would need a credential that can invoke a service-role function), a new kick function (same objection plus a deploy).
+
+**Files.** `docs/stage6/KAYK_AI_CHAT_KICK_TRIGGER_PROPOSAL.sql` (88 lines, sha256 `813bdbaaf109c54bc6d31d5fc2f92de7c88124578fe2d65532bb7c7d0d1ea420`), `server/stage6AiChatKickTriggerContract.test.ts` (10 static pins), `server/stage6AiChatKickTriggerApplies.test.ts` (5 behaviour tests), plus the drawer's still-pending state and two new copy strings.
+
+**Evidence.** `pnpm check` clean; `pnpm test` 852/852 in 57 files; applies run on PostgreSQL 17.12. The behaviour tests show one call per `begin`, the request surviving a raised transport error with `status = 'queued'`, no call at all when the secret is absent, and no call for a non-queued row. Not proven: that Launch has `pg_net`, that the definer may read Vault there, or that the real round trip works.
+
+**Two consequences recorded rather than smoothed over.** A failed kick leaves a permanently queued request because there is no sweep, by instruction; the client now says "尚未完成…重新載入對話" instead of reporting a failure. And one kick can answer up to `EXECUTOR_BATCH` (5) requests, because the executor claims in a loop — that is the existing function draining the queue, not a retry.
+
+**Not done.** `pg_net` not enabled, no Vault secret created, SQL not applied, no deployment, demo not republished.
