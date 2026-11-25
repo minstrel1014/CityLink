@@ -2520,3 +2520,17 @@ Adam, 14:30: 「i haven't test it yet and not send 10 message」. Correct — he
 **Process change.** Live probes that consume quota must not run under the identity the demo session is signed in as. From this round: probes use a dedicated QA identity, and any probe that spends a daily allowance is named in the handoff so the human is not surprised by an exhausted account. This is a working rule, not a code change.
 
 **What remains unverified.** No human has clicked through the new consent panel. It is verified by unit tests (856/856), by reading the built bundle back from the live site (copy strings present, `.72rem`/`max-height` rules present, no raw `45N06 ·` concatenation), and by the type checker. That is not the same as someone opening the drawer and using it, and the difference is worth keeping straight while Adam is the one who has not yet tested.
+
+## 2026-11-25 14:37 — The assistant answers like a general AI; the strict grounding rule is retired
+
+Adam, 14:34–14:36: he asked 「test」 and got 「資料不足。目前對話只有「hi」」, then 「what is mobile app?」 and got 「資料不足…沒有關於 mobile app 的內容或檔案，無法回答」, followed by 「it should be able to answer question like i using a gen ai」.
+
+**The refusal was correct behaviour under the wrong rule.** `systemPrompt()` said 「只根據提供的對話與檔案內容回答；資料不足時直接說明不足，不要猜測。」 With that instruction, a general question has no permitted source, so the only honest answer is a refusal. Nothing in the SQL, the RPC or the context builder was at fault: the request row for 「test」 shows `chat_chars=2`, one turn, no files — the model was told to use only that, and did.
+
+**What changed.** The prompt now frames the assistant as a general one: ordinary knowledge, explanations, writing and planning are answerable without group data; the group's recent chat and selected files are supplied as background to prefer when the question is about the group; and the anti-fabrication rule is kept precisely where it earns its place — no invented messages, decisions or files. The length cap, the language rule and the 「不要假裝是成員」 rule are unchanged.
+
+**Disclosure check (all seven statements).** None of them claims the answer is limited to group content, so none became false. Statement 1 says the group's chat, the current question and the selected files 「都會被用來產生回答」 — still true, and now not the only input. Statement 2 (content leaves CityLink for xAI in the US) is unaffected. No consent text was changed, and the per-group memory from the 13:56 change is untouched.
+
+**Deploy is a separate act and has not happened.** The change is committed on `feature/kayk-ai-analysis` (`36150b1`) and the live executor still carries the old prompt, so Adam's next question would still be refused. Redeploying `group-ai-executor` to Launch needs its own authorisation, as every earlier deploy did; the file is ready and the tests pass.
+
+**Checks.** `pnpm check` clean; `pnpm test` **857/857** (57 files; +1 static test pinning both halves of the new rule, which also caught my own comment quoting the retired sentence verbatim).
