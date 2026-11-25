@@ -2442,3 +2442,25 @@ Adam reported that the Edge Function page has no Schedules option and asked for 
 **Two consequences recorded rather than smoothed over.** A failed kick leaves a permanently queued request because there is no sweep, by instruction; the client now says "尚未完成…重新載入對話" instead of reporting a failure. And one kick can answer up to `EXECUTOR_BATCH` (5) requests, because the executor claims in a loop — that is the existing function draining the queue, not a retry.
 
 **Not done.** `pg_net` not enabled, no Vault secret created, SQL not applied, no deployment, demo not republished.
+
+## 2026-11-25 13:38 — Kick trigger applied to Launch and verified end to end
+
+**Adam, 13:32.** "1.done 2.done 3. Authorised 4 yes": `pg_net` enabled, the Vault secret created, the SQL authorised, and the demo republished.
+
+**Preflight, immediately before the write.** `pg_net` 0.20.4 installed; `vault.secrets` had exactly one row named `group_ai_executor_key` (name checked, value never read); `has_schema_privilege('postgres','net','usage')` true; `has_table_privilege('postgres','vault.decrypted_secrets','select')` true; `net.http_post` signature confirmed as `(url text, body jsonb, params jsonb, headers jsonb, timeout_milliseconds integer)`; seven queued rows existed from earlier testing; zero triggers on the table.
+
+**Applied 05:33:50Z**, exact blob sha256 `813bdbaaf109c54bc6d31d5fc2f92de7c88124578fe2d65532bb7c7d0d1ea420`. Verified afterwards: trigger `group_ai_requests_kick` present, function owned by `postgres`, `prosecdef = true`, `proconfig = search_path=""`.
+
+**End to end, first kick.** One authenticated `begin_group_ai_request` produced exactly one `net._http_response` row, and the executor answered **five** requests (five `ready`, five `author_kind = 'ai'` messages). The batch is the executor's own `EXECUTOR_BATCH = 5`, oldest first — my own request was the eighth in the queue and therefore not in that batch, which is the expected behaviour of a queue drained five at a time, not a miss.
+
+**One defect, measured.** `net._http_response` recorded `timed_out = true`, `status_code = null`, "Timeout of 10000 ms reached", while all five answers were written. The 10-second client timeout is shorter than a five-request batch needs, so the single log an operator would consult reports a failure that did not happen. V2 changes that number to 60000 and nothing else (diff is one line, sha256 `bdb3fcb3671ad862a407a735477a53fa5a6c6c3aa56b4719ef7a57411b430fc5`); it is **not applied** and awaits a separate authorisation. Until then the authoritative signal is the request row, not `net._http_response`.
+
+**Correction to my own earlier wording.** I wrote that a failed kick leaves a request "permanently queued". That is too strong: the in-flight gate only counts rows created within the 120-second staleness window, so a stuck row stops blocking new asks in that group after two minutes, and the next successful question drains it (oldest first). It is not lost, and it is not swept — it waits for the next real question, which is exactly the no-sweep design Adam chose. Three such rows remain from testing and will be answered by the next successful ask.
+
+**Deployment state.** Promoted byte-identically to `supabase/migrations/20261125053350_kayk_ai_chat_kick_trigger.sql` (same sha256) with ledger row `20261125053350`, `statements = null`, matching the convention of deploys 1–4. The promoted file still carries the line "Draft. Not applied." — kept on purpose, because editing an applied blob would break the identity between the authorised hash, the repo and the bytes that ran; status lives here instead.
+
+**Deviation, recorded rather than smoothed.** This SQL went to Launch on Adam's direct authorisation without a prior Role 6 review, which the project rules normally require. Adam named the hash and said "Authorised"; the review did not happen first, and that ordering is the deviation.
+
+**Demo.** `cbc38ac`, build `8ba5a8a28d6afc9d`, asset `index-BYHqhKKB.js`: the still-pending copy is live, the mock is still absent.
+
+**Not done.** V2 not applied; no Role 6 review of the trigger; the three leftover queued rows untouched; the sender-name and xlsx/PDF gaps unchanged.
