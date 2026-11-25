@@ -1905,7 +1905,8 @@ its diff against the previous head is **0 bytes**. Deploy 2 becomes
 `9700679905c11e3d2b5046080f6ebccdf06288729ba909da1e2ca6a1b90ad15e`, superseding
 `748a87f1969a58967d6cbf297077755c274ce522` / `8e4d18910d2ece5b75901373c53c7f731a72c8c03f64059b49c42f8e06b75f19`.
 The contract becomes `75615c8caac01792c3bb2b4b1040e4b20ba782e9`, 528 lines, 96,702 bytes, sha256
-`8740fe92c612b3dde709f0dce0025c77a3ecbb3493af232f9ff8afa7400f5bb3`. Any authorisation must name
+`8740fe92c612b3dde709f0dce0025c77a3ecbb3493af232f9ff8afa7400f5bb3` — **superseded by the
+follow-up below**. Any authorisation must name
 **the deploy-1 blob above and this deploy-2 blob**, and nothing older.
 
 **The contract's line citations moved by one.** The new header line shifts the deploy-2 body, so §2.1
@@ -1950,3 +1951,53 @@ opens each throwaway database by bare name, so it follows `PGPORT`, not
 `CITYLINK_TEST_PG_URI`; the first attempt with the URI alone failed at the stub step with psql
 status 2 (it connected to 5432, where that database does not exist), which says nothing about the
 SQL. Re-run with `PGPORT=5433`: green.
+
+## 2026-11-25 — AUTHORIZATION (gate 4): apply the AI-chat deploy pair to CityLink Launch
+
+Adam authorises applying exactly these two blobs, in this order, to project
+`pijslbchvstkoweslymr` (CityLink Launch):
+
+- **Deploy 1** — path `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql`, blob
+  `57e4c5265da487073683436fa385a4ce79a06403`, 299 lines, 18,653 bytes, sha256
+  `4effbf5d69bbf92d6275c2af1b6ca6d62dd9a2a0be6bb421ffd4d8ab5abb179d`
+- **Deploy 2** — path `docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql`, blob
+  `2c66691b2e1f780498f1cca1e9c603a5a2053364`, 721 lines, 33,989 bytes, sha256
+  `9700679905c11e3d2b5046080f6ebccdf06288729ba909da1e2ca6a1b90ad15e`
+
+Note on the paths: deploy 1 is the **un-suffixed** file. `KAYK_AI_CHAT_MIGRATION_PROPOSAL.sql` is
+deploy 1, not the old combined 788-line proposal; the combined file is no longer a deployable object.
+
+Both blobs were read back from head `8f705edf301d0184b5e0274bffd931dbac693dac` of
+`feature/kayk-ai-analysis` (PR #67, draft) — the SQL files are byte-identical there and at `cb6b4a8`
+and `ec35c4b` — and re-hashed from the commit blob, not a working tree. Role 6's gate-1 certification
+(`ROLE6_AI_CHAT_FINAL_CERT_2c66691b_20261125.md`, 2026-11-25 02:30 Asia/Taipei) records **no blocker**
+on either file, and its follow-up check at `8f705ed` confirms this authorisation names the current
+objects. The contract `docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md` at this head is blob
+`13a4e8ccd5990d4cd443672e3a15adc6dab1b75c`, sha256
+`a49abe8883dadc9da77f54dcf1e383e766abb3a4ba661ea458bafdd504ad48cd`; it is a reference document and is
+not applied.
+
+**Execution shape.** Gate 3 read-only preflight against Launch immediately before, in the same
+window; then one `psql` invocation per file, deploy 1 first, then deploy 2, each with
+`ON_ERROR_STOP=1 -v VERBOSITY=verbose -f <file>`. Files are transferred in a form that preserves
+blank lines and formatting, and the sha256 of the file that actually executes is recomputed and
+compared against the two values above before it runs. Adam confirms the target in the same session
+with `select system_identifier from pg_control_system();` = `7692131729119822239`. That read is the
+identity check; the in-file Section 0 assertion proves history, not identity, and neither is a
+substitute for this authorisation.
+
+**Failure handling.** A deploy 2 failure does not roll deploy 1 back; both files are re-runnable
+as written. If the unique index `group_chat_messages_ai_request` raises `23505`, that is pre-existing
+row state, not a defect in the blob: stop, keep the raw output and SQLSTATE, do not delete chat
+rows, and do not weaken the index back to non-unique as a fix.
+
+**After apply.** `notify pgrst, 'reload schema';`, then per-function `md5(prosrc)` comparison against
+the two reviewed blobs with the results posted, then promote the same bytes to
+`supabase/migrations/<timestamp>_kayk_ai_chat_*.sql` and add the ledger line (the P1 pattern).
+
+**If either blob changes after this entry is written, this entry no longer names what runs.** A new
+blob means a fresh exact-head review and a new dated authorisation; nothing older may be applied.
+
+**Not authorised by this entry:** merging or transitioning any PR to ready, deployment or
+publication, GitHub visibility or permission changes, any write to `wkzclgmhrtecnpexfesr` (frozen
+Prototype), signed-in or multi-account QA, and any schema work beyond these two files.
