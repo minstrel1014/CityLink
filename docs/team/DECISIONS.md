@@ -2357,3 +2357,23 @@ attachments, and the signer's service-role route does not exist yet, so a spread
 "no readable text" notice. `turns` rows carry `{id, body}` and no sender name, so prompts currently attribute
 every turn to "成員"; that is a prompt-fidelity gap, not a correctness bug, and it is worth fixing when the
 executor gets its next revision.
+
+**The AI drawer is on the public demo, and that creates a tracked divergence.** Adam chose "port" on
+2026-11-25. The WebDev project builds from its own `main` (checkout `/home/ubuntu/citylink`), which had zero
+references to `GroupAiDrawer`; the feature lives only on `feature/kayk-ai-analysis`. Ten files were copied
+verbatim — the drawer and its CSS, `aiChatConsent.ts`, `GroupChatPage.tsx`, `supabaseStage6.ts`, and five
+`shared/` modules — and for the two modified files the branch diff and the two-dot diff against main were
+identical, which is the evidence that main had not moved since the branch point and nothing was overwritten.
+`corepack pnpm check` and `corepack pnpm build:static` both passed before the push. Commit `e09f928` on the
+WebDev `main` triggered automatic publication, and the live bundle now serves `assets/index-DLlAAR4i.js`
+containing `Ask CityLink AI` and the consent strings.
+
+**What this costs.** The demo's `main` now carries AI client code that the reviewed branch has not merged, so
+the two copies must not be edited independently: PR #67 remains the source of truth, and when it merges its
+versions win and `e09f928` becomes redundant. Anyone reading the demo's history should treat `e09f928` as a
+port, not as a review.
+
+**Also checked before publishing.** The stored `VITE_SUPABASE_PUBLISHABLE_KEY` description still claims it
+holds the Prototype key; the live bundle proves otherwise — it references `pijslbchvstkoweslymr`, contains
+`sb_publishable_`, and has no Prototype ref and no legacy JWT. The description is stale text, not a stale
+value, and it should be corrected the next time that secret is touched.
