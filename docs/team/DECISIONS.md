@@ -2534,3 +2534,13 @@ Adam, 14:34–14:36: he asked 「test」 and got 「資料不足。目前對話�
 **Deploy is a separate act and has not happened.** The change is committed on `feature/kayk-ai-analysis` (`36150b1`) and the live executor still carries the old prompt, so Adam's next question would still be refused. Redeploying `group-ai-executor` to Launch needs its own authorisation, as every earlier deploy did; the file is ready and the tests pass.
 
 **Checks.** `pnpm check` clean; `pnpm test` **857/857** (57 files; +1 static test pinning both halves of the new rule, which also caught my own comment quoting the retired sentence verbatim).
+
+## 2026-11-25 14:41 — Executor redeployed with the general-assistant prompt (version 6 → 7)
+
+Adam, 14:40: 「Authorise the redeploy of group-ai-executor to Launch pijslbchvstkoweslymr」.
+
+**Deployed.** `deploy_edge_function` against `pijslbchvstkoweslymr`, name `group-ai-executor`, entrypoint `index.ts`, `verify_jwt: true` (unchanged from version 6 — the function authenticates the caller itself and rejects anything that is not service role). Result: `version = 7`, `status = ACTIVE`, `ezbr_sha256 = b30c24b772ac728bb3fd707a8ddc0f0dd1251928125282713be564126038b310`. Read back with `get_edge_function`: the stored source contains 「像一般生成式 AI 一樣回答」 and no longer contains the retired 「只根據提供的對話與檔案內容回答」, 11,368 characters.
+
+**What is proven and what is not.** Proven: the deployed artefact is the reviewed file, the function is active, and its prompt is the new one. Not proven: an actual answer. Invoking the executor needs the service-role key, which is not in this sandbox and will not be requested in chat; the honest path is a real question from a signed-in member, after which the answer can be read back from `group_ai_requests` and the AI message. No queued rows exist at deploy time, so the next question is the only one in the batch and its answer will be unambiguous.
+
+**Scope.** Only the Edge Function changed. No SQL, no migration, no secret, no client bundle, no demo republish, no PR state change — PR #67 remains draft.
