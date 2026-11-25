@@ -2001,3 +2001,32 @@ blob means a fresh exact-head review and a new dated authorisation; nothing olde
 **Not authorised by this entry:** merging or transitioning any PR to ready, deployment or
 publication, GitHub visibility or permission changes, any write to `wkzclgmhrtecnpexfesr` (frozen
 Prototype), signed-in or multi-account QA, and any schema work beyond these two files.
+
+## 2026-11-25 — Execution-shape deviation for the gate-4 window (Adam, option 3)
+
+Adam's decision at 09:13 Asia/Taipei: the gate-4 pair is applied through the Supabase connector's
+`execute_sql` rather than through two `psql -f` invocations, because the coordinator's sandbox has no
+secret store and no route to a `psql` connection string — `manus-config secret search` answers
+"Saved secrets are not available in this environment", there is no `DATABASE_URL` and no `.pgpass`.
+He was offered three routes (card plus a `{{secret:…}}` reference, running the prepared script
+himself, or the connector) and chose the connector.
+
+**What still holds, unchanged.** The same two blobs, in the same order, with the same sha256 values as
+the gate-4 entry above; the gate-3 read-only preflight immediately before, in the same window; the
+identity check `select system_identifier from pg_control_system();` = `7692131729119822239`; the
+failure rule that a deploy 2 failure does not roll deploy 1 back; and the after-apply steps
+(`notify pgrst, 'reload schema';`, per-function `md5(prosrc)` comparison posted, promotion of the same
+bytes to `supabase/migrations/<timestamp>_kayk_ai_chat_*.sql`, ledger line).
+
+**One transaction per file is preserved by the files themselves.** Both blobs carry their own
+`begin;` … `commit;` (deploy 1 lines 90 and 299, deploy 2 lines 86 and 721), so a mid-file error aborts
+that file's transaction and commits nothing. Fail-closed behaviour therefore rests on the explicit
+transactions inside the authorised bytes, not on a client-side setting.
+
+**What deviates.** There is no `psql` client in the path, so there is no `ON_ERROR_STOP=1` and no
+`-v VERBOSITY=verbose`; error text and SQLSTATE come back from the connector's response instead. The
+file reaches the server as a JSON string rather than as a filesystem `-f` argument, so blank lines and
+formatting are preserved byte-for-byte in transit but are not exercised through a file descriptor.
+
+**Scope.** This deviation covers this window only. It is not a precedent for later migrations: a
+future window that has a working `psql` route should use the shape the gate-4 entry names.
