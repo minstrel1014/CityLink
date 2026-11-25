@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import {
+  AI_CHAT_LIMITS,
   buildAiChatContext,
   clearAiChatContext,
   type ChatTurn,
@@ -12,6 +13,7 @@ import {
   newIdempotencyKey,
   waitForAiAnswer,
 } from "@/lib/aiChatRequests";
+import { AI_RATE_LIMITS } from "@shared/aiRateLimit";
 import { sendGroupChatMessage } from "@/lib/supabaseStage6";
 import {
   AI_CHAT_CONSENT_STATEMENTS,
@@ -88,11 +90,49 @@ export default function GroupAiDrawer({
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
+  // "sending" is the round trip to begin; "waiting" is the model working.
+  const [phase, setPhase] = useState<"idle" | "sending" | "waiting">("idle");
+  // Usage is only ever reported by the server on a refusal, so it is remembered
+  // here and shown as "last known" rather than invented.
+  const [usage, setUsage] = useState<{
+    groupToday: number | null;
+    userToday: number | null;
+  } | null>(null);
 
   const eligibleFiles = useMemo(
     () => files.filter(file => file.status === "current"),
     [files]
   );
+
+  /**
+   * What this question would actually carry, computed with the same builder the
+   * server uses. Shown so "the AI only saw one message" is never a mystery after
+   * the fact.
+   */
+  const preview = useMemo(() => {
+    const context = buildAiChatContext({
+      question: question.trim() || "（尚未輸入問題）",
+      history,
+      files: eligibleFiles.filter(file => selectedFileIds.includes(file.id)),
+      contextStartsAt,
+      groupId,
+    });
+    return {
+      messages: context.stats.memberMessagesIncluded,
+      answers: context.stats.aiAnswersIncluded,
+      chatChars: context.stats.chatChars,
+      files: context.files.length,
+      fileChars: context.stats.fileChars,
+      dropped: context.dropped,
+    };
+  }, [
+    question,
+    history,
+    eligibleFiles,
+    selectedFileIds,
+    contextStartsAt,
+    groupId,
+  ]);
 
   if (!open) return null;
 
@@ -116,6 +156,7 @@ export default function GroupAiDrawer({
       return;
     }
     setBusy(true);
+    setPhase("sending");
     setFeedback("");
     setPending(false);
     const alreadyAccepted = rememberConsent({ userId, groupId });
@@ -130,6 +171,12 @@ export default function GroupAiDrawer({
         idempotencyKey: newIdempotencyKey(),
       });
       if (!begun.ok) {
+        if (begun.userToday !== null || begun.groupToday !== null) {
+          setUsage({
+            groupToday: begun.groupToday,
+            userToday: begun.userToday,
+          });
+        }
         setFeedback(describeRefusal(begun));
         return;
       }
@@ -142,6 +189,7 @@ export default function GroupAiDrawer({
           .then(() => onQuestionPosted?.())
           .catch(() => {});
       }
+      setPhase("waiting");
       const state = await waitForAiAnswer(begun.requestId);
       if (state.status === "ready") {
         // The answer is already a chat message written by the executor; closing
@@ -163,6 +211,7 @@ export default function GroupAiDrawer({
       setFeedback(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
+      setPhase("idle");
       setShowConsent(false);
     }
   };
@@ -194,6 +243,51 @@ export default function GroupAiDrawer({
         placeholder="例如：我們上次對儲存方案決定了什麼？"
         disabled={busy}
       />
+
+      {busy && (
+        <p className="citylink-ai-drawer__status" role="status">
+          <span className="citylink-ai-drawer__spinner" aria-hidden="true" />
+          {phase === "sending"
+            ? AI_CHAT_COPY.sending
+            : AI_CHAT_COPY.waitingForAnswer}
+        </p>
+      )}
+
+      <dl className="citylink-ai-drawer__meta">
+        <div>
+          <dt>這次送出</dt>
+          <dd>
+            {preview.messages} 則對話、{preview.answers} 則 AI 回答、
+            {preview.files} 個檔案
+            <span className="citylink-ai-drawer__meta-detail">
+              約 {preview.chatChars + preview.fileChars} 字／上限{" "}
+              {AI_CHAT_LIMITS.chatChars + AI_CHAT_LIMITS.fileChars}
+            </span>
+            {preview.dropped && (
+              <span className="citylink-ai-drawer__meta-warn">
+                較早的對話未包含
+              </span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>每日額度</dt>
+          <dd>
+            每人 {AI_RATE_LIMITS.perUserPerDay} 次（所有群組共用）、每群組{" "}
+            {AI_RATE_LIMITS.perGroupPerDay} 次
+            <span className="citylink-ai-drawer__meta-detail">
+              UTC 00:00 重置
+            </span>
+            {usage && (
+              <span className="citylink-ai-drawer__meta-warn">
+                上次查詢：今天已用 {usage.userToday ?? "?"}／
+                {AI_RATE_LIMITS.perUserPerDay} 次（此群組{" "}
+                {usage.groupToday ?? "?"}／{AI_RATE_LIMITS.perGroupPerDay}）
+              </span>
+            )}
+          </dd>
+        </div>
+      </dl>
 
       <fieldset className="citylink-ai-drawer__files">
         <legend>選取檔案（最多 2 個）</legend>

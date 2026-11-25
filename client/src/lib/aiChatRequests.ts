@@ -30,6 +30,13 @@ export type BeginResult =
       retryAfter: number | null;
       /** 45N06 carries `reason=in_flight` or `reason=group_daily|user_daily`. */
       reason: string | null;
+      /**
+       * Today's counts, but only when the daily-cap branch produced them. This is
+       * the only place the client is ever told its own usage, which is why the
+       * drawer remembers it rather than recomputing it.
+       */
+      groupToday: number | null;
+      userToday: number | null;
     };
 
 const NOT_CONFIGURED = "Supabase is not configured in this build.";
@@ -49,11 +56,16 @@ function readError(error: {
   const token = text.match(/45N\d\d/g)?.[0] ?? error.code ?? "unknown";
   const retry = text.match(/retry_after["'\s:=]+(\d+)/)?.[1];
   const reason = text.match(/reason=([a-z_]+)/)?.[1] ?? null;
+  // Only the daily-cap branch reports counts; the in-flight branch does not.
+  const groupToday = text.match(/group_today=(\d+)/)?.[1];
+  const userToday = text.match(/user_today=(\d+)/)?.[1];
   return {
     code: token,
     message: text.trim(),
     retryAfter: retry ? Number(retry) : null,
     reason,
+    groupToday: groupToday ? Number(groupToday) : null,
+    userToday: userToday ? Number(userToday) : null,
   };
 }
 
@@ -70,6 +82,8 @@ export async function beginGroupAiRequest(input: {
       message: NOT_CONFIGURED,
       retryAfter: null,
       reason: null,
+      groupToday: null,
+      userToday: null,
     };
   }
   const { data, error } = await supabaseClient.rpc("begin_group_ai_request", {
@@ -88,6 +102,8 @@ export async function beginGroupAiRequest(input: {
       message: "begin_group_ai_request returned no request id",
       retryAfter: null,
       reason: null,
+      groupToday: null,
+      userToday: null,
     };
   }
   return {

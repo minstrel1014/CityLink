@@ -90,6 +90,19 @@ describe("drawer — no pretending", () => {
     expect(drawer).toContain("stillPending");
   });
 
+  it("shows the context and the daily allowance without hardcoding them", () => {
+    // Adam, 2026-11-25 14:55. The numbers must come from shared/aiRateLimit.ts,
+    // which a static SQL test already pins against the RPC's literals; retyping
+    // 10 or 20 here would create a second source of truth.
+    expect(drawer).toContain("AI_RATE_LIMITS.perUserPerDay");
+    expect(drawer).toContain("AI_RATE_LIMITS.perGroupPerDay");
+    expect(drawer).toContain("AI_CHAT_LIMITS.chatChars");
+    expect(drawer).toContain("這次送出");
+    expect(drawer).toContain("每日額度");
+    expect(drawer).toContain("AI_CHAT_COPY.sending");
+    expect(drawer).toContain("AI_CHAT_COPY.waitingForAnswer");
+  });
+
   it("posts the question into the room, after begin and before polling", () => {
     // Adam, 2026-11-25 14:52: a question sent to the AI should appear in the chat
     // like any other message. Order matters twice: posting after `begin` keeps the

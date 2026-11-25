@@ -88,6 +88,12 @@ describe("consent starts empty and stays per question", () => {
     });
   });
 
+  it("says what is happening while the answer is on its way", () => {
+    expect(AI_CHAT_COPY.sending).toBe("正在送出提問…");
+    expect(AI_CHAT_COPY.waitingForAnswer).toContain("5–15 秒");
+    expect(AI_CHAT_COPY.sending).not.toBe(AI_CHAT_COPY.waitingForAnswer);
+  });
+
   it("offers one box that agrees every statement", () => {
     expect(AI_CHAT_COPY.agreeAll).toBe("我已閱讀並同意以上全部");
     expect(AI_CHAT_CONSENT_STATEMENTS.length).toBeGreaterThanOrEqual(7);

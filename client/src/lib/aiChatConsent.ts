@@ -203,6 +203,8 @@ export const AI_CHAT_COPY = {
     return `${who}，約 ${wait}後、${clock} 左右重置。`;
   },
   inFlight: "CityLink AI 還在回答上一個問題，請稍等一會再問。",
+  sending: "正在送出提問…",
+  waitingForAnswer: "CityLink AI 正在回答，通常需要 5–15 秒…",
   agreeAll: "我已閱讀並同意以上全部",
   clearContext: "清空 context",
   send: "送出提問",

@@ -183,3 +183,68 @@
   border-left: 3px solid #6366f1;
   padding-left: 10px;
 }
+
+.citylink-ai-drawer__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: #4338ca;
+}
+
+.citylink-ai-drawer__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #c7d2fe;
+  border-top-color: #4338ca;
+  border-radius: 50%;
+  animation: citylink-ai-spin 700ms linear infinite;
+}
+
+@keyframes citylink-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citylink-ai-drawer__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* What this question carries and what is left today: small, always visible,
+   never louder than the question box itself. */
+.citylink-ai-drawer__meta {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.citylink-ai-drawer__meta div {
+  display: flex;
+  gap: 8px;
+}
+
+.citylink-ai-drawer__meta dt {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: #334155;
+}
+
+.citylink-ai-drawer__meta dd {
+  margin: 0;
+}
+
+.citylink-ai-drawer__meta-detail {
+  margin-left: 6px;
+  color: #94a3b8;
+}
+
+.citylink-ai-drawer__meta-warn {
+  margin-left: 6px;
+  color: #b45309;
+}
