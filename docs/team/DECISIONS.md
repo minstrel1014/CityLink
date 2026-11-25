@@ -2412,3 +2412,19 @@ exist yet, and no further demo publication happens until it does and has been ex
 **Still open, unchanged:** sender names are absent from prompt turns (`{id, body}` only, so every turn is attributed to "成員"); the executor reads only text-shaped attachments, so xlsx/PDF produce the "no readable text" notice; the signer's service-role route (PR #66 branch) is untouched.
 
 **Follow-up `3446c01` (demo `be7ee30`, build `44e49f21cffb3c6a`).** The drawer closed without telling the page anything, and `GroupChatPage` still passed an `onAiMessage` that appended a `local-ai-…` copy of the answer. With the real path that copy would duplicate the server row and then disappear on reload. The callback is gone; closing the drawer now bumps the existing `reloadToken`, so the answer is read once from `group_chat_messages`. `pnpm check` clean, `pnpm test` 837/837, `build:static` ok, live bundle `index-CVI604TB.js` carries both RPC names and no mock text. This is the second push of the same rollout — the first was complete in itself, this one fixes how the answer becomes visible.
+
+## 2026-11-25 13:01 — Scheduler investigation (read-only; nothing on Launch changed)
+
+Adam reported that the Edge Function page has no Schedules option and asked for the real application-native routes before anything is applied. Only `select` statements were run against Launch.
+
+**Facts established on `pijslbchvstkoweslymr`.**
+- `shared_preload_libraries` already contains `pg_cron` and `pg_net`, and `cron.database_name = postgres`. The libraries are loaded; only the extensions are missing, so enabling them needs no restart.
+- `pg_cron` 1.6.4 and `pg_net` 0.20.4 are available but **not installed**; `supabase_vault` 0.3.1 **is** installed with zero secrets; `pgmq` and `http` are available.
+- Neither `pg_cron` nor `pg_net` is `trusted`, and both appear in `supautils.privileged_extensions`, so `create extension` from the connector's `postgres` role is expected to fail with `42501`; the Dashboard (as `supabase_admin`) is the supported path. This is inferred from configuration, not tested, because testing it would be a write.
+- The `cron`, `net` and `supabase_functions` schemas do not exist, so there is no cron job, no HTTP queue and no webhook trigger today.
+- The connector exposes no extension-enabling tool (`list_extensions` is read-only), so a Dashboard click is unavoidable whichever route is chosen.
+- The executor processes up to `EXECUTOR_BATCH` (default 5) requests per invocation and stops early when the queue is empty.
+
+**Routes, in the order I would take them.** (A) Enable `pg_cron` + `pg_net`, put the service-role key in Vault, and schedule `net.http_post` to the function every minute, reading the key from `vault.decrypted_secrets` at run time — the key never appears in SQL text, repo, chat or browser. (B) Same plumbing but the function accepts a function-scoped shared token instead of the service-role key, which shrinks the blast radius and needs an executor redeploy. (C) A Database Webhook on `insert into group_ai_requests`, which is event-driven rather than polling, but stores its headers in the trigger definition where `postgres` can read them. (D) An external scheduler (Cloudflare Worker cron) with the key as a Worker secret — not application-native.
+
+**Not done.** No extension enabled, no secret created, no job scheduled, no schema change, no function redeploy.
