@@ -2510,3 +2510,13 @@ Adam, 14:16, quoted the sentence back: 「你今天在這裡的 AI 提問次數�
 **Checks.** `pnpm check` clean; `pnpm test` **856/856** (57 files); `build:static` ok. Canonical `031080b`; demo `c8e11dd`, auto-published `buildId=154369e872a07f8d`, `assets/index-ynu6RYqj.js`, read back and confirmed to contain 「所有群組共用同一個額度」 and no 「其他群組不受影響」.
 
 **Note on this round.** Three successive attempts at one sentence, each wrong in a different way (raw code and seconds → wrong owner → wrong scope). The pattern is that I wrote product copy from the drawer's perspective instead of from the RPC's actual predicates. The fix for the remaining rounds is to read the counting SQL before writing the sentence, not after Adam sees it.
+
+## 2026-11-25 14:31 — The exhausted account was the QA2 identity, and the requests were mine
+
+Adam, 14:30: 「i haven't test it yet and not send 10 message」. Correct — he had not.
+
+**Attribution, checked read-only on Launch.** The eleven requests counted against the per-user cap today belong to `8954315c…` = `citylink.qa2.20261123@example.com` (display name 「Nora Patel - Leader - Q02」), and their question texts are mine: 「context budget probe」, 「quota demonstration 1」 through 「quota demonstration 6」. Adam's own identity `9bfc6d04…` = `citylink.qa.20261123@example.com` has **two** requests today, both from the earlier drawer verification. So the cap was correct and the reader was not: Adam was signed into the demo under the Nora session, which is the session I had been using for probes, and the sentence addressed him as 「你」.
+
+**Process change.** Live probes that consume quota must not run under the identity the demo session is signed in as. From this round: probes use a dedicated QA identity, and any probe that spends a daily allowance is named in the handoff so the human is not surprised by an exhausted account. This is a working rule, not a code change.
+
+**What remains unverified.** No human has clicked through the new consent panel. It is verified by unit tests (856/856), by reading the built bundle back from the live site (copy strings present, `.72rem`/`max-height` rules present, no raw `45N06 ·` concatenation), and by the type checker. That is not the same as someone opening the drawer and using it, and the difference is worth keeping straight while Adam is the one who has not yet tested.
