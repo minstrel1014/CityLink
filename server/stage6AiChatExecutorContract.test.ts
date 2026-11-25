@@ -30,6 +30,17 @@ describe("group AI executor, statically", () => {
     );
   });
 
+  it("answers general questions instead of refusing them", () => {
+    // Adam, 2026-11-25 14:36: 「it should be able to answer question like i using a
+    // gen ai」. The prompt used to say 「只根據提供的對話與檔案內容回答」, so
+    // "what is mobile app?" came back as 資料不足. Pin the two halves that matter:
+    // general knowledge is allowed, inventing group facts is not.
+    expect(executor).toContain("像一般生成式 AI 一樣回答");
+    expect(executor).toContain("不需要先有群組資料");
+    expect(executor).not.toContain("只根據提供的對話與檔案內容回答");
+    expect(executor).toContain("不要編造這個群組裡沒發生過的事");
+  });
+
   it("uses the shared dropped-context notice verbatim", () => {
     expect(executor).toContain(CONTEXT_DROPPED_NOTICE);
   });
