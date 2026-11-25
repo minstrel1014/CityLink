@@ -2287,3 +2287,13 @@ Edge Function has never been deployed. Adam's choice of option b means deploying
 which needs its own deployment authorisation and is not covered by any record above. Until it exists, a
 question with a file is claimed and then stalls; the QA brief must say so, or the first report will read as
 "AI file reading is broken".
+
+**Deploy 4 applied to Launch, 2026-11-25 03:19Z.** The file was applied through the Supabase connector
+`execute_sql` (the same route as deploys 1–3, since the sandbox has no psql connection string and no secret
+store). The in-file target assertion returned empty, which is a pass; `pg_indexes` then reported
+`CREATE INDEX group_ai_requests_queued ON public.group_ai_requests USING btree (created_at, id) WHERE (status = 'queued'::text)`
+with `indisvalid = true`, and the two queued requests from Eunice's pass were untouched (2 queued, 2 total).
+The file is promoted byte-identically to `supabase/migrations/20261125031926_kayk_ai_chat_deploy4.sql` and the
+ledger row `20261125031926` / `kayk_ai_chat_deploy4` was written with `created_by =
+citylink-coordinator-20261125-postapply`, matching the three rows before it. Promotion is after the fact, as
+with deploys 1–3: the ledger records what ran, it did not drive it.
