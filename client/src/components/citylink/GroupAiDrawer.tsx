@@ -12,6 +12,7 @@ import {
   newIdempotencyKey,
   waitForAiAnswer,
 } from "@/lib/aiChatRequests";
+import { sendGroupChatMessage } from "@/lib/supabaseStage6";
 import {
   AI_CHAT_CONSENT_STATEMENTS,
   AI_CHAT_COPY,
@@ -61,6 +62,7 @@ export default function GroupAiDrawer({
   files,
   filesUnavailable = false,
   onClose,
+  onQuestionPosted,
 }: {
   groupId: string;
   /** Consent is remembered per user per group, so the drawer needs both. */
@@ -71,6 +73,8 @@ export default function GroupAiDrawer({
   /** The list could not be read; say so rather than implying there are none. */
   filesUnavailable?: boolean;
   onClose: () => void;
+  /** Lets the chat re-read at once, so the question shows without waiting. */
+  onQuestionPosted?: () => void;
   /** Kept for call-site compatibility; the answer now arrives as a chat message. */
   onAiMessage?: (body: string) => void;
 }) {
@@ -128,6 +132,15 @@ export default function GroupAiDrawer({
       if (!begun.ok) {
         setFeedback(describeRefusal(begun));
         return;
+      }
+      // Adam, 2026-11-25 14:52: the question belongs in the room, like any other
+      // message the member sends, not only inside this drawer. Posted after
+      // `begin` so the request's own context does not carry the question twice.
+      // A failed post must not lose the answer, so it is not fatal.
+      if (userId) {
+        await sendGroupChatMessage(userId, groupId, question)
+          .then(() => onQuestionPosted?.())
+          .catch(() => {});
       }
       const state = await waitForAiAnswer(begun.requestId);
       if (state.status === "ready") {

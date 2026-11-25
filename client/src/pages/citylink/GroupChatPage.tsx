@@ -350,6 +350,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               status: "current" as const,
               retentionExpiresAt: file.retentionExpiresAt,
             }))}
+            onQuestionPosted={() => setReloadToken(value => value + 1)}
             onClose={() => {
               setAiOpen(false);
               // The answer is a server row written by the executor, so closing

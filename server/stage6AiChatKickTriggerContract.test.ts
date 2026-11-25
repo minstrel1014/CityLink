@@ -89,4 +89,17 @@ describe("drawer — no pretending", () => {
   it("shows a distinct still-pending message instead of a fake failure", () => {
     expect(drawer).toContain("stillPending");
   });
+
+  it("posts the question into the room, after begin and before polling", () => {
+    // Adam, 2026-11-25 14:52: a question sent to the AI should appear in the chat
+    // like any other message. Order matters twice: posting after `begin` keeps the
+    // question out of its own context, and posting before the poll keeps the
+    // question above the answer rather than below it.
+    const begin = drawer.indexOf("await beginGroupAiRequest");
+    const post = drawer.indexOf("await sendGroupChatMessage");
+    const poll = drawer.indexOf("await waitForAiAnswer");
+    expect(begin).toBeGreaterThan(-1);
+    expect(post).toBeGreaterThan(begin);
+    expect(poll).toBeGreaterThan(post);
+  });
 });
