@@ -63,12 +63,12 @@ export const AI_CHAT_CONSENT_STATEMENTS: readonly ConsentStatement[] = [
     text: "其他成員無法單獨退出：你提問時，送出的內容包含本群組其他成員的聊天記錄與本群組檔案的文字，群組沒有 AI 開關，成員也沒有個人退出選項。",
   },
   {
-    id: "per-question",
-    text: "這個介面每次提問都會再要求你勾選，不會記住這個介面的勾選狀態。",
+    id: "per-group-once",
+    text: "這個群組只需要同意一次：勾選之後，你在這個群組再提問不會再被要求勾選；其他群組第一次使用時會再問一次。",
   },
   {
     id: "server-recorded",
-    text: "你第一次接受時，伺服器會記住「此帳號已看過本揭露」這一個時間點（只記錄時間，不記錄其他資料）；之後每次提問仍會要求你在介面再確認一次。",
+    text: "你第一次接受時，伺服器會記住「此帳號已看過本揭露」這一個時間點（只記錄時間，不記錄其他資料）。",
   },
 ] as const;
 
@@ -83,14 +83,21 @@ export type ConsentDecision =
   | { canAsk: false; reason: "ai_chat_consent_incomplete" };
 
 /**
- * Remembers the disclosure choice.
+ * Remembers the disclosure choice once per user per group.
  *
- * Adam, 2026-11-25: the drawer must stop asking on every question. One accepted
- * disclosure is remembered on the device and pre-ticks the box; the server still
- * keeps its own timestamp (`accept_ai_disclosure`), so this is a convenience, not
- * the record of consent. Clearing site data asks again.
+ * Adam, 2026-11-25: "this should only be ask once for every user in each group
+ * chat room". So the key carries both the user and the group: agreeing in one
+ * room does not agree for another, and a different account on the same browser is
+ * asked again. The server keeps its own timestamp (`accept_ai_disclosure`), so
+ * this is a convenience, not the record of consent. Clearing site data asks again.
  */
-const REMEMBERED_CONSENT_KEY = "citylink.ai-disclosure.v1";
+const REMEMBERED_CONSENT_PREFIX = "citylink.ai-disclosure.v1";
+
+export type ConsentScope = { userId?: string | null; groupId?: string | null };
+
+function consentKey(scope: ConsentScope = {}): string {
+  return `${REMEMBERED_CONSENT_PREFIX}:${scope.userId ?? "anon"}:${scope.groupId ?? "anon"}`;
+}
 
 function storage(): Storage | null {
   try {
@@ -100,27 +107,28 @@ function storage(): Storage | null {
   }
 }
 
-export function initialConsentState(): ConsentState {
-  const remembered = storage()?.getItem(REMEMBERED_CONSENT_KEY) === "accepted";
+export function initialConsentState(scope: ConsentScope = {}): ConsentState {
+  const remembered = storage()?.getItem(consentKey(scope)) === "accepted";
   return Object.fromEntries(
     AI_CHAT_CONSENT_STATEMENTS.map(s => [s.id, remembered])
   );
 }
 
-/** Returns true when the device had already remembered the choice. */
-export function rememberConsent(): boolean {
-  const previous = storage()?.getItem(REMEMBERED_CONSENT_KEY) === "accepted";
+/** Returns true when this user had already agreed in this group. */
+export function rememberConsent(scope: ConsentScope = {}): boolean {
+  const key = consentKey(scope);
+  const previous = storage()?.getItem(key) === "accepted";
   try {
-    storage()?.setItem(REMEMBERED_CONSENT_KEY, "accepted");
+    storage()?.setItem(key, "accepted");
   } catch {
     // A blocked storage must not block asking; the server timestamp still exists.
   }
   return previous;
 }
 
-export function forgetConsent(): void {
+export function forgetConsent(scope: ConsentScope = {}): void {
   try {
-    storage()?.removeItem(REMEMBERED_CONSENT_KEY);
+    storage()?.removeItem(consentKey(scope));
   } catch {
     // ignore
   }
@@ -161,8 +169,23 @@ export const AI_CHAT_COPY = {
   stillPending:
     "尚未完成。CityLink AI 仍在處理這個問題，重新載入對話可查看結果。",
   reloadThread: "重新載入對話",
-  rateLimited: (retryAfter: number) =>
-    `今天在這裡問得太多了，請 ${retryAfter} 秒後再試。`,
+  /**
+   * The server answers 45N06 with a `retry_after` in seconds: about fifteen for an
+   * in-flight question, most of a day for the daily caps. Printing "45N06 · 65607s"
+   * told the reader nothing, so the drawer turns it into a sentence.
+   */
+  rateLimited: (retryAfter: number) => {
+    const seconds = Math.max(1, Math.round(retryAfter));
+    const wait =
+      seconds >= 3600
+        ? `${Math.round(seconds / 3600)} 小時`
+        : seconds >= 60
+          ? `${Math.round(seconds / 60)} 分鐘`
+          : `${seconds} 秒`;
+    return `今天在這裡問得太多了，請約 ${wait}後再試。`;
+  },
+  inFlight: "CityLink AI 還在回答上一個問題，請稍等一會再問。",
+  agreeAll: "我已閱讀並同意以上全部",
   clearContext: "清空 context",
   send: "送出提問",
   cancel: "取消",

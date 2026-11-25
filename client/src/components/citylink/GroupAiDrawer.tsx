@@ -17,6 +17,7 @@ import {
   AI_CHAT_COPY,
   decideAskAi,
   initialConsentState,
+  isConsentComplete,
   rememberConsent,
   type ConsentState,
 } from "@/lib/aiChatConsent";
@@ -30,8 +31,30 @@ import "./GroupAiDrawer.css";
  * chat message, so nothing is rendered from a local copy that the next read
  * would duplicate.
  */
+/**
+ * Turn a refusal into a sentence.
+ *
+ * The drawer used to print `45N06 · 65607s`, which is the server's token plus a
+ * number of seconds nobody converts in their head. The numbers stay available in
+ * the message for logs; the reader gets the meaning.
+ */
+function describeRefusal(failure: {
+  code: string;
+  message: string;
+  retryAfter: number | null;
+  reason: string | null;
+}): string {
+  if (failure.code === "45N06") {
+    if (failure.reason === "in_flight") return AI_CHAT_COPY.inFlight;
+    if (failure.retryAfter) return AI_CHAT_COPY.rateLimited(failure.retryAfter);
+  }
+  if (failure.code === "45N09") return AI_CHAT_COPY.disclosureRequired;
+  return `${failure.code}: ${failure.message}`;
+}
+
 export default function GroupAiDrawer({
   groupId,
+  userId,
   open,
   history,
   files,
@@ -39,6 +62,8 @@ export default function GroupAiDrawer({
   onClose,
 }: {
   groupId: string;
+  /** Consent is remembered per user per group, so the drawer needs both. */
+  userId?: string | null;
   open: boolean;
   history: ChatTurn[];
   files: SelectableFile[];
@@ -50,7 +75,7 @@ export default function GroupAiDrawer({
 }) {
   const [question, setQuestion] = useState("");
   const [consent, setConsent] = useState<ConsentState>(() =>
-    initialConsentState()
+    initialConsentState({ userId, groupId })
   );
   const [showConsent, setShowConsent] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
@@ -88,7 +113,7 @@ export default function GroupAiDrawer({
     setBusy(true);
     setFeedback("");
     setPending(false);
-    const alreadyAccepted = rememberConsent();
+    const alreadyAccepted = rememberConsent({ userId, groupId });
     try {
       // `accept_ai_disclosure` overwrites the timestamp (open item S-3), so it is
       // called only on the first acceptance on this device.
@@ -100,11 +125,7 @@ export default function GroupAiDrawer({
         idempotencyKey: newIdempotencyKey(),
       });
       if (!begun.ok) {
-        setFeedback(
-          begun.retryAfter
-            ? `${begun.code} · ${begun.retryAfter}s`
-            : `${begun.code}: ${begun.message}`
-        );
+        setFeedback(describeRefusal(begun));
         return;
       }
       const state = await waitForAiAnswer(begun.requestId);
@@ -187,21 +208,28 @@ export default function GroupAiDrawer({
           className="citylink-ai-drawer__consent"
           aria-label="Disclosure"
         >
-          {AI_CHAT_CONSENT_STATEMENTS.map(statement => (
-            <label key={statement.id}>
-              <input
-                type="checkbox"
-                checked={consent[statement.id] === true}
-                onChange={event =>
-                  setConsent(current => ({
-                    ...current,
-                    [statement.id]: event.target.checked,
-                  }))
-                }
-              />
-              <span>{statement.text}</span>
-            </label>
-          ))}
+          <ul className="citylink-ai-drawer__consent-list">
+            {AI_CHAT_CONSENT_STATEMENTS.map(statement => (
+              <li key={statement.id}>{statement.text}</li>
+            ))}
+          </ul>
+          <label className="citylink-ai-drawer__agree">
+            <input
+              type="checkbox"
+              checked={isConsentComplete(consent)}
+              onChange={event =>
+                setConsent(
+                  Object.fromEntries(
+                    AI_CHAT_CONSENT_STATEMENTS.map(s => [
+                      s.id,
+                      event.target.checked,
+                    ])
+                  )
+                )
+              }
+            />
+            <span>{AI_CHAT_COPY.agreeAll}</span>
+          </label>
         </section>
       )}
 

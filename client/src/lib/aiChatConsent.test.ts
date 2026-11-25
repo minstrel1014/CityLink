@@ -3,6 +3,7 @@ import * as consent from "./aiChatConsent";
 import { CONTEXT_DROPPED_NOTICE } from "@shared/aiChatContext";
 import { AI_REPLY_TRUNCATION_NOTICE } from "@shared/aiChatReply";
 import {
+  AI_CHAT_COPY,
   AI_CHAT_CONSENT_STATEMENTS,
   AI_CHAT_REQUIRED_PHRASES,
   decideAskAi,
@@ -11,6 +12,22 @@ import {
   isConsentComplete,
   rememberConsent,
 } from "./aiChatConsent";
+
+function withLocalStorage(run: () => void): void {
+  const store = new Map<string, string>();
+  (globalThis as { window?: unknown }).window = {
+    localStorage: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    },
+  };
+  try {
+    run();
+  } finally {
+    delete (globalThis as { window?: unknown }).window;
+  }
+}
 
 describe("consent starts empty and stays per question", () => {
   it("presents every statement unticked", () => {
@@ -44,24 +61,47 @@ describe("consent starts empty and stays per question", () => {
   });
 
   it("remembers one acceptance instead of asking on every question", () => {
-    const store = new Map<string, string>();
-    (globalThis as { window?: unknown }).window = {
-      localStorage: {
-        getItem: (key: string) => store.get(key) ?? null,
-        setItem: (key: string, value: string) => void store.set(key, value),
-        removeItem: (key: string) => void store.delete(key),
-      },
-    };
-    try {
-      expect(Object.values(initialConsentState()).every(Boolean)).toBe(false);
-      expect(rememberConsent()).toBe(false);
-      expect(Object.values(initialConsentState()).every(Boolean)).toBe(true);
-      expect(rememberConsent()).toBe(true);
-      forgetConsent();
-      expect(Object.values(initialConsentState()).every(Boolean)).toBe(false);
-    } finally {
-      delete (globalThis as { window?: unknown }).window;
-    }
+    withLocalStorage(() => {
+      const scope = { userId: "u-1", groupId: "g-1" };
+      expect(isConsentComplete(initialConsentState(scope))).toBe(false);
+      expect(rememberConsent(scope)).toBe(false);
+      expect(isConsentComplete(initialConsentState(scope))).toBe(true);
+      expect(rememberConsent(scope)).toBe(true);
+      forgetConsent(scope);
+      expect(isConsentComplete(initialConsentState(scope))).toBe(false);
+    });
+  });
+
+  it("asks again in a different group and for a different user", () => {
+    withLocalStorage(() => {
+      const alice = { userId: "u-alice", groupId: "g-1" };
+      const bob = { userId: "u-bob", groupId: "g-1" };
+      const other = { userId: "u-alice", groupId: "g-2" };
+      rememberConsent(alice);
+      expect(isConsentComplete(initialConsentState(alice))).toBe(true);
+      expect(isConsentComplete(initialConsentState(other))).toBe(false);
+      expect(isConsentComplete(initialConsentState(bob))).toBe(false);
+      rememberConsent(other);
+      expect(isConsentComplete(initialConsentState(alice))).toBe(true);
+      expect(isConsentComplete(initialConsentState(other))).toBe(true);
+      expect(isConsentComplete(initialConsentState(bob))).toBe(false);
+    });
+  });
+
+  it("offers one box that agrees every statement", () => {
+    expect(AI_CHAT_COPY.agreeAll).toBe("我已閱讀並同意以上全部");
+    expect(AI_CHAT_CONSENT_STATEMENTS.length).toBeGreaterThanOrEqual(7);
+    expect(
+      isConsentComplete(
+        Object.fromEntries(AI_CHAT_CONSENT_STATEMENTS.map(s => [s.id, true]))
+      )
+    ).toBe(true);
+  });
+
+  it("does not promise to ask again on every question", () => {
+    const all = AI_CHAT_CONSENT_STATEMENTS.map(s => s.text).join(" ");
+    expect(all).not.toContain("每次提問都會再要求");
+    expect(all).toContain("這個群組只需要同意一次");
   });
 });
 

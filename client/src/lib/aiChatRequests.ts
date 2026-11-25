@@ -23,7 +23,14 @@ export type AiRequestState = {
 
 export type BeginResult =
   | { ok: true; requestId: string; status: AiRequestStatus }
-  | { ok: false; code: string; message: string; retryAfter: number | null };
+  | {
+      ok: false;
+      code: string;
+      message: string;
+      retryAfter: number | null;
+      /** 45N06 carries `reason=in_flight` or `reason=group_daily|user_daily`. */
+      reason: string | null;
+    };
 
 const NOT_CONFIGURED = "Supabase is not configured in this build.";
 
@@ -41,10 +48,12 @@ function readError(error: {
   // The SQL raises tokens like 45N06; the message carries them verbatim.
   const token = text.match(/45N\d\d/g)?.[0] ?? error.code ?? "unknown";
   const retry = text.match(/retry_after["'\s:=]+(\d+)/)?.[1];
+  const reason = text.match(/reason=([a-z_]+)/)?.[1] ?? null;
   return {
     code: token,
     message: text.trim(),
     retryAfter: retry ? Number(retry) : null,
+    reason,
   };
 }
 
@@ -60,6 +69,7 @@ export async function beginGroupAiRequest(input: {
       code: "not_configured",
       message: NOT_CONFIGURED,
       retryAfter: null,
+      reason: null,
     };
   }
   const { data, error } = await supabaseClient.rpc("begin_group_ai_request", {
@@ -77,6 +87,7 @@ export async function beginGroupAiRequest(input: {
       code: "no_request_id",
       message: "begin_group_ai_request returned no request id",
       retryAfter: null,
+      reason: null,
     };
   }
   return {

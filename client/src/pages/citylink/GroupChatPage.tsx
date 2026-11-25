@@ -333,6 +333,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
 
           <GroupAiDrawer
             groupId={groupId}
+            userId={userId}
             open={aiOpen}
             history={messages.map<ChatTurn>(message => ({
               id: message.id,
