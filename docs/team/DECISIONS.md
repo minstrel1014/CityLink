@@ -2389,3 +2389,24 @@ removed the button again and triggered automatic publication.
 for a string, not by using the feature. A string in a bundle proves the code shipped, never that it works.
 The real client path — `begin`, poll `get_group_ai_request_status`, read the message from the chat — does not
 exist yet, and no further demo publication happens until it does and has been exercised once end to end.
+
+## 2026-11-25 12:46 — Client rewire lands; consent now remembered; executor has no scheduler
+
+**Adam's instruction (12:20).** Replace `composeMockReply` in `GroupAiDrawer.tsx` with the real path, delete the mock from the client, remember the consent choice, update the contract and its test together, verify locally, republish once. Option A earlier: leave the button visible while it is wired. Option "yes": stop asking on every question.
+
+**Committed `d1aea07`** on `feature/kayk-ai-analysis` (PR #67 stays draft):
+- `client/src/lib/aiChatRequests.ts` (new): `beginGroupAiRequest`, `getGroupAiRequestStatus`, `acceptAiDisclosure`, `waitForAiAnswer`, `newIdempotencyKey`. No content decisions; the server owns question, context and limits.
+- `GroupAiDrawer`: submit → `begin_group_ai_request` → bounded poll → `onClose()`. It no longer renders a local answer, because the executor already wrote one into `group_chat_messages`; injecting a copy would duplicate it on the next read. The unused answer panel and the mock import are gone. `shared/aiChatMockReply.ts` survives only for `server/ai/provider/mock.ts` (dev provider), which is not the client path.
+- Consent: `citylink.ai-disclosure.v1` in `localStorage`; `initialConsentState()` pre-ticks when remembered; `rememberConsent()` returns whether the device had already agreed. `accept_ai_disclosure` is called only on the first acceptance because it overwrites the timestamp (open item S-3), so the "first acceptance" record stays true.
+- Contract §7 items 5 and the F-11 paragraph now say the same thing as the code; the pinning test that forbade any persistence ("exports nothing that would remember a choice") is replaced by a behavioural test. Adam reversed that rule today; the old test would otherwise have locked the old behaviour in place.
+- Executor pin: the 401 body has carried `role` and `token_length` since version 6; the test now pins the diagnostic shape instead of `{ error: "unauthorized" }`. This was a real failing test, not a cosmetic one.
+
+**Checks (exact, this commit).** `corepack pnpm check` clean; `corepack pnpm test` 837/837 in 55 files; `corepack pnpm build:static` ok; `prettier --write` on the six touched files. Contract sha256 changes because §7 wording changed; Adam's earlier ruling covers this (contract wording changes move only the contract hash).
+
+**Demo.** `/home/ubuntu/citylink` `c561329` (auto-published, build `9f59985569ea343e`, asset `index-Dl5upUyc.js`). Live check: `begin_group_ai_request` and `get_group_ai_request_status` present, `citylink.ai-disclosure.v1` present, `composeMockReply` and the mock's "本機的 mock" sentence absent from the bundle.
+
+**Client path verified with a real member JWT** (not service-role): signed in as `citylink.qa.20261123@example.com` against Launch with the demo's own publishable key, `accept_ai_disclosure` ok, `begin_group_ai_request` returned request `438afea3-bb66-4864-a102-37594a683242`, `get_group_ai_request_status` returned `queued`. A first attempt without accepting returned `45N09 group_ai_disclosure_required`, which is the intended fail-closed behaviour.
+
+**Gap found: nothing invokes the executor.** `cron.job` does not exist on Launch (pg_cron not installed) and there is no Manus scheduled task. The five answers on record came from manual invocation with the service-role key. So the demo now queues honestly but will not answer until something calls `group-ai-executor` on a schedule. Options for Adam: (a) Supabase Dashboard → the function's schedule, every minute — no code, no key in the database; (b) enable `pg_cron` + `pg_net` and schedule a `net.http_post` — needs SQL authorization and puts a service key in the database, which is worse; (c) a Manus script trigger holding the key as a secret. Recommendation: (a).
+
+**Still open, unchanged:** sender names are absent from prompt turns (`{id, body}` only, so every turn is attributed to "成員"); the executor reads only text-shaped attachments, so xlsx/PDF produce the "no readable text" notice; the signer's service-role route (PR #66 branch) is untouched.
