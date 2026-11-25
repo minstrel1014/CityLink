@@ -2297,3 +2297,25 @@ The file is promoted byte-identically to `supabase/migrations/20261125031926_kay
 ledger row `20261125031926` / `kayk_ai_chat_deploy4` was written with `created_by =
 citylink-coordinator-20261125-postapply`, matching the three rows before it. Promotion is after the fact, as
 with deploys 1–3: the ledger records what ran, it did not drive it.
+
+## 2026-11-25 — Signing path authorised, executor authorised, disclosure wording accepted
+
+**Adam's three answers at 11:33.** (1) The service-role signing path is authorised — option b of Role 6's
+D-1. (2) The xAI key is ready and the executor is authorised; the key itself still arrives through a secure
+card at deployment time and never appears in chat, the repo or a browser bundle. (3) The disclosure wording
+is accepted as written, so the live sentence stands and no retention or training claim is added to it.
+
+**A correction to the premise behind option b.** Role 6 recorded that "PR #66's signing Edge Function was
+never deployed". That is not accurate: `group-file-signer` was deployed to Launch on 2026-11-24 and
+redeployed as version 2 (function id `87c2d055-09c8-49ec-ad93-e149c8cda91c`), with `SITE_ORIGIN` set and the
+preflight `OPTIONS` check verified — see the 2026-11-24 17:13 and 17:20 entries above. What is true is
+narrower and still matters: **the deployed signer authenticates user JWTs only**, so it cannot serve a
+service-role executor that has no user token. The gap is a missing service-role route, not a missing
+deployment.
+
+**And signing yields bytes, not text.** The P1 migration stores no extracted text: `group_files` has no
+`extracted_text` or character-count column, and the AI contract's line that "text is extracted server-side"
+describes an intention that has no storage behind it yet. A signed download URL therefore gives the executor
+a file it must parse itself. That is a real design choice rather than an implementation detail — extraction
+in the executor means every answer path carries an xlsx/PDF parser, while extraction at upload time means a
+schema change and a backfill — and it is recorded here as open, not silently decided.
