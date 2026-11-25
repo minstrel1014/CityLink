@@ -2151,3 +2151,70 @@ repository has no non-test caller and `supabase/functions/` is empty — so a re
 `queued` and an end-to-end AI reply is not testable today. PRE-5: `supabase/schema.sql` contains none of the
 five new objects (0 hits for `group_ai_requests`, `group_ai_context`, `ai_request_id`), so a local rebuild
 from it produces a schema without them.
+
+## 2026-11-25 — PRE-6 withdrawn: the "missing" migration was never missing
+
+The earlier entry of today recorded `20261124082200 coordinator_group_file_read_functions` as a permanent
+documented exception because its text could not be found. That conclusion was wrong and is withdrawn.
+
+The file exists on `origin/feature/coordinator-sql-bundle-20261124` (PR #65, open draft), commit `33c6e3c`,
+path `supabase/migrations/20261124082200_coordinator_group_file_read_functions.sql`. Verified here against
+the commit blob: blob `15eb3457a337a8062b871460bd505fe6bcf73b5b`, 139 lines, sha256
+`ed30cfd3852602b01aa01116e50749fc2ba8f25a0b3ff985e880f3604fcf61a0` — the same Git object as the v2 proposal
+reviewed at `3fcc260`, so it is the bytes that ran and not a reconstruction. No forward-fill was made, and
+none is needed.
+
+The real shape is cross-branch aggregation, not a hole:
+
+| ref                                             | migrations | extra over main                                                                                                    |
+| ----------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------ |
+| `main` (`519a69e`)                              | 11         | —                                                                                                                  |
+| `feature/coordinator-sql-bundle-20261124` (#65) | 12         | `20261124082200_coordinator_group_file_read_functions`                                                             |
+| `feature/kayk-ai-analysis` (#67)                | 14         | `20261124064100_kayk_p1_group_files`, `20261125011616_kayk_ai_chat_deploy1`, `20261125011637_kayk_ai_chat_deploy2` |
+| union                                           | 15         | equals the Launch ledger's 15 rows                                                                                 |
+
+Four applied migrations live only on draft branches. Recorded without authorising anything: merging #67 alone
+would leave `main` at 13 files against 15 rows, so #65 and #67 have to be handled together when a merge
+decision is finally taken. That is a merge-order decision, not an SQL one, and needs no new blob review.
+
+## 2026-11-25 — `supabase/migrations/` is authoritative; `supabase/schema.sql` is a skeleton (Adam, option b)
+
+Adam chose option b at 09:35 rather than adding the five new objects to `supabase/schema.sql`.
+
+- The applied schema of any environment is what `supabase/migrations/` says, and for Launch that includes the
+  four migrations currently sitting on draft branches (table above).
+- `supabase/schema.sql` is a skeleton. It is not a live snapshot and must not be used to decide whether an
+  object exists.
+- A local rebuild from `schema.sql` alone cannot reproduce Launch, and "function not found" from such a
+  rebuild is not evidence of a regression.
+
+A header comment saying exactly this was added to `supabase/schema.sql` itself, so the next reader meets it at
+the file rather than only here.
+
+## 2026-11-25 — AUTHORIZATION (PRE-2): build and deploy a `service_role` executor (Adam, option A)
+
+Adam chose option A at 09:35: a service-side executor exists before signed-in QA is asked to cover the
+end-to-end path.
+
+**Authorised.** Implement the executor in the canonical repository with tests; deploy it to Launch
+`pijslbchvstkoweslymr` once it is reviewed; it may hold the provider credential as a server-side secret; it
+calls `claim_group_ai_request` and then `finish_group_ai_request` as `service_role`.
+
+**Shape fixed by the contract.** Claim, then provider call, then finish. `error_code` is limited to
+`provider_timeout` / `provider_failed`. The answer body is capped at 2,500 characters including its truncation
+notice. The context and unread-file notices are prepended in the order §6 fixes. `files_used` is reported so
+the client can show the unread-file notice.
+
+**Not authorised by this entry.** A provider key in the repository, in a browser bundle, or in chat; any SQL,
+grant or policy change; merge; publication; GitHub visibility.
+
+The provider credential is Adam's to supply through a secure card. Until it exists the executor is built and
+tested against a fake provider, and is not deployed.
+
+## 2026-11-25 — `LIVE_SCHEMA_20261124.sql` is a stale snapshot, not a baseline
+
+`docs/backup/LIVE_SCHEMA_20261124.sql` on ref `docs/live-schema-snapshot-20261124` (3,619 lines, structure
+only) was generated 2026-11-23 17:53 UTC. It contains none of `group_files`, `group_file_requests`,
+`group_ai_requests`, `group_ai_context`, `ai_request_id` or `author_kind`, so it predates P1, the bundle and
+the AI pair. Despite the filename it is not a live baseline and must not be used to judge whether an object
+exists. Kept as history; not edited.
