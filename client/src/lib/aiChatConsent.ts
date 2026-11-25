@@ -163,6 +163,21 @@ export const AI_CHAT_COPY = {
   )[],
   disclosureRequired:
     "請先確認已閱讀 AI 揭露（伺服器會記錄你已看過，但不記錄其他資料）。",
+  /**
+   * Usage before asking. `get_group_ai_usage` is read-only and only reachable by
+   * active members, so these lines describe the caller's own numbers, never a
+   * platform-wide total.
+   */
+  usageLoading: "正在讀取今天的用量…",
+  usageUnavailable: "用量暫時讀不到；送出時仍會由伺服器判斷。",
+  usageInFlight: "上一個問題還在處理中，這時送出會先被擋下。",
+  usageToday: (
+    userToday: number,
+    userLimit: number,
+    groupToday: number,
+    groupLimit: number
+  ) =>
+    `今天已用 ${userToday}／${userLimit} 次・此群組 ${groupToday}／${groupLimit} 次`,
   providerFailed: "CityLink AI 暫時無法回答，請稍後再試。",
   // Distinct from providerFailed on purpose: the request exists and may still be
   // answered. Saying "failed" would be a lie in the other direction.

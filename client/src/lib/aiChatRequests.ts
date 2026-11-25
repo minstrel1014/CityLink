@@ -133,6 +133,44 @@ export async function getGroupAiRequestStatus(
   };
 }
 
+/**
+ * Today's quota, read before asking.
+ *
+ * Until now the only numbers the client ever saw arrived inside a 45N06 refusal,
+ * so the drawer could only say "last time you asked…". `get_group_ai_usage` is
+ * read-only, mirrors `begin_group_ai_request`'s predicates, and is reachable only
+ * by an active member of that group — a null return means "could not read", never
+ * "zero used", so the caller must not print 0 in that case.
+ */
+export type GroupAiUsage = {
+  groupToday: number;
+  groupLimit: number;
+  userToday: number;
+  userLimit: number;
+  inFlight: number;
+  retryAfterSeconds: number;
+};
+
+export async function getGroupAiUsage(
+  groupId: string
+): Promise<GroupAiUsage | null> {
+  if (!supabaseClient || !groupId) return null;
+  const { data, error } = await supabaseClient.rpc("get_group_ai_usage", {
+    p_group_id: groupId,
+  });
+  if (error) return null;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+  return {
+    groupToday: Number(row.group_today ?? 0),
+    groupLimit: Number(row.group_limit ?? 0),
+    userToday: Number(row.user_today ?? 0),
+    userLimit: Number(row.user_limit ?? 0),
+    inFlight: Number(row.in_flight ?? 0),
+    retryAfterSeconds: Number(row.retry_after_seconds ?? 0),
+  };
+}
+
 /** Records the disclosure acceptance once; the server keeps the timestamp. */
 export async function acceptAiDisclosure(): Promise<boolean> {
   if (!supabaseClient) return false;

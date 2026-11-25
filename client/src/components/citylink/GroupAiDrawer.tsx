@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Sparkles, X } from "lucide-react";
 import {
   AI_CHAT_LIMITS,
@@ -10,8 +10,10 @@ import {
 import {
   acceptAiDisclosure,
   beginGroupAiRequest,
+  getGroupAiUsage,
   newIdempotencyKey,
   waitForAiAnswer,
+  type GroupAiUsage,
 } from "@/lib/aiChatRequests";
 import { AI_RATE_LIMITS } from "@shared/aiRateLimit";
 import { sendGroupChatMessage } from "@/lib/supabaseStage6";
@@ -98,6 +100,30 @@ export default function GroupAiDrawer({
     groupToday: number | null;
     userToday: number | null;
   } | null>(null);
+  // The read-only usage RPC, refreshed whenever the drawer opens. `null` with a
+  // "ready" phase means the read failed, which is shown as unavailable rather
+  // than as zero used.
+  const [liveUsage, setLiveUsage] = useState<GroupAiUsage | null>(null);
+  const [usagePhase, setUsagePhase] = useState<
+    "loading" | "ready" | "unavailable"
+  >("loading");
+
+  const loadUsage = useCallback(async () => {
+    if (!groupId) {
+      setLiveUsage(null);
+      setUsagePhase("unavailable");
+      return;
+    }
+    setUsagePhase("loading");
+    const next = await getGroupAiUsage(groupId);
+    setLiveUsage(next);
+    setUsagePhase(next ? "ready" : "unavailable");
+  }, [groupId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void loadUsage();
+  }, [open, loadUsage]);
 
   const eligibleFiles = useMemo(
     () => files.filter(file => file.status === "current"),
@@ -178,6 +204,9 @@ export default function GroupAiDrawer({
           });
         }
         setFeedback(describeRefusal(begun));
+        // The refusal is authoritative, but the panel should not keep showing
+        // yesterday's numbers if the read succeeds now.
+        void loadUsage();
         return;
       }
       // Adam, 2026-11-25 14:52: the question belongs in the room, like any other
@@ -201,11 +230,13 @@ export default function GroupAiDrawer({
       }
       if (state.status === "failed") {
         setFeedback(state.errorCode ?? AI_CHAT_COPY.providerFailed);
+        void loadUsage();
       } else {
         // Still queued or processing when the wait ran out. The request is real
         // and the answer may still arrive, so this is not reported as a failure.
         setPending(true);
         setFeedback(AI_CHAT_COPY.stillPending);
+        void loadUsage();
       }
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : String(error));
@@ -278,7 +309,34 @@ export default function GroupAiDrawer({
             <span className="citylink-ai-drawer__meta-detail">
               UTC 00:00 重置
             </span>
-            {usage && (
+            {usagePhase === "ready" && liveUsage && (
+              <span className="citylink-ai-drawer__meta-detail">
+                {AI_CHAT_COPY.usageToday(
+                  liveUsage.userToday,
+                  liveUsage.userLimit || AI_RATE_LIMITS.perUserPerDay,
+                  liveUsage.groupToday,
+                  liveUsage.groupLimit || AI_RATE_LIMITS.perGroupPerDay
+                )}
+              </span>
+            )}
+            {usagePhase === "ready" && liveUsage && liveUsage.inFlight > 0 && (
+              <span className="citylink-ai-drawer__meta-warn">
+                {AI_CHAT_COPY.usageInFlight}
+              </span>
+            )}
+            {usagePhase === "loading" && (
+              <span className="citylink-ai-drawer__meta-detail">
+                {AI_CHAT_COPY.usageLoading}
+              </span>
+            )}
+            {usagePhase === "unavailable" && (
+              <span className="citylink-ai-drawer__meta-detail">
+                {AI_CHAT_COPY.usageUnavailable}
+              </span>
+            )}
+            {/* Only shown when the live read did not produce numbers: the refusal
+                detail is then the best evidence, and it is labelled as old. */}
+            {usagePhase !== "ready" && usage && (
               <span className="citylink-ai-drawer__meta-warn">
                 上次查詢：今天已用 {usage.userToday ?? "?"}／
                 {AI_RATE_LIMITS.perUserPerDay} 次（此群組{" "}
