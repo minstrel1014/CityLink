@@ -74,6 +74,10 @@ create table if not exists public.group_files (
   detected_mime text,
   byte_size bigint,
   analysis_status text not null default 'none',
+  -- P1 stores this as `not null unique`; nullable here so the existing scenario
+  -- rows keep inserting. The deploy-5 apply test sets values explicitly, because
+  -- whether a key is handed to the worker is exactly what that test proves.
+  object_key text unique,
   status text not null default 'current',
   deleted_at timestamptz,
   retention_expires_at timestamptz,
