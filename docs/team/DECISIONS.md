@@ -2498,3 +2498,15 @@ Adam, 14:04: 「it shows 今天在這裡問得太多了，請約 18 小時後再
 **Consequence, stated plainly.** Adam cannot ask again from that account until 08:00 Taipei, and nothing in this round changes that: the caps are server-side constants in the applied RPC, and raising them would be a SQL revision requiring its own authorisation, Role 6 review, preflight and migration cycle. Deleting rows to free quota would be a Launch write and is not authorised. The cheap path is another account (each has its own 10) or waiting.
 
 **Checks.** `pnpm check` clean; `pnpm test` **856/856** (57 files; +1 from the cap-copy test); `build:static` ok. Canonical `4c0a958`; demo `684d761`, auto-published `buildId=15c8bcf62c3c51ca`, `assets/index-QN85zCsN.js` + `assets/index-txmrmRpr.css`, both read back and confirmed to carry the new copy and the `.72rem`/`max-height` rules.
+
+## 2026-11-25 14:18 — Correction: the per-user cap is account-wide, and the reset clock was a minute early
+
+Adam, 14:16, quoted the sentence back: 「你今天在這裡的 AI 提問次數已用完（每人每天有上限，其他群組不受影響），約 18 小時後、07:59 左右重置。」Both halves were wrong, and the contract already said so.
+
+**Scope.** `begin_group_ai_request` computes `v_user_today` with `where q.asked_by = v_actor` and **no group filter**, so the 10-per-day ceiling is shared by every group the person belongs to. Contract §6 (line 179) has said 「10（跨所有群組，UTC 日界）」since the quota section was written; my copy contradicted a fact the repo already recorded. The sentence now reads 「你今天問 AI 的次數已用完（每人每天有上限，所有群組共用同一個額度）」, and a test pins both the correct claim and the absence of the false one. The practical consequence is what Adam would have hit next: switching to another group does **not** restore quota; only another account or the UTC boundary does.
+
+**Clock.** `retry_after` is `floor(epoch until v_day_start + 1 day)`, i.e. up to 999 ms short of the boundary. Adding it raw to `Date.now()` printed 07:59 for a reset that happens at 08:00 Taipei. The clock is now computed from `Math.ceil(seconds / 60) * 60_000`, so the printed minute is the first minute after the reset, never one before it.
+
+**Checks.** `pnpm check` clean; `pnpm test` **856/856** (57 files); `build:static` ok. Canonical `031080b`; demo `c8e11dd`, auto-published `buildId=154369e872a07f8d`, `assets/index-ynu6RYqj.js`, read back and confirmed to contain 「所有群組共用同一個額度」 and no 「其他群組不受影響」.
+
+**Note on this round.** Three successive attempts at one sentence, each wrong in a different way (raw code and seconds → wrong owner → wrong scope). The pattern is that I wrote product copy from the drawer's perspective instead of from the RPC's actual predicates. The fix for the remaining rounds is to read the counting SQL before writing the sentence, not after Adam sees it.
