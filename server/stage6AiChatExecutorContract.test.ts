@@ -70,6 +70,10 @@ describe("group AI executor, statically", () => {
 
   it("refuses callers that do not present the service-role key", () => {
     expect(executor).toContain('request.headers.get("authorization")');
-    expect(executor).toContain('{ error: "unauthorized" }');
+    // Deployed version 6 reports why it refused: the role claim it saw and how
+    // long the token was. A bare 401 cost three debugging rounds on 2026-11-25.
+    expect(executor).toContain('error: "unauthorized"');
+    expect(executor).toContain("role:");
+    expect(executor).toContain("token_length:");
   });
 });

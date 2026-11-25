@@ -74,10 +74,6 @@ export const AI_CHAT_CONSENT_STATEMENTS: readonly ConsentStatement[] = [
 
 export type ConsentState = Record<string, boolean>;
 
-export function initialConsentState(): ConsentState {
-  return Object.fromEntries(AI_CHAT_CONSENT_STATEMENTS.map(s => [s.id, false]));
-}
-
 export function isConsentComplete(state: ConsentState): boolean {
   return AI_CHAT_CONSENT_STATEMENTS.every(s => state[s.id] === true);
 }
@@ -85,6 +81,50 @@ export function isConsentComplete(state: ConsentState): boolean {
 export type ConsentDecision =
   | { canAsk: true; reason: null }
   | { canAsk: false; reason: "ai_chat_consent_incomplete" };
+
+/**
+ * Remembers the disclosure choice.
+ *
+ * Adam, 2026-11-25: the drawer must stop asking on every question. One accepted
+ * disclosure is remembered on the device and pre-ticks the box; the server still
+ * keeps its own timestamp (`accept_ai_disclosure`), so this is a convenience, not
+ * the record of consent. Clearing site data asks again.
+ */
+const REMEMBERED_CONSENT_KEY = "citylink.ai-disclosure.v1";
+
+function storage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function initialConsentState(): ConsentState {
+  const remembered = storage()?.getItem(REMEMBERED_CONSENT_KEY) === "accepted";
+  return Object.fromEntries(
+    AI_CHAT_CONSENT_STATEMENTS.map(s => [s.id, remembered])
+  );
+}
+
+/** Returns true when the device had already remembered the choice. */
+export function rememberConsent(): boolean {
+  const previous = storage()?.getItem(REMEMBERED_CONSENT_KEY) === "accepted";
+  try {
+    storage()?.setItem(REMEMBERED_CONSENT_KEY, "accepted");
+  } catch {
+    // A blocked storage must not block asking; the server timestamp still exists.
+  }
+  return previous;
+}
+
+export function forgetConsent(): void {
+  try {
+    storage()?.removeItem(REMEMBERED_CONSENT_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 export function decideAskAi(state: ConsentState): ConsentDecision {
   return isConsentComplete(state)

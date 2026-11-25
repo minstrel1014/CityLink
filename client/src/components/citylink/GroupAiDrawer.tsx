@@ -6,13 +6,18 @@ import {
   type ChatTurn,
   type SelectableFile,
 } from "@shared/aiChatContext";
-import { applyContextNotice, finaliseAiReply } from "@shared/aiChatReply";
-import { composeMockReply } from "@shared/aiChatMockReply";
+import {
+  acceptAiDisclosure,
+  beginGroupAiRequest,
+  newIdempotencyKey,
+  waitForAiAnswer,
+} from "@/lib/aiChatRequests";
 import {
   AI_CHAT_CONSENT_STATEMENTS,
   AI_CHAT_COPY,
   decideAskAi,
   initialConsentState,
+  rememberConsent,
   type ConsentState,
 } from "@/lib/aiChatConsent";
 import "./GroupAiDrawer.css";
@@ -20,10 +25,10 @@ import "./GroupAiDrawer.css";
 /**
  * The group AI drawer.
  *
- * Front-end only on this branch: the answer is produced by the shared mock, so
- * nothing leaves the browser and no key exists. The real provider call replaces
- * `composeMockReply` with one server request; the context assembly, the notice and
- * the length policy stay exactly as they are here.
+ * The drawer only asks. It calls `begin_group_ai_request`, waits for the
+ * server-side executor to finish, then closes: the answer arrives as a normal
+ * chat message, so nothing is rendered from a local copy that the next read
+ * would duplicate.
  */
 export default function GroupAiDrawer({
   groupId,
@@ -32,7 +37,6 @@ export default function GroupAiDrawer({
   files,
   filesUnavailable = false,
   onClose,
-  onAiMessage,
 }: {
   groupId: string;
   open: boolean;
@@ -41,7 +45,8 @@ export default function GroupAiDrawer({
   /** The list could not be read; say so rather than implying there are none. */
   filesUnavailable?: boolean;
   onClose: () => void;
-  onAiMessage: (body: string) => void;
+  /** Kept for call-site compatibility; the answer now arrives as a chat message. */
+  onAiMessage?: (body: string) => void;
 }) {
   const [question, setQuestion] = useState("");
   const [consent, setConsent] = useState<ConsentState>(() =>
@@ -50,7 +55,6 @@ export default function GroupAiDrawer({
   const [showConsent, setShowConsent] = useState(false);
   const [selectedFileIds, setSelectedFileIds] = useState<string[]>([]);
   const [contextStartsAt, setContextStartsAt] = useState<string | null>(null);
-  const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -71,7 +75,7 @@ export default function GroupAiDrawer({
     );
   };
 
-  const submit = () => {
+  const submit = async () => {
     if (!question.trim()) {
       setFeedback(AI_CHAT_COPY.emptyQuestion);
       return;
@@ -80,35 +84,44 @@ export default function GroupAiDrawer({
       setShowConsent(true);
       return;
     }
-
     setBusy(true);
     setFeedback("");
+    const alreadyAccepted = rememberConsent();
     try {
-      const context = buildAiChatContext({
-        question,
-        history,
-        files: eligibleFiles.filter(file => selectedFileIds.includes(file.id)),
-        contextStartsAt,
+      // `accept_ai_disclosure` overwrites the timestamp (open item S-3), so it is
+      // called only on the first acceptance on this device.
+      if (!alreadyAccepted) await acceptAiDisclosure();
+      const begun = await beginGroupAiRequest({
         groupId,
+        question,
+        fileIds: selectedFileIds,
+        idempotencyKey: newIdempotencyKey(),
       });
-
-      const raw = composeMockReply({
-        question: context.question,
-        turns: context.turns,
-        files: context.files,
-      });
-      const finalised = finaliseAiReply(
-        applyContextNotice(raw, context.notice)
-      );
-
-      setAnswer(finalised.body);
-      onAiMessage(finalised.body);
+      if (!begun.ok) {
+        setFeedback(
+          begun.retryAfter
+            ? `${begun.code} · ${begun.retryAfter}s`
+            : `${begun.code}: ${begun.message}`
+        );
+        return;
+      }
+      const state = await waitForAiAnswer(begun.requestId);
+      if (state.status === "ready") {
+        // The answer is already a chat message written by the executor; closing
+        // lets the normal chat refresh show it. Injecting it here would duplicate
+        // it on the next read.
+        setQuestion("");
+        onClose();
+        return;
+      }
+      setFeedback(state.errorCode ?? AI_CHAT_COPY.providerFailed);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
       setShowConsent(false);
     }
   };
-
   return (
     <aside className="citylink-ai-drawer" aria-label={AI_CHAT_COPY.drawerTitle}>
       <header className="citylink-ai-drawer__header">
@@ -209,13 +222,6 @@ export default function GroupAiDrawer({
           {busy ? "…" : showConsent ? AI_CHAT_COPY.send : AI_CHAT_COPY.button}
         </button>
       </div>
-
-      {answer && (
-        <article className="citylink-ai-drawer__answer" aria-live="polite">
-          <h3>{AI_CHAT_COPY.drawerTitle}</h3>
-          <p>{answer}</p>
-        </article>
-      )}
     </aside>
   );
 }
