@@ -26,6 +26,10 @@ const extraction = readFileSync(
   path.resolve(here, "../supabase/functions/group-ai-executor/extraction.ts"),
   "utf8"
 );
+const promptSource = readFileSync(
+  path.resolve(here, "../supabase/functions/group-ai-executor/prompt.ts"),
+  "utf8"
+) as string;
 const denoConfig = JSON.parse(
   readFileSync(
     path.resolve(here, "../supabase/functions/group-ai-executor/deno.json"),
@@ -47,11 +51,31 @@ describe("group AI executor, statically", () => {
     // Adam, 2026-11-25 14:36: 「it should be able to answer question like i using a
     // gen ai」. The prompt used to say 「只根據提供的對話與檔案內容回答」, so
     // "what is mobile app?" came back as 資料不足. Pin the two halves that matter:
-    // general knowledge is allowed, inventing group facts is not.
-    expect(executor).toContain("像一般生成式 AI 一樣回答");
-    expect(executor).toContain("不需要先有群組資料");
-    expect(executor).not.toContain("只根據提供的對話與檔案內容回答");
-    expect(executor).toContain("不要編造這個群組裡沒發生過的事");
+    // general knowledge is allowed, inventing group facts is not. These strings live
+    // in `prompt.ts` since 2026-11-26, so the behaviour suite can execute them; the
+    // entry point only has to reach that module.
+    expect(promptSource).toContain("像一般生成式 AI 一樣回答");
+    expect(promptSource).toContain("不需要先有群組資料");
+    expect(promptSource).not.toContain("只根據提供的對話與檔案內容回答");
+    expect(promptSource).toContain("不要編造這個群組裡沒發生過的事");
+    expect(executor).toContain('from "./prompt.ts"');
+    expect(executor).toContain("buildSystemPrompt(ANSWER_CAP)");
+    expect(executor).toContain("buildUserPrompt(request.turns");
+  });
+
+  it("renders the transcript with the keys the applied function sends", () => {
+    // The 2026-11-25 defect: `begin_group_ai_request` writes 'authorName' /
+    // 'authorKind' (deploy 2 line 438) and `index.ts` read `turn.sender_name`, so
+    // every line — the assistant's own answers included — became 「成員」. The camelCase
+    // pair must stay the primary read, and the count must stay in the prompt.
+    expect(promptSource).toContain("turn.authorKind ?? turn.author_kind");
+    expect(promptSource).toContain("turn.authorName ?? turn.sender_name");
+    expect(promptSource).toContain('"CityLink AI"');
+    expect(promptSource).toContain("共 ${lines.length} 則");
+    expect(promptSource).toContain("不得說群組沒有發言過或記錄是空的");
+    // Only one place decides the prompt now; a second copy could drift back in.
+    expect(executor).not.toContain("function systemPrompt");
+    expect(executor).not.toContain("你是 CityLink 的群組助理");
   });
 
   it("uses the shared dropped-context notice verbatim", () => {
