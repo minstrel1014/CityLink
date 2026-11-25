@@ -32,8 +32,18 @@ const deploy2Path = path.resolve(
   here,
   "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql"
 );
+const deploy3Path = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY3.sql"
+);
+const deploy4Path = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY4.sql"
+);
 const deploy1 = readFileSync(proposalPath, "utf8");
 const deploy2 = readFileSync(deploy2Path, "utf8");
+const deploy3 = readFileSync(deploy3Path, "utf8");
+const deploy4 = readFileSync(deploy4Path, "utf8");
 const contractPath = path.resolve(
   here,
   "../docs/stage6/KAYK_AI_CHAT_CONTRACT_DRAFT.md"
@@ -595,5 +605,25 @@ describe("ai chat migration proposal, statically", () => {
     for (const token of codes) {
       expect(contract, `contract does not document ${token}`).toContain(token);
     }
+  });
+
+  it("grants deploy 3's claim to service_role and to nobody else", () => {
+    // Role 6 C-1(b): the ninth function has to be inside the pin system, not merely
+    // reviewed by eye. Supabase's default privileges grant every new function to
+    // authenticated, so a missing revoke here is a live privilege escalation.
+    expect(deploy3).toContain(
+      "revoke all on function public.claim_next_group_ai_request()\n  from public, anon, authenticated, service_role;"
+    );
+    expect(deploy3).toContain(
+      "grant execute on function public.claim_next_group_ai_request() to service_role;"
+    );
+    expect(deploy3.match(/grant execute/g)).toHaveLength(1);
+    expect(deploy3).not.toMatch(/to (anon|authenticated)\s*;/);
+  });
+  it("indexes the queue with the same predicate the claim filters on", () => {
+    // Role 6 C-3: a partial index is only used when the predicate matches literally.
+    expect(deploy4).toContain("where status = 'queued';");
+    expect(deploy4).toContain("on public.group_ai_requests (created_at, id)");
+    expect(deploy3).toContain("where q.status = 'queued'");
   });
 });

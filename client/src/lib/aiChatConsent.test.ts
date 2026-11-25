@@ -64,10 +64,14 @@ describe("the two mandated sentences appear verbatim", () => {
     );
   });
 
-  it("names the provider, the route and the country", () => {
-    expect(allText).toContain("OpenRouter");
-    expect(allText).toContain("DeepSeek");
-    expect(allText).toContain("中國大陸");
+  it("names the provider and the country", () => {
+    expect(allText).toContain("xAI");
+    expect(allText).toContain("美國");
+  });
+  it("does not name a provider we no longer call", () => {
+    expect(allText).not.toContain("OpenRouter");
+    expect(allText).not.toContain("DeepSeek");
+    expect(allText).not.toContain("中國大陸");
   });
 
   it("says the answer is written into the group chat", () => {

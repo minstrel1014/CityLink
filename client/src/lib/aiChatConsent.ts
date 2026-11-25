@@ -47,7 +47,7 @@ export const AI_CHAT_CONSENT_STATEMENTS: readonly ConsentStatement[] = [
   },
   {
     id: "external-provider",
-    text: "這些內容會離開 CityLink，送到外部 provider：OpenRouter 轉送 DeepSeek，而 DeepSeek 是中國大陸 provider，內容會在中國大陸處理。",
+    text: "這些內容會離開 CityLink，送到外部 provider：xAI（美國），內容會在美國處理。",
   },
   {
     id: "written-to-chat",

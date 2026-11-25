@@ -120,6 +120,7 @@ revoke all on table public.group_ai_requests from service_role;
 **狀態機：`queued → processing → ready|failed`（Role 6 F-3）。** 上一版 `processing` 是不可達的枚举值，且 `finish` 可被重複呼叫——逾時重試會插入**兩則** CityLink AI 訊息回答同一個問題。現在：
 
 - `claim_group_ai_request`（僅 `service_role`）以 `update ... set status='processing', claimed_at=now() where id = $1 and status = 'queued' returning id` 宣告接手；回傳 false 表示別人已接手或已完成，伺服器就不呼叫 provider。這讓「有沒有伺服器在做」變成可觀測的事實，而不是猜測。
+  **部署 3 補上執行者真正需要的那一步（Adam 2026-11-25 選項 A）。** `claim_group_ai_request` 只回傳 boolean，而 `group_ai_requests` 對 `service_role` 也是 revoke 的，worker 因此拿不到題目本身。新增 `claim_next_group_ai_request()`（僅 `service_role`）：以 `status = 'queued' order by created_at, id limit 1 for update skip locked` 取最舊的一列，更新成 `processing` 並回傳 `id, group_id, question, turns, files, chat_chars, file_chars, files_used, dropped_context`。空佇列回 0 列、不報錯；`skip locked` 讓兩個 worker 同時輪詢時不會拿到同一列。**尚未實測的是「兩個真實會話同時呼叫」的排他性**——Role 6 把它列為 QA 前置而非審查阻擋，理由是最壞情況被 `finish` 的 unique partial index 擋成一次 `23505` 失敗回寫，不會產生第二則 AI 訊息。
 - `finish_group_ai_request` 只從非終止狀態轉換：`update ... where id = $1 and status in ('queued','processing') returning id`。若更新不到任何列，代表已 `ready`／`failed`，此時**回傳既有 `message_id`**（以 `ai_request_id` 查），不插入第二則訊息。重試因此安全。
 - 停在同一狀態超過 120 秒的 `processing` 由限流視為死亡（見 §2.1），可被重新接手。
 
@@ -142,15 +143,17 @@ revoke all on table public.group_ai_requests from service_role;
 
 **逐支函式的授權（Role 6 R-2 要求，取代上一版那一句摘要）。** 上一版只對 `begin`／`clear`／`list_group_chat_messages_ai` 寫了 revoke，`claim` 與 `finish` 完全沒有——而 PostgreSQL 對新函式預設授與 **PUBLIC** `EXECUTE`，`authenticated` 是 PUBLIC 的成員。照那段字面寫出來的 migration 會讓**任何登入者**直接呼叫 `finish_group_ai_request`，自己插入一條 `author_kind='ai'`、署名 CityLink AI 的訊息，正好把 Adam 批准 B-1 時要建立的性質（AI 寫入只有一個閘門）重新打開。同一版也沒寫 `claim`／`finish` 是 `security definer`：表權限已全數 revoke，security invoker 版本在 `update`／`insert` 時會 permission denied，照文件寫不出能動的 SQL。因此本節改成逐支列出，且 SQL §8 一律「先 revoke 全部（指名 `public, anon, authenticated, service_role`）再 grant」：
 
-| 函式（簽章）                                                                             | 執行身分           | `set search_path = ''` | revoke 對象                                 | grant `EXECUTE` 給    | actor 來源                           |
-| ---------------------------------------------------------------------------------------- | ------------------ | ---------------------- | ------------------------------------------- | --------------------- | ------------------------------------ |
-| `private.list_group_chat_messages_page(uuid,timestamptz,uuid,integer)`                   | `security definer` | 是                     | `public, anon, authenticated, service_role` | **無人**              | 內部委派，不對外                     |
-| `public.list_group_chat_messages_ai(uuid,timestamptz,uuid,integer)`                      | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                         |
-| `public.begin_group_ai_request(uuid,text,uuid[],uuid)`                                   | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                         |
-| `public.clear_group_ai_context(uuid)`                                                    | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                         |
-| `public.accept_ai_disclosure()`                                                          | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                         |
-| `public.get_group_ai_request_status(uuid)`                                               | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()` + `can_read_group_chat` |
-| `public.finish_group_ai_request(uuid,text,boolean,boolean,integer,integer,integer,text)` | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`（F-4）             |
+| 函式（簽章）                                                                             | 執行身分           | `set search_path = ''` | revoke 對象                                 | grant `EXECUTE` 給    | actor 來源                            |
+| ---------------------------------------------------------------------------------------- | ------------------ | ---------------------- | ------------------------------------------- | --------------------- | ------------------------------------- |
+| `private.list_group_chat_messages_page(uuid,timestamptz,uuid,integer)`                   | `security definer` | 是                     | `public, anon, authenticated, service_role` | **無人**              | 內部委派，不對外                      |
+| `public.list_group_chat_messages_ai(uuid,timestamptz,uuid,integer)`                      | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                          |
+| `public.begin_group_ai_request(uuid,text,uuid[],uuid)`                                   | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                          |
+| `public.clear_group_ai_context(uuid)`                                                    | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                          |
+| `public.accept_ai_disclosure()`                                                          | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()`                          |
+| `public.get_group_ai_request_status(uuid)`                                               | `security definer` | 是                     | 同上                                        | `authenticated`       | `auth.uid()` + `can_read_group_chat`  |
+| `public.claim_group_ai_request(uuid)`                                                    | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`                     |
+| `public.claim_next_group_ai_request()`                                                   | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`；回傳九欄（部署 3） |
+| `public.finish_group_ai_request(uuid,text,boolean,boolean,integer,integer,integer,text)` | `security definer` | 是                     | 同上                                        | **僅 `service_role`** | 不看 `auth.uid()`（F-4）              |
 
 三個重點：(1) **revoke 一定指名 `service_role`**——Supabase 的 `ALTER DEFAULT PRIVILEGES FOR ROLE postgres` 會把新物件自動授與 `anon`／`authenticated`／`service_role`（P1 preflight 實測過預設權限的存在），只寫 `from public, anon` 等於留下一條沒有人授權過卻確實存在的路徑；(2) 表（`group_ai_context`／`group_ai_requests`）**不授任何權限給任何角色**，寫入只透過上表的 definer 函式；(3) `private` 那支 helper 不給任何人 `EXECUTE`，只由兩支 public definer 函式委派。**apply 測試實測**：`set role authenticated` 呼叫 `claim`／`finish` 得到 `permission denied`，`set role service_role` 能 claim+finish 但對兩張表仍是 permission denied。
 
@@ -162,7 +165,7 @@ revoke all on table public.group_ai_requests from service_role;
 
 **舊讀取路徑的過渡風險要寫成驗收條件（Role 6 F-6）。** 仍走舊函式的客戶端拿不到 `author_kind`，會把 AI 回答顯示成一般成員訊息。若這狀態變成常態，§7 第 3 項「回答會以 CityLink AI 名義寫進聊天室」對那些客戶端就不成立。**P2 驗收項：AI 回答正式上線前，所有讀取聊天室的介面都必須改用 `_ai` 版本**；舊函式只為未更新的舊客戶端保留。
 
-**provider 呼叫不在資料庫內。** `begin_group_ai_request` 只做權限、資格、context 組裝與排隊；伺服器（Edge Function 或 Express，形狀已是 `server/ai/chat/answerQuestion.ts`）先 `claim`、呼叫 OpenRouter／DeepSeek、再以 `service_role` 呼叫 `finish_group_ai_request` 寫回。資料庫不持有 key。
+**provider 呼叫不在資料庫內。** `begin_group_ai_request` 只做權限、資格、context 組裝與排隊；伺服器（Edge Function 或 Express，形狀已是 `server/ai/chat/answerQuestion.ts`）先 `claim_next_group_ai_request` 取回待答的那一列、呼叫 **xAI**（模型 id 由環境變數指定，不寫死在程式裡）、再以 `service_role` 呼叫 `finish_group_ai_request` 寫回。資料庫不持有 key。**provider 於 2026-11-25 由 OpenRouter／DeepSeek 改為 xAI**，理由與範圍見 `DECISIONS.md` 同日紀錄；本檔此後只描述 xAI。
 
 **trigger 現況。** `group_chat_messages` 上沒有任何 trigger（該 migration 的三個 trigger 全在 `group_recruitment_posts`），所以插入 AI 列不會被成員資格 trigger 擋下。這一點 Role 6 要求寫進契約，已記錄。
 
@@ -195,7 +198,7 @@ revoke all on table public.group_ai_requests from service_role;
 - **G-5（時間源）：全用交易開始的單一 `now()`。** 殭屍判定（`claimed_at < now() - interval '120 seconds'`）與 `retry_after` 的算式必須同源，否則同一次呼叫裡兩次 `now()` 就能算出「還有 -3 秒」之類的矛盾值。SQL 把 `now()` 取一次存進區域變數，所有比較與減法都用它；`retry_after` 以 `greatest(1, …)` 下限包住，且 `in_flight` 給 15 秒估計值、每日上限給到下一個 UTC 零時的秒數。
   **操作性定義（Adam 2026-11-25 第三批裁決 (b)：不改程式，改這半句）：**「進行中」一律以 **`created_at`** 起算，即 `status in ('queued','processing') and created_at > now() - interval '120 seconds'`，也就是部署 2 第 352 行的寫法。本節出現的 `claimed_at` 式子只用於每日配額「從未被人接手就不計入」那個排除條件（第 340／346 行）。兩者只在「某列在佇列裡待超過 120 秒才被接手」時不同，那種情況下**以 `created_at` 這句為準**。
   **TZ（Adam 2026-11-25 第三批裁決「follow suggestions」，對應第二審查者 item 4）：** 日界現在寫成 `date_trunc('day', now(), 'UTC')`，不再是 `date_trunc('day', now())`。舊寫法的「今天」依**連線端** `TimeZone` 解釋：preflight 量到 Launch 是 UTC 所以兩種寫法等值，但 session 模式的 pooler、套用者自己的 psql 環境、或日後有人改 GUC，都會讓配額重置點和 `retry_after`（同一個 `v_day_start`）一起漂移，而客戶端 `shared/aiRateLimit.ts` 用的是 `Date.UTC`、不會跟著漂移。Pin 之後兩邊是結構一致，不再依賴伺服器設定。**實測：** 把連線 `set time zone 'Etc/GMT+8'`（POSIX 記法＝UTC−8）後，十條寫在「今天 00:30 UTC」的列仍然吃掉該成員的當日配額並拋 `45N06 reason=user_daily user_today=10`；同一支測試跑在上一版 blob（`045546fd…` 之後的 `de5eb18f…`）上得到的是**成功**——那一次提問被放行了，這就是這條修改的鑑別力。靜側另有一條釘選：本檔可執行文字中不得再出現不帶時區的 `date_trunc('day', now())`。
-- **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 實作結案。
+- **G-4（`claim` 是否需要）** 已隨 F-3 的 `claim_group_ai_request` 與部署 3 的 `claim_next_group_ai_request` 實作結案：前者回答「這一列被接手了嗎」，後者回答「下一個該做的是哪一列」。兩者都只給 `service_role`。
 
 ## 3. Context 預算與規則（產品行為，已定案）
 
@@ -257,7 +260,7 @@ revoke all on table public.group_ai_requests from service_role;
 **必須包含下列五項；其中第 1、4 項為逐字強制，測試以完全相等比對；其餘三項以包含比對（Role 6 C-7）。**
 
 1. **「AI 會讀取本群組聊天記錄」**——逐字。本次提問、最近的對話、選取的檔案文字。
-2. 內容會離開 CityLink，送到 OpenRouter 轉送的 DeepSeek，而 **DeepSeek 是中國大陸 provider**。
+2. 內容會離開 CityLink，送到 **xAI（美國 provider）**，內容會在美國處理。
 3. 回答會以「CityLink AI」名義寫進聊天室，全組可見。
 4. **「前成員仍可讀取 AI 回答」**——逐字。退出或被移除後，聊天室歷史（含 AI 回答）仍可見。
 5. 每次提問重新同意，不記住選擇。
@@ -362,7 +365,7 @@ revoke all on table public.group_ai_requests from service_role;
 - **F-11 原問題：** `begin_group_ai_request` 無法知道提問者是否看過揭露文字。任何能構造請求的 active 成員，都能在不見揭露的情況下把群組對話與檔案內容送到中國大陸 provider。前端同意是 UI 承諾，不是可驗證的事實。
 - **F-11 裁決：** 「在伺服器端記錄一次接受，並在 `begin` 檢查。」落點：`profiles.ai_disclosure_accepted_at timestamptz`（可為 NULL，**不 backfill**——既有使用者未曾看過新揭露文字，預設接受等於把未取得的同意寫進資料庫）；新 RPC `accept_ai_disclosure()` 由本人在抽屜勾選後呼叫；`begin_group_ai_request` 在任何寫入**之前**檢查該欄位，未接受即拋 `45N09 group_ai_disclosure_required`。**已知局限（記錄，不掩蓋）：** 它記錄的是「該帳號在該時點按過接受」，不是「讀過並理解」；它堵掉的是「繞過前端直接構造請求」，堵不掉想法改變。**與 §7 第 5 項的關係：** 同意只記一次（Adam 選擇），所以「每次提問重新同意」變成純 UI 行為——每次都要求勾選，伺服器只在第一次寫入時間戳。兩邊不一致時以伺服器為準，本檔不做修飾。
 - **F-12 原問題：** context 含其他成員最多 4,000 字元訊息與 10,000 字元群組檔案文字，由提問者一人同意即外送，其他成員沒有退出機制，而 §5 規定保留永久。
-- **F-12 裁決：** **選項 c**——既不做群組級 AI 開關，也不做成員級退出，而是**把接受寫明白**：揭露文字必須點出「你的提問會把本群組其他成員的聊天記錄與本群組檔案文字一併送給 OpenRouter 轉送的 DeepSeek（中國大陸 provider），其他成員無法單獨退出」。SQL 因此刻意**沒有** `ai_enabled`／opt-out 欄位或 trigger（本輪新增靜態測試擋住這類欄位出現）。這一項的合規判斷屬 Adam／產品；Kayk 不自行評估法律效果。
+- **F-12 裁決：** **選項 c**——既不做群組級 AI 開關，也不做成員級退出，而是**把接受寫明白**：揭露文字必須點出「你的提問會把本群組其他成員的聊天記錄與本群組檔案文字一併送給 xAI（美國 provider），其他成員無法單獨退出」。SQL 因此刻意**沒有** `ai_enabled`／opt-out 欄位或 trigger（本輪新增靜態測試擋住這類欄位出現）。這一項的合規判斷屬 Adam／產品；Kayk 不自行評估法律效果。
 - **C-4 裁決（先前已定，連同數字入檔）：** 交易式檢查在 `begin_group_ai_request` 內、寫 request 列之前；上限 20／群組／UTC 日、10／成員／UTC 日、1 個並行；`queued`／`processing` 超過 120 秒視為死亡；拋 `group_ai_rate_limited`（45N06），`retry_after` 與 `reason` 放在 `DETAIL`。
 
 ### 11.3 第三輪（focused，2026-11-24）的發現與處置

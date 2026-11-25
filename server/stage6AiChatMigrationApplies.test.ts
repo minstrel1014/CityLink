@@ -31,6 +31,10 @@ const deploy2Path = path.resolve(
   here,
   "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY2.sql"
 );
+const deploy3Path = path.resolve(
+  here,
+  "../docs/stage6/KAYK_AI_CHAT_MIGRATION_PROPOSAL_DEPLOY3.sql"
+);
 const stubPath = path.resolve(here, "fixtures/aiChatStubSchema.sql");
 const scenarioPath = path.resolve(here, "fixtures/aiChatScenario.sql");
 const baseUri = process.env.CITYLINK_TEST_PG_URI ?? "postgres:///postgres";
@@ -238,6 +242,10 @@ function applyDeploy1(database: string): Run {
 /** Deploy 2: validation, indexes, the read/write path, the status RPC and all grants. */
 function applyDeploy2(database: string): Run {
   return applyFile(database, deploy2Path);
+}
+/** Deploy 3: the service-role-only claim that returns the row the executor must answer. */
+function applyDeploy3(database: string): Run {
+  return applyFile(database, deploy3Path);
 }
 
 /**
@@ -1738,3 +1746,82 @@ describe.skipIf(!available)("group ai chat migration proposal applies", () => {
 function KEY(n: number): string {
   return `f0000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
+
+describe("deploy 3, the executor's claim", () => {
+  /** Deploy 1 and 2, then deploy 3, then the scenario rows. */
+  function provisionedWithDeploy3(run: (database: string) => void): void {
+    provisioned(database => {
+      const third = applyDeploy3(database);
+      expect(third.stderr).not.toContain("ERROR");
+      expect(third.status).toBe(0);
+      run(database);
+    });
+  }
+  it("returns the oldest queued request, whole row, and marks it processing", () => {
+    provisionedWithDeploy3(database => {
+      accept(database, ASKER);
+      const oldest = requestIdFrom(
+        askOnce(database, ASKER, GROUP, "oldest", KEY(41))
+      );
+      // Two queued rows are otherwise unreachable: in-flight is 1 per group. Pushing
+      // the first past the 120-second window is the documented stale-row rule, not a
+      // test-only bypass, and it is also what makes "oldest first" observable.
+      exec(
+        database,
+        `update public.group_ai_requests set created_at = now() - interval '10 minutes' ` +
+          `where id = '${oldest}';`
+      );
+      const newer = requestIdFrom(
+        askOnce(database, ASKER, GROUP, "newer", KEY(42))
+      );
+      // One call, one claim: every call consumes the next row, so the whole row has to
+      // be read in the same statement as the id, not in a follow-up probe.
+      expect(
+        one(
+          database,
+          "set role service_role; select id::text || '/' || question || '/' || " +
+            "group_id::text || '/' || jsonb_array_length(files)::text " +
+            "from public.claim_next_group_ai_request()"
+        )
+      ).toBe(`${oldest}/oldest/${GROUP}/0`);
+      expect(
+        one(
+          database,
+          `select status from public.group_ai_requests where id = '${oldest}'`
+        )
+      ).toBe("processing");
+      expect(
+        one(
+          database,
+          "set role service_role; select id::text from public.claim_next_group_ai_request()"
+        )
+      ).toBe(newer);
+    });
+  });
+  it("returns no rows, and no error, when the queue is empty", () => {
+    provisionedWithDeploy3(database => {
+      // `sql()` keeps psql's table decoration; `one()` is the -tA form this suite uses
+      // whenever the value itself is the assertion.
+      expect(
+        one(
+          database,
+          "set role service_role; select count(*)::text from public.claim_next_group_ai_request()"
+        )
+      ).toBe("0");
+    });
+  });
+  it("refuses authenticated and anon outright", () => {
+    provisionedWithDeploy3(database => {
+      const asUser = sql(
+        database,
+        "set role authenticated; select * from public.claim_next_group_ai_request();"
+      );
+      expect(asUser.stderr).toContain("permission denied");
+      const asAnon = sql(
+        database,
+        "set role anon; select * from public.claim_next_group_ai_request();"
+      );
+      expect(asAnon.stderr).toContain("permission denied");
+    });
+  });
+});
