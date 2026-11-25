@@ -2544,3 +2544,17 @@ Adam, 14:40: 「Authorise the redeploy of group-ai-executor to Launch pijslbchvs
 **What is proven and what is not.** Proven: the deployed artefact is the reviewed file, the function is active, and its prompt is the new one. Not proven: an actual answer. Invoking the executor needs the service-role key, which is not in this sandbox and will not be requested in chat; the honest path is a real question from a signed-in member, after which the answer can be read back from `group_ai_requests` and the AI message. No queued rows exist at deploy time, so the next question is the only one in the batch and its answer will be unambiguous.
 
 **Scope.** Only the Edge Function changed. No SQL, no migration, no secret, no client bundle, no demo republish, no PR state change — PR #67 remains draft.
+
+## 2026-11-25 14:57 — Kick trigger V2 applied; drawer gains context, quota and a loading state
+
+Adam, 14:55: 「approve」 for V2, plus 「add the ai usage quota and context ui on the ai drawer」 and 「add a loading ui when user sumbit a message to ai」.
+
+**V2 applied to Launch.** Preflight first: `system_identifier` 7692131729119822239 (the Launch cluster), `pg_net` 0.20.4, exactly one non-internal trigger on `group_ai_requests`, and `private.kick_group_ai_executor()` still containing `timeout_milliseconds := 10000` and not 60000. Then the whole 94-line blob `bdb3fcb3…` ran as one transaction with its own `begin;`/`commit;`. After: `has_60000 = true`, `has_10000 = false`, one trigger, `AFTER INSERT`. Promoted byte-identically to `supabase/migrations/20261125055813_kayk_ai_chat_kick_trigger_v2.sql` (same sha256) with ledger row `20261125055813`, `statements = null`, matching how V1 was recorded. The header still describes the file as requiring authorisation; like V1's stale "Draft. Not applied." line, it is left alone so the hash that ran stays the hash in the repo.
+
+**Context panel.** The drawer computes what the question will carry with `buildAiChatContext` — the same builder the server uses — and shows member messages, AI answers, files, and characters against the 4,000 + 10,000 budget, plus a warning when earlier turns were dropped. This exists because of the 「資料不足」 confusion: the context was literally one message, and nothing in the UI said so.
+
+**Quota panel.** The allowances come from `AI_RATE_LIMITS` rather than being retyped, and a static test already pins those numbers against the SQL literals. Usage is the honest gap: no function returns today's counts, so the drawer shows the counts **only when the server volunteers them on a refusal** (`group_today=` / `user_today=` in the 45N06 detail) and labels them 「上次查詢」. It does not estimate. Always-on numbers need a new read-only RPC, which is a SQL revision with its own gate; not started without a decision.
+
+**Loading state.** Replaces a button that read 「…」. A spinner with 「正在送出提問…」 then 「CityLink AI 正在回答，通常需要 5–15 秒…」, driven by a phase that changes after `begin` succeeds, so a slow answer is visibly a wait rather than a dead control.
+
+**Checks.** `pnpm check` clean; `pnpm test` **860/860** (57 files; +2). Canonical `ea0ee5e`; demo `b15b04b`, auto-published `buildId=bc7832c07c133625`, `assets/index-QAdLVV18.js`, read back and confirmed to contain 這次送出 / 每日額度 / 正在送出提問 / 正在回答 and the chat-send path.
