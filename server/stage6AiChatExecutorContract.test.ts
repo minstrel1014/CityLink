@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { CONTEXT_DROPPED_NOTICE } from "../shared/aiChatContext";
+import {
+  AI_CHAT_LIMITS,
+  CONTEXT_DROPPED_NOTICE,
+} from "../shared/aiChatContext";
 import {
   AI_REPLY_HARD_LIMIT,
   AI_REPLY_TRUNCATION_NOTICE,
@@ -19,6 +22,16 @@ const executor = readFileSync(
   path.resolve(here, "../supabase/functions/group-ai-executor/index.ts"),
   "utf8"
 );
+const extraction = readFileSync(
+  path.resolve(here, "../supabase/functions/group-ai-executor/extraction.ts"),
+  "utf8"
+);
+const denoConfig = JSON.parse(
+  readFileSync(
+    path.resolve(here, "../supabase/functions/group-ai-executor/deno.json"),
+    "utf8"
+  )
+) as { imports?: Record<string, string> };
 
 describe("group AI executor, statically", () => {
   it("caps answers at the shared hard limit, notice included", () => {
@@ -86,5 +99,67 @@ describe("group AI executor, statically", () => {
     expect(executor).toContain('error: "unauthorized"');
     expect(executor).toContain("role:");
     expect(executor).toContain("token_length:");
+  });
+
+  it("reads files by their bytes, not by what storage called them", () => {
+    // The bug Adam reported on 2026-11-25: a readable PDF was answered with
+    // 「部分選取檔案沒有可讀文字」 because this gate rejected
+    // `application/pdf` before any parser ran. It must not come back.
+    const oldGate = "!/^text\\/|json|csv|markdown/";
+    expect(
+      executor,
+      "the MIME gate is gone from the entry point"
+    ).not.toContain(oldGate);
+    expect(extraction).not.toContain(oldGate);
+    // ...and neither file consults a declared content type at all: the bytes decide.
+    expect(executor + extraction).not.toContain('headers.get("content-type")');
+    expect(extraction).toContain('const PDF_MAGIC = "%PDF-"');
+    expect(extraction).toContain('const DOCX_MARKER = "word/"');
+  });
+
+  it("keeps the file budget and ceilings equal to the rest of the system", () => {
+    // The value itself is compared against `server/ai/extraction/extractText.ts`
+    // and `shared/aiChatContext.ts` by the behaviour suite, which imports them.
+    // Here it is enough that the copy is a literal, because a literal is what a
+    // reviewer can read and a re-export in Deno would not be.
+    expect(extraction).toContain(
+      `export const FILE_CHAR_BUDGET = ${AI_CHAT_LIMITS.fileChars};`
+    );
+    expect(extraction).toContain(
+      "export const EXTRACTION_MAX_BYTES = 20 * 1024 * 1024;"
+    );
+    expect(extraction).toContain("export const EXTRACTION_MAX_PAGES = 300;");
+  });
+
+  it("still reads the queue only through service-role RPCs", () => {
+    // Extraction changed how bytes are fetched, not how the queue is reached.
+    expect(executor).toContain('rpc("claim_next_group_ai_request")');
+    expect(executor).not.toMatch(/\.from\("/);
+    expect(extraction).not.toMatch(/\.from\("/);
+  });
+
+  it("names the storage settings without carrying a value", () => {
+    // Documented names only. A secret, a bucket URL with credentials, or an
+    // account id must never appear in this folder's source.
+    for (const name of [
+      "R2_ACCOUNT_ID",
+      "R2_BUCKET",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "R2_REGION",
+    ]) {
+      expect(executor, name).toContain(`Deno.env.get("${name}")`);
+    }
+    expect(executor + extraction).not.toMatch(/r2\.dev|aws_secret_access_key/i);
+  });
+
+  it("maps the Deno-only dependency the parser needs", () => {
+    // `extraction.ts` imports bare names so the Node test suite can resolve them
+    // from node_modules; Deno needs the mapping. Same pattern as the file signer.
+    expect(extraction).toContain('from "unpdf"');
+    expect(denoConfig.imports?.unpdf).toBe("npm:unpdf@2.2.2");
+    // mammoth is deliberately absent: 1.13 mis-detects Deno as Node and throws.
+    expect(denoConfig.imports?.mammoth).toBeUndefined();
+    expect(extraction).not.toContain('from "mammoth"');
   });
 });
