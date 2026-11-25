@@ -200,6 +200,9 @@ describe("answer notices have one pinned order and one source of truth", () => {
     expect(copy).not.toContain("45N06");
     const mine = consent.AI_CHAT_COPY.rateLimited(65607, "user_daily");
     expect(mine).toContain("你今天");
-    expect(mine).not.toContain("全組共用");
+    expect(mine).toContain("所有群組");
+    // The per-user counter has no group filter in the RPC, so promising that
+    // other groups are unaffected would be a lie.
+    expect(mine).not.toContain("其他群組不受影響");
   });
 });

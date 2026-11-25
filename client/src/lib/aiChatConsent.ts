@@ -184,15 +184,21 @@ export const AI_CHAT_COPY = {
           : `${seconds} 秒`;
     // "About 18 hours" is true but useless, and it matters whose allowance ran
     // out: the per-user cap is one reader's, the group cap is everyone's.
-    const clock = new Date(Date.now() + seconds * 1000).toLocaleTimeString(
-      "zh-TW",
-      { hour: "2-digit", minute: "2-digit", hour12: false }
-    );
+    // Round up to the next minute: retry_after is floored to whole seconds
+    // before the boundary, so adding it raw printed 07:59 for a reset that
+    // happens at 08:00.
+    const clock = new Date(
+      Date.now() + Math.ceil(seconds / 60) * 60_000
+    ).toLocaleTimeString("zh-TW", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
     const who =
       reason === "group_daily"
         ? "這個群組今天的 AI 提問次數已用完（額度由全組共用）"
         : reason === "user_daily"
-          ? "你今天在這裡的 AI 提問次數已用完（每人每天有上限，其他群組不受影響）"
+          ? "你今天問 AI 的次數已用完（每人每天有上限，所有群組共用同一個額度）"
           : "今天的 AI 提問次數已用完";
     return `${who}，約 ${wait}後、${clock} 左右重置。`;
   },
