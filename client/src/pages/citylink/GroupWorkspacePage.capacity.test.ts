@@ -14,11 +14,11 @@ const mocks = vi.hoisted(() => ({
   request: vi.fn(),
   groupError: vi.fn(),
   create: vi.fn(),
+  createGroup: vi.fn(),
   edit: vi.fn(),
   stageError: vi.fn(),
   effects: [] as Array<() => void | (() => void)>,
   loadOwn: vi.fn(),
-  loadCourseEligibility: vi.fn(),
   listGroups: vi.fn(),
   listPosts: vi.fn(),
   persistentRefs: false,
@@ -65,12 +65,16 @@ vi.mock("./Stage6Layout", () => ({
   Stage6Status: () => null,
 }));
 vi.mock("@/lib/supabaseGroups", () => ({
+  createGroupAlone: mocks.createGroup,
   getGroupWorkflowErrorMessage: mocks.groupError,
   loadOwnCourseGroupSnapshot: mocks.loadOwn,
   requestToJoinGroup: mocks.request,
 }));
 vi.mock("@/lib/supabaseCourses", () => ({
-  hasCurrentTermCourseEnrollment: mocks.loadCourseEligibility,
+  loadCourseDirectory: vi.fn(async () => ({
+    courses: [],
+    enrolledCourseIds: [],
+  })),
 }));
 vi.mock("@/lib/supabaseStage6", () => ({
   closeGroupRecruitmentPost: vi.fn(),
@@ -122,7 +126,7 @@ function pageWith(
     subject?: string;
     scope?: GroupWorkspaceScope;
     busy?: string | null;
-    verified?: boolean;
+    ownGroupsStatus?: "loading" | "ready" | "error";
     noPosts?: boolean;
   } = {}
 ) {
@@ -153,9 +157,8 @@ function pageWith(
       postsCursor: null,
       postsState: "ready",
       postsError: "",
-      eligibility: {
-        status: "complete",
-        verified: options.verified ?? true,
+      ownGroups: {
+        status: options.ownGroupsStatus ?? "ready",
         groups: withGroup
           ? [
               {
@@ -182,11 +185,12 @@ function pageWith(
     false,
     [],
     0,
-    options.creatingGroupId ?? null,
     editingPostId,
     options.draft ?? "",
     options.subject ?? "",
     false,
+    "", // courseLabel
+    "", // groupSearch
   ];
   mocks.setters = mocks.state.map((_, index) =>
     vi.fn(value => {
@@ -276,7 +280,6 @@ describe("workspace capacity integration (isolated mocks)", () => {
     const textButtons = nodes
       .filter(node => node.type === "button")
       .map(node => node.props.children);
-    expect(textButtons).toContain("Create recruitment post");
     expect(textButtons).toContain("Edit post");
     expect(
       textButtons.some(children =>
@@ -347,391 +350,6 @@ describe("workspace capacity integration (isolated mocks)", () => {
   });
 });
 
-describe("own-group recruitment form (isolated render mocks)", () => {
-  function formFor(page: ReactElement) {
-    const form = descendants(page).find(
-      node =>
-        node.type === "form" &&
-        descendants(node).some(
-          child =>
-            child.type === "input" &&
-            child.props.id === "new-post-subject-own-1"
-        )
-    );
-    expect(form).toBeDefined();
-    return form!;
-  }
-
-  function pending<T>() {
-    let resolve!: (value: T) => void;
-    let reject!: (reason: unknown) => void;
-    const promise = new Promise<T>((yes, no) => {
-      resolve = yes;
-      reject = no;
-    });
-    return { promise, resolve, reject };
-  }
-
-  it("shows creation only in the own-group area, not on the other browseable group", () => {
-    const nodes = descendants(pageWith(availablePost()));
-    const own = nodes.find(
-      node =>
-        node.type === "section" &&
-        node.props["aria-labelledby"] === "stage6-your-group-heading"
-    )!;
-    const browse = nodes.find(
-      node =>
-        node.type === "section" &&
-        node.props["aria-labelledby"] === "stage6-groups-heading"
-    )!;
-    expect(
-      descendants(own).some(
-        node => node.type === "h3" && node.props.children === "My team"
-      )
-    ).toBe(true);
-    expect(
-      descendants(own).some(
-        node =>
-          node.type === "button" &&
-          node.props.children === "Create recruitment post"
-      )
-    ).toBe(true);
-    expect(
-      descendants(browse).some(
-        node => node.type === "h3" && node.props.children === "Design team"
-      )
-    ).toBe(true);
-    expect(
-      descendants(browse).some(
-        node =>
-          node.type === "button" &&
-          node.props.children === "Create recruitment post"
-      )
-    ).toBe(false);
-  });
-
-  it("offers retry rather than falsely claiming no group when evidence is unverified", () => {
-    const nodes = descendants(
-      pageWith(availablePost(), true, null, { verified: false })
-    );
-    const status = nodes.find(
-      node => node.props.title === "Posting eligibility could not be verified"
-    );
-    expect(status).toBeDefined();
-    expect(typeof status!.props.retry).toBe("function");
-    expect(
-      nodes.some(
-        node => node.props.title === "No eligible group found in this view"
-      )
-    ).toBe(false);
-    expect(
-      nodes.some(
-        node =>
-          node.type === "button" &&
-          node.props.children === "Create recruitment post"
-      )
-    ).toBe(false);
-  });
-
-  it("describes an empty own-group read without claiming no group exists", () => {
-    const nodes = descendants(pageWith(availablePost(), false));
-    const status = nodes.find(
-      node => node.props.title === "No eligible group found in this view"
-    );
-    expect(status).toBeDefined();
-    expect(status!.props.message).toContain("If your group is missing");
-    expect(typeof status!.props.retry).toBe("function");
-  });
-
-  it("does not claim there are no browseable groups when evidence is unverified", () => {
-    const nodes = descendants(
-      pageWith(availablePost(), false, null, { verified: false })
-    );
-    expect(
-      nodes.some(
-        node => node.props.title === "Browseable groups could not be confirmed"
-      )
-    ).toBe(true);
-    expect(
-      nodes.some(node => node.props.title === "No browseable groups yet")
-    ).toBe(false);
-    expect(
-      nodes.some(
-        node => node.props.title === "No eligible group found in this view"
-      )
-    ).toBe(false);
-  });
-
-  it("does not claim there are no posts when course evidence is unverified", () => {
-    const nodes = descendants(
-      pageWith(availablePost(), false, null, { verified: false, noPosts: true })
-    );
-    expect(
-      nodes.some(
-        node => node.props.title === "Recruitment posts could not be confirmed"
-      )
-    ).toBe(true);
-    expect(
-      nodes.some(node => node.props.title === "No recruitment posts yet")
-    ).toBe(false);
-  });
-
-  it("refreshes capacity without clearing an active recruitment draft", async () => {
-    const fullPost: GroupRecruitmentPost = {
-      ...availablePost(),
-      applyEnabled: false,
-      applyBlockReason: "group_full",
-      capacityState: "full",
-    };
-    mocks.listPosts.mockResolvedValue({
-      items: [fullPost],
-      hasMore: false,
-      nextCursor: null,
-    });
-    // Both halves of a capacity refresh have to succeed before the page may
-    // claim it refreshed anything, so the group read needs a real fixture.
-    mocks.listGroups.mockResolvedValue({
-      items: [
-        {
-          groupId: "group-1",
-          groupName: "Design team",
-          status: "active",
-          activeMemberCount: 3,
-          maxMembers: 5,
-          capacityCount: 3,
-          capacityState: "available",
-          canCreatePost: false,
-        },
-      ],
-      hasMore: false,
-      nextCursor: null,
-    });
-    const page = pageWith(fullPost, true, null, {
-      creatingGroupId: "own-1",
-      subject: "Unsaved subject",
-      draft: "Unsaved body",
-    });
-    const control = descendants(page).find(
-      node =>
-        node.type === Stage6ApplyControl && node.props.post.id === "post-1"
-    );
-    expect(control).toBeDefined();
-    const refresh = descendants(Stage6ApplyControl(control!.props)).find(
-      node =>
-        node.type === "button" && node.props.children === "Refresh group status"
-    );
-    expect(refresh).toBeDefined();
-    refresh!.props.onClick();
-    await vi.waitFor(() => expect(mocks.setters[10]).toHaveBeenCalled());
-    expect(mocks.listPosts).toHaveBeenCalledWith(
-      "user-1",
-      "course-1",
-      undefined
-    );
-    expect(mocks.listGroups).toHaveBeenCalledWith(
-      "user-1",
-      "course-1",
-      undefined
-    );
-    expect(mocks.setters[4]).toHaveBeenCalledWith(
-      "Group capacity refreshed. Unsaved drafts, loaded posts, and loaded group cards were kept."
-    );
-    expect(mocks.setters[11]).not.toHaveBeenCalled();
-    expect(mocks.setters[12]).not.toHaveBeenCalled();
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-  });
-
-  it("publishes with the existing service arguments, synchronously blocks duplicates, and refreshes on success", async () => {
-    const wait = pending<string>();
-    mocks.create.mockReturnValueOnce(wait.promise);
-    const page = pageWith(availablePost(), true, null, {
-      creatingGroupId: "own-1",
-      subject: "  Subject  ",
-      draft: "  Message  ",
-    });
-    const form = formFor(page);
-    const event = { preventDefault: vi.fn() };
-    form.props.onSubmit(event);
-    form.props.onSubmit(event);
-    expect(event.preventDefault).toHaveBeenCalledTimes(2);
-    expect(mocks.create).toHaveBeenCalledTimes(1);
-    expect(mocks.create).toHaveBeenCalledWith(
-      "user-1",
-      "own-1",
-      "  Subject  ",
-      "  Message  ",
-      expect.any(Function)
-    );
-    const shouldDispatch = mocks.create.mock.calls[0][4] as () => boolean;
-    expect(shouldDispatch()).toBe(true);
-    expect(mocks.setters[5]).toHaveBeenCalledWith("create:own-1");
-    wait.resolve("post-new");
-    await vi.waitFor(() =>
-      expect(mocks.setters[4]).toHaveBeenCalledWith("Recruitment post created.")
-    );
-    expect(mocks.setters[13]).toHaveBeenCalledWith("");
-    expect(mocks.setters[14]).toHaveBeenCalledWith("");
-    expect(mocks.setters[11]).toHaveBeenCalledWith(null);
-    expect(mocks.setters[3]).toHaveBeenCalled();
-    expect(mocks.setters[5]).toHaveBeenCalledWith(null);
-    expect(shouldDispatch()).toBe(false);
-  });
-
-  it("maps create errors, releases busy state, and does not clear or refresh the draft", async () => {
-    const problem = new Error("write rejected");
-    mocks.create.mockRejectedValueOnce(problem);
-    const form = formFor(
-      pageWith(availablePost(), true, null, {
-        creatingGroupId: "own-1",
-        subject: "Title",
-        draft: "Body",
-      })
-    );
-    form.props.onSubmit({ preventDefault: vi.fn() });
-    await vi.waitFor(() =>
-      expect(mocks.setters[4]).toHaveBeenCalledWith("Post error")
-    );
-    expect(mocks.stageError).toHaveBeenCalledWith(problem);
-    expect(mocks.setters[5]).toHaveBeenLastCalledWith(null);
-    expect(mocks.setters[3]).not.toHaveBeenCalled();
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-  });
-
-  it("does not let editing another post overwrite an in-flight draft, including before rerender", async () => {
-    const wait = pending<string>();
-    mocks.create.mockReturnValueOnce(wait.promise);
-    const page = pageWith({ ...availablePost(), canManage: true }, true, null, {
-      creatingGroupId: "own-1",
-      subject: "My draft",
-      draft: "My message",
-    });
-    const edit = descendants(page).find(
-      node => node.type === "button" && node.props.children === "Edit post"
-    );
-    expect(edit).toBeDefined();
-    formFor(page).props.onSubmit({ preventDefault: vi.fn() });
-    edit!.props.onClick();
-    expect(mocks.setters[12]).not.toHaveBeenCalled();
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-    wait.reject(new Error("write rejected"));
-    await vi.waitFor(() =>
-      expect(mocks.setters[4]).toHaveBeenCalledWith("Post error")
-    );
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-    const busyPage = pageWith(
-      { ...availablePost(), canManage: true },
-      true,
-      null,
-      { busy: "create:own-1" }
-    );
-    const busyEdit = descendants(busyPage).find(
-      node => node.type === "button" && node.props.children === "Edit post"
-    );
-    expect(busyEdit!.props.disabled).toBe(true);
-  });
-
-  it("does not let a create click overwrite an in-flight edit before rerender", async () => {
-    const wait = pending<string>();
-    mocks.edit.mockReturnValueOnce(wait.promise);
-    const page = pageWith(
-      { ...availablePost(), canManage: true },
-      true,
-      "post-1",
-      { subject: "My edit", draft: "Edit draft" }
-    );
-    const editForm = descendants(page).find(
-      node =>
-        node.type === "form" &&
-        descendants(node).some(
-          child =>
-            child.type === "input" &&
-            child.props.id === "edit-post-subject-post-1"
-        )
-    )!;
-    const create = descendants(page).find(
-      node =>
-        node.type === "button" &&
-        node.props.children === "Create recruitment post"
-    )!;
-    editForm.props.onSubmit({ preventDefault: vi.fn() });
-    create.props.onClick();
-    expect(mocks.setters[11]).not.toHaveBeenCalled();
-    expect(mocks.setters[12]).not.toHaveBeenCalled();
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-    wait.reject(new Error("edit rejected"));
-    await vi.waitFor(() =>
-      expect(mocks.setters[4]).toHaveBeenCalledWith("Post error")
-    );
-    expect(mocks.setters[13]).not.toHaveBeenCalled();
-    expect(mocks.setters[14]).not.toHaveBeenCalled();
-  });
-
-  it("renders the in-flight form disabled", () => {
-    const form = formFor(
-      pageWith(availablePost(), true, null, {
-        creatingGroupId: "own-1",
-        subject: "Title",
-        draft: "Body",
-        busy: "create:own-1",
-      })
-    );
-    for (const element of descendants(form).filter(node =>
-      ["input", "textarea", "button"].includes(node.type as string)
-    )) {
-      expect(element.props.disabled).toBe(true);
-    }
-    expect(
-      descendants(form).some(
-        node => node.type === "button" && node.props.children === "Publishing…"
-      )
-    ).toBe(true);
-  });
-
-  it.each([
-    ["account", { status: "ready", userId: "user-2", courseId: "course-1" }],
-    ["course", { status: "ready", userId: "user-1", courseId: "course-2" }],
-  ])(
-    "ignores a pending publish success or failure after a %s change",
-    async (_, next) => {
-      for (const outcome of ["success", "error"] as const) {
-        vi.clearAllMocks();
-        const scope = new GroupWorkspaceScope({
-          status: "ready",
-          userId: "user-1",
-          courseId: "course-1",
-        });
-        const wait = pending<string>();
-        mocks.create.mockReturnValueOnce(wait.promise);
-        const form = formFor(
-          pageWith(availablePost(), true, null, {
-            creatingGroupId: "own-1",
-            subject: "Title",
-            draft: "Body",
-            scope,
-          })
-        );
-        form.props.onSubmit({ preventDefault: vi.fn() });
-        const shouldDispatch = mocks.create.mock.calls[0][4] as () => boolean;
-        expect(shouldDispatch()).toBe(true);
-        for (const setter of mocks.setters) setter.mockClear();
-        scope.updateContext(next);
-        expect(shouldDispatch()).toBe(false);
-        if (outcome === "success") wait.resolve("post-new");
-        else wait.reject(new Error("old error"));
-        await new Promise(resolve => setTimeout(resolve, 0));
-        for (const setter of mocks.setters)
-          expect(setter).not.toHaveBeenCalled();
-        expect(mocks.stageError).not.toHaveBeenCalled();
-      }
-    }
-  );
-});
-
 describe("context-keyed form reset (isolated render mocks)", () => {
   it("keys the content tree by session readiness, account and course", () => {
     const original = GroupWorkspacePage({ courseId: "course-1" }).key;
@@ -744,48 +362,6 @@ describe("context-keyed form reset (isolated render mocks)", () => {
       4
     );
   });
-});
-
-describe("obsolete render guards", () => {
-  it.each([
-    ["account", { status: "ready", userId: "user-2", courseId: "course-1" }],
-    ["course", { status: "ready", userId: "user-1", courseId: "course-2" }],
-    ["session", { status: "loading", userId: null, courseId: "course-1" }],
-  ])(
-    "does not display or submit the old snapshot after a %s change",
-    (_, next) => {
-      const scope = new GroupWorkspaceScope({
-        status: "ready",
-        userId: "user-1",
-        courseId: "course-1",
-      });
-      const oldPage = pageWith(availablePost(), true, null, {
-        creatingGroupId: "own-1",
-        subject: "Title",
-        draft: "Body",
-        scope,
-      });
-      const oldForm = descendants(oldPage).find(node => node.type === "form")!;
-      scope.updateContext(next);
-      oldForm.props.onSubmit({ preventDefault: vi.fn() });
-      expect(mocks.create).not.toHaveBeenCalled();
-      const staleRender = pageWith(availablePost(), true, null, {
-        creatingGroupId: "own-1",
-        subject: "Title",
-        draft: "Body",
-        scope,
-      });
-      expect(descendants(staleRender).some(node => node.type === "form")).toBe(
-        false
-      );
-      const currentToken = scope.currentToken();
-      const result = mocks.effects[0]();
-      expect(result).toBeUndefined();
-      expect(scope.currentToken()).toEqual(currentToken);
-      expect(mocks.listGroups).not.toHaveBeenCalled();
-      expect(mocks.loadCourseEligibility).not.toHaveBeenCalled();
-    }
-  );
 });
 
 describe("actual load effect with mocked services", () => {
@@ -847,7 +423,6 @@ describe("actual load effect with mocked services", () => {
     mocks.listGroups.mockResolvedValue(page([browse]));
     mocks.listPosts.mockResolvedValue(page([availablePost()]));
     mocks.loadOwn.mockResolvedValue(own());
-    mocks.loadCourseEligibility.mockResolvedValue(true);
   }
   function mount(
     scope = new GroupWorkspaceScope(initialContext),
@@ -869,10 +444,18 @@ describe("actual load effect with mocked services", () => {
       [],
       0,
       null,
-      null,
       "",
       "",
       false,
+      "", // courseLabel
+      "", // groupSearch
+      false, // createPostOpen
+      "", // createSubject
+      "", // createBody
+      "", // createGroupId
+      false, // newGroupOpen
+      "", // newGroupName
+      6, // newGroupMax
     ];
     mocks.setters = mocks.state.map((_, index) =>
       vi.fn(value => {
@@ -909,49 +492,35 @@ describe("actual load effect with mocked services", () => {
       node => node.type === "h3" && node.props.children === text
     );
 
-  it("shows each browse response while both scoped checks are pending", async () => {
+  it("shows each browse response while the own-group read is still pending", async () => {
     arrange();
     const ownWait = pending<ReturnType<typeof own>>();
-    const courseWait = pending<boolean>();
     const postsWait = pending<ReturnType<typeof page>>();
     mocks.loadOwn.mockReturnValueOnce(ownWait.promise);
-    mocks.loadCourseEligibility.mockReturnValueOnce(courseWait.promise);
     mocks.listPosts.mockReturnValueOnce(postsWait.promise);
     const instance = mount();
     await vi.waitFor(() =>
       expect(hasHeading(instance, "Design team")).toBe(true)
     );
-    expect(
-      status(instance, "Checking posting eligibility…")?.props.retry
-    ).toBeTypeOf("function");
     expect(status(instance, "Loading recruitment posts…")).toBeDefined();
-    expect(button(instance, "Create recruitment post")).toBeUndefined();
     expect(mocks.loadOwn).toHaveBeenCalledWith("user-1", "course-1");
-    expect(mocks.loadCourseEligibility).toHaveBeenCalledWith(
-      "user-1",
-      "course-1"
-    );
     expect(mocks.listGroups).toHaveBeenCalledWith("user-1", "course-1");
     expect(mocks.listPosts).toHaveBeenCalledWith("user-1", "course-1");
     postsWait.resolve(page([availablePost()]));
     await vi.waitFor(() =>
       expect(hasHeading(instance, "Looking for a teammate")).toBe(true)
     );
-    courseWait.resolve(true);
-    await new Promise(resolve => setTimeout(resolve, 0));
     expect(button(instance, "Create recruitment post")).toBeUndefined();
-    expect(status(instance, "Checking posting eligibility…")).toBeDefined();
     ownWait.resolve(own());
     await vi.waitFor(() =>
       expect(button(instance, "Create recruitment post")).toBeDefined()
     );
-    expect(hasHeading(instance, "My team")).toBe(true);
     expect(hasHeading(instance, "Design team")).toBe(true);
     expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
     instance.cleanup?.();
   });
 
-  it("preserves eligibility and each list when evidence completes before the lists", async () => {
+  it("preserves each list when the own-group read completes before the lists", async () => {
     arrange();
     const groupsWait = pending<ReturnType<typeof page>>();
     const postsWait = pending<ReturnType<typeof page>>();
@@ -972,177 +541,61 @@ describe("actual load effect with mocked services", () => {
     await vi.waitFor(() =>
       expect(hasHeading(instance, "Design team")).toBe(true)
     );
-    expect(button(instance, "Create recruitment post")).toBeDefined();
     expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
     instance.cleanup?.();
   });
 
-  it("does not offer creation when own groups arrive before course eligibility", async () => {
+  it("keeps the own-group card when it arrives before both lists", async () => {
     arrange();
-    const ownWait = pending<ReturnType<typeof own>>();
-    const courseWait = pending<boolean>();
-    mocks.loadOwn.mockReturnValueOnce(ownWait.promise);
-    mocks.loadCourseEligibility.mockReturnValueOnce(courseWait.promise);
+    const groupsWait = pending<ReturnType<typeof page>>();
+    const postsWait = pending<ReturnType<typeof page>>();
+    mocks.listGroups.mockReturnValueOnce(groupsWait.promise);
+    mocks.listPosts.mockReturnValueOnce(postsWait.promise);
     const instance = mount();
-    await vi.waitFor(() =>
-      expect(hasHeading(instance, "Design team")).toBe(true)
-    );
-    ownWait.resolve(own());
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(button(instance, "Create recruitment post")).toBeUndefined();
-    expect(status(instance, "Checking posting eligibility…")).toBeDefined();
-    courseWait.resolve(true);
     await vi.waitFor(() =>
       expect(button(instance, "Create recruitment post")).toBeDefined()
     );
+    expect(status(instance, "Loading browseable groups…")).toBeDefined();
+    expect(status(instance, "Loading recruitment posts…")).toBeDefined();
+    groupsWait.resolve(page([browse]));
+    postsWait.resolve(page([availablePost()]));
+    await vi.waitFor(() =>
+      expect(hasHeading(instance, "Design team")).toBe(true)
+    );
+    expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
+    expect(button(instance, "Create recruitment post")).toBeDefined();
     instance.cleanup?.();
   });
 
-  it.each(["own groups", "course rejection", "course false"])(
-    "fails closed promptly on %s even if the other check never settles",
-    async kind => {
-      arrange();
-      const ownWait = pending<ReturnType<typeof own>>();
-      const courseWait = pending<boolean>();
-      mocks.loadOwn.mockReturnValueOnce(ownWait.promise);
-      mocks.loadCourseEligibility.mockReturnValueOnce(courseWait.promise);
-      const instance = mount();
-      await vi.waitFor(() =>
-        expect(hasHeading(instance, "Design team")).toBe(true)
-      );
-      if (kind === "own groups")
-        ownWait.reject(new Error("own groups unavailable"));
-      else if (kind === "course rejection")
-        courseWait.reject(new Error("course unavailable"));
-      else courseWait.resolve(false);
-      await vi.waitFor(() =>
-        expect(
-          status(instance, "Posting eligibility could not be verified")
-        ).toBeDefined()
-      );
-      expect(
-        status(instance, "Posting eligibility could not be verified")?.props
-          .retry
-      ).toBeTypeOf("function");
-      expect(button(instance, "Create recruitment post")).toBeUndefined();
-      expect(hasHeading(instance, "Design team")).toBe(true);
-      expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
-      expect(mocks.stageError).not.toHaveBeenCalled();
-      instance.cleanup?.();
-    }
-  );
-
-  it("keeps the correct unverified empty-list messages and never claims no results", async () => {
+  it("never claims an empty list before the list read settles", async () => {
     arrange();
-    mocks.listGroups.mockResolvedValue(page([]));
-    mocks.listPosts.mockResolvedValue(page([]));
-    mocks.loadCourseEligibility.mockResolvedValue(false);
+    const groupsWait = pending<ReturnType<typeof page>>();
+    const postsWait = pending<ReturnType<typeof page>>();
+    mocks.listGroups.mockReturnValueOnce(groupsWait.promise);
+    mocks.listPosts.mockReturnValueOnce(postsWait.promise);
     const instance = mount();
     await vi.waitFor(() =>
-      expect(
-        status(instance, "Recruitment posts could not be confirmed")
-      ).toBeDefined()
+      expect(button(instance, "Create recruitment post")).toBeDefined()
     );
-    expect(
-      status(instance, "Browseable groups could not be confirmed")?.props
-        .message
-    ).toContain("group availability may be incomplete");
-    expect(
-      status(instance, "Recruitment posts could not be confirmed")?.props
-        .message
-    ).toContain("post availability may be incomplete");
     expect(status(instance, "No browseable groups yet")).toBeUndefined();
     expect(status(instance, "No recruitment posts yet")).toBeUndefined();
-    instance.cleanup?.();
-  });
-
-  it("recovers from false course evidence through eligibility-only retry", async () => {
-    arrange();
-    const retryCourse = pending<boolean>();
-    mocks.loadCourseEligibility
-      .mockResolvedValueOnce(false)
-      .mockReturnValueOnce(retryCourse.promise);
-    const instance = mount();
+    groupsWait.resolve(page([]));
+    postsWait.resolve(page([]));
     await vi.waitFor(() =>
-      expect(
-        status(instance, "Posting eligibility could not be verified")
-      ).toBeDefined()
+      expect(status(instance, "No browseable groups yet")).toBeDefined()
     );
-    status(
-      instance,
-      "Posting eligibility could not be verified"
-    )!.props.retry();
-    expect(status(instance, "Checking posting eligibility…")).toBeDefined();
-    expect(button(instance, "Create recruitment post")).toBeUndefined();
-    expect(hasHeading(instance, "Design team")).toBe(true);
-    expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
-    retryCourse.resolve(true);
-    await vi.waitFor(() =>
-      expect(button(instance, "Create recruitment post")).toBeDefined()
-    );
-    expect(mocks.listGroups).toHaveBeenCalledTimes(1);
-    expect(mocks.listPosts).toHaveBeenCalledTimes(1);
-    instance.cleanup?.();
-  });
-
-  it("retries pending eligibility without clearing browsing and ignores the older attempt", async () => {
-    arrange();
-    const oldOwn = pending<ReturnType<typeof own>>();
-    const oldCourse = pending<boolean>();
-    const newOwn = pending<ReturnType<typeof own>>();
-    const newCourse = pending<boolean>();
-    mocks.loadOwn
-      .mockReturnValueOnce(oldOwn.promise)
-      .mockReturnValueOnce(newOwn.promise);
-    mocks.loadCourseEligibility
-      .mockReturnValueOnce(oldCourse.promise)
-      .mockReturnValueOnce(newCourse.promise);
-    const instance = mount();
-    await vi.waitFor(() =>
-      expect(hasHeading(instance, "Design team")).toBe(true)
-    );
-    status(instance, "Checking posting eligibility…")!.props.retry();
-    await vi.waitFor(() => expect(mocks.loadOwn).toHaveBeenCalledTimes(2));
-    oldOwn.resolve(own());
-    oldCourse.resolve(true);
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(status(instance, "Checking posting eligibility…")).toBeDefined();
-    expect(button(instance, "Create recruitment post")).toBeUndefined();
-    expect(hasHeading(instance, "Design team")).toBe(true);
-    expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
-    expect(mocks.listGroups).toHaveBeenCalledTimes(1);
-    expect(mocks.listPosts).toHaveBeenCalledTimes(1);
-    newCourse.resolve(true);
-    newOwn.resolve(own());
-    await vi.waitFor(() =>
-      expect(button(instance, "Create recruitment post")).toBeDefined()
-    );
-    instance.cleanup?.();
-  });
-
-  it("does not let a late failed attempt overwrite successful retry evidence", async () => {
-    arrange();
-    const oldOwn = pending<ReturnType<typeof own>>();
-    mocks.loadOwn.mockReturnValueOnce(oldOwn.promise);
-    const instance = mount();
-    await vi.waitFor(() =>
-      expect(hasHeading(instance, "Design team")).toBe(true)
-    );
-    status(instance, "Checking posting eligibility…")!.props.retry();
-    await vi.waitFor(() =>
-      expect(button(instance, "Create recruitment post")).toBeDefined()
-    );
-    oldOwn.reject(new Error("old failure"));
-    await new Promise(resolve => setTimeout(resolve, 0));
-    expect(button(instance, "Create recruitment post")).toBeDefined();
+    expect(status(instance, "No recruitment posts yet")).toBeDefined();
     expect(
-      status(instance, "Posting eligibility could not be verified")
+      status(instance, "Browseable groups could not be confirmed")
+    ).toBeUndefined();
+    expect(
+      status(instance, "Recruitment posts could not be confirmed")
     ).toBeUndefined();
     instance.cleanup?.();
   });
 
   it.each(["groups", "posts"])(
-    "isolates a %s list failure and its retry from the other list and eligibility",
+    "isolates a %s list failure and its retry from the other list and the own-group read",
     async failed => {
       arrange();
       if (failed === "groups")
@@ -1172,14 +625,12 @@ describe("actual load effect with mocked services", () => {
           )
         ).toBe(true)
       );
-      expect(button(instance, "Create recruitment post")).toBeDefined();
       expect(mocks.loadOwn).toHaveBeenCalledTimes(1);
-      expect(mocks.loadCourseEligibility).toHaveBeenCalledTimes(1);
       instance.cleanup?.();
     }
   );
 
-  it("merges a page completed after eligibility without losing either update", async () => {
+  it("merges a page completed after the own-group read without losing either update", async () => {
     arrange();
     const ownWait = pending<ReturnType<typeof own>>();
     const nextWait = pending<ReturnType<typeof page>>();
@@ -1211,6 +662,110 @@ describe("actual load effect with mocked services", () => {
     instance.cleanup?.();
   });
 
+  it("hides the Your group section and offers creation at the foot of the posts section", async () => {
+    arrange();
+    const instance = mount();
+    await vi.waitFor(() =>
+      expect(button(instance, "Create recruitment post")).toBeDefined()
+    );
+    expect(hasHeading(instance, "Your group")).toBe(false);
+    expect(
+      nodes(instance).some(node => node.props.children === "YOUR GROUP")
+    ).toBe(false);
+    expect(hasHeading(instance, "Design team")).toBe(true);
+    instance.cleanup?.();
+  });
+
+  it("asks for a group instead of offering creation when the student has none", async () => {
+    arrange();
+    mocks.loadOwn.mockResolvedValue({ groups: [], memberships: [] });
+    const instance = mount();
+    await vi.waitFor(() =>
+      expect(
+        nodes(instance).some(
+          node => node.props.className === "stage6-create-post-note"
+        )
+      ).toBe(true)
+    );
+    expect(button(instance, "Create recruitment post")).toBeUndefined();
+    expect(
+      JSON.stringify(nodes(instance)).includes(
+        "You need a group in this course before you can publish a recruitment post."
+      )
+    ).toBe(true);
+    expect(button(instance, "Create a group")).toBeDefined();
+    instance.cleanup?.();
+  });
+
+  it("creates a group for the student without inviting anyone", async () => {
+    arrange();
+    mocks.loadOwn.mockResolvedValue({ groups: [], memberships: [] });
+    mocks.createGroup.mockResolvedValue("new-group");
+    const instance = mount();
+    await vi.waitFor(() =>
+      expect(button(instance, "Create a group")).toBeDefined()
+    );
+    button(instance, "Create a group")!.props.onClick();
+    const form = nodes(instance).find(
+      node => node.props.className === "stage6-create-group-form"
+    );
+    expect(form).toBeDefined();
+    form!.props.onSubmit({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(mocks.createGroup).toHaveBeenCalled());
+    expect(mocks.createGroup).toHaveBeenCalledWith(
+      "user-1",
+      "course-1",
+      "",
+      6,
+      expect.any(Function)
+    );
+    instance.cleanup?.();
+  });
+
+  it("publishes a recruitment post for the student's own group", async () => {
+    arrange();
+    const instance = mount();
+    await vi.waitFor(() =>
+      expect(button(instance, "Create recruitment post")).toBeDefined()
+    );
+    button(instance, "Create recruitment post")!.props.onClick();
+    const form = nodes(instance).find(node => node.type === "form");
+    expect(form).toBeDefined();
+    mocks.state[18] = "Need a designer";
+    mocks.state[19] = "We need a designer for the project.";
+    // Re-render so the submit handler closes over the typed values.
+    const filled = nodes(instance).find(node => node.type === "form");
+    expect(filled).toBeDefined();
+    filled!.props.onSubmit({ preventDefault: () => {} });
+    await vi.waitFor(() => expect(mocks.create).toHaveBeenCalled());
+    expect(mocks.create).toHaveBeenCalledWith(
+      "user-1",
+      "own-1",
+      "Need a designer",
+      "We need a designer for the project.",
+      expect.any(Function)
+    );
+    instance.cleanup?.();
+  });
+
+  it("shows the failure line instead of an empty result when the own-group read fails", async () => {
+    arrange();
+    mocks.loadOwn.mockRejectedValueOnce(new Error("own groups unavailable"));
+    const instance = mount();
+    await vi.waitFor(() =>
+      expect(
+        nodes(instance).some(
+          node => node.props.children === "Your group could not be loaded."
+        )
+      ).toBe(true)
+    );
+    expect(button(instance, "Create recruitment post")).toBeUndefined();
+    // The two browse lists are independent reads and still render.
+    expect(hasHeading(instance, "Design team")).toBe(true);
+    expect(hasHeading(instance, "Looking for a teammate")).toBe(true);
+    instance.cleanup?.();
+  });
+
   it.each([
     [
       "account",
@@ -1239,11 +794,9 @@ describe("actual load effect with mocked services", () => {
       const oldGroups = pending<ReturnType<typeof page>>();
       const oldPosts = pending<ReturnType<typeof page>>();
       const oldOwn = pending<ReturnType<typeof own>>();
-      const oldCourse = pending<boolean>();
       mocks.listGroups.mockReturnValueOnce(oldGroups.promise);
       mocks.listPosts.mockReturnValueOnce(oldPosts.promise);
       mocks.loadOwn.mockReturnValueOnce(oldOwn.promise);
-      mocks.loadCourseEligibility.mockReturnValueOnce(oldCourse.promise);
       const scope = new GroupWorkspaceScope(initialContext);
       const previous = mount(scope);
       await vi.waitFor(() => expect(mocks.loadOwn).toHaveBeenCalledTimes(1));
@@ -1263,7 +816,6 @@ describe("actual load effect with mocked services", () => {
       oldPosts.resolve(page([availablePost()]));
       if (outcome === "success") oldOwn.resolve(own());
       else oldOwn.reject(new Error("stale own-group failure"));
-      oldCourse.resolve(true);
       await new Promise(resolve => setTimeout(resolve, 0));
       for (const setter of previous.setters)
         expect(setter).not.toHaveBeenCalled();

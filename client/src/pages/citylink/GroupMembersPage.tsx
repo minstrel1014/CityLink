@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, UserRound, Users } from "lucide-react";
+import { UserRound, Users } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
@@ -11,6 +11,7 @@ import {
   type GroupMemberCursor,
 } from "@/lib/supabaseStage6";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
+import { MessageButton } from "@/pages/citylink/MessageButton";
 
 type LoadState = "loading" | "ready" | "error" | "unauthorized";
 
@@ -160,27 +161,27 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
           )}
           {members.map(member => (
             <article className="stage6-member-card" key={member.profileId}>
-              <span className="stage6-member-avatar" aria-hidden="true">
-                {member.displayName
-                  .trim()
-                  .split(/\s+/)
-                  .slice(0, 2)
-                  .map(part => part[0]?.toUpperCase())
-                  .join("") || "CL"}
-              </span>
-              <div className="stage6-member-summary">
-                <h2>{member.displayName}</h2>
-                <p>
-                  {member.major || "Major not provided"} · Year {member.year}
-                </p>
-              </div>
               <Link
-                className="secondary"
+                className="stage6-member-plate"
                 href={`/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(member.profileId)}`}
-                aria-label={`View ${member.displayName}'s profile`}
+                aria-label={`Open ${member.displayName}'s profile`}
               >
-                View profile <ArrowRight size={15} />
+                <span className="stage6-member-avatar" aria-hidden="true">
+                  {member.displayName
+                    .trim()
+                    .split(/\s+/)
+                    .slice(0, 2)
+                    .map(part => part[0]?.toUpperCase())
+                    .join("") || "CL"}
+                </span>
+                <div className="stage6-member-summary">
+                  <h2>{member.displayName}</h2>
+                  <p>
+                    {member.major || "Major not provided"} · Year {member.year}
+                  </p>
+                </div>
               </Link>
+              <MessageButton otherProfileId={member.profileId} />
             </article>
           ))}
           {hasMore && (

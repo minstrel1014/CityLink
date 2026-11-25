@@ -85,6 +85,17 @@
   color: #374332;
   font-size: 18px;
 }
+.stage6-groups-search {
+  margin-bottom: 15px;
+}
+.stage6-groups-search button {
+  border: 0;
+  background: transparent;
+  color: #6b7a62;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
 .stage6-count {
   display: grid;
   min-width: 26px;
@@ -173,18 +184,67 @@
   font-size: 10px;
 }
 .stage6-create-post {
+  display: grid;
+  gap: 12px;
   width: 100%;
-  min-height: 38px;
-  margin-top: 14px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #edf0e7;
+  justify-items: start;
+}
+.stage6-create-post-note {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 15px 16px;
   border: 1px dashed #b9c6aa;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #f8faf5;
-  color: #62774f;
+}
+.stage6-create-post-note p {
+  margin: 0;
+  color: #5d6b4c;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.55;
+}
+.stage6-create-post-note .secondary {
+  justify-self: start;
+  width: auto;
+  min-height: 34px;
+  padding: 8px 14px;
+  font-size: 11px;
+}
+.stage6-create-group-form {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+}
+.stage6-create-group-form label {
+  color: #516047;
   font-size: 10px;
   font-weight: 650;
 }
-.stage6-create-post:hover {
-  background: #f0f5e9;
+.stage6-create-group-form input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid #e0e6d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #394435;
+  font-size: 12px;
+}
+.stage6-create-group-form input[type="number"] {
+  width: 90px;
+}
+.stage6-create-group-form .stage6-form-footer {
+  margin-top: 2px;
+}
+.stage6-create-group-form .stage6-form-footer .primary {
+  min-height: 34px;
+  padding: 8px 14px;
+  font-size: 11px;
 }
 .stage6-post-list {
   display: grid;
@@ -248,6 +308,25 @@
   color: #394435;
   font-size: 12px;
   line-height: 1.6;
+}
+.stage6-post-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid #e0e6d9;
+  border-radius: 8px;
+  background: #fff;
+  color: #394435;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.stage6-post-form input::placeholder {
+  color: #a7ae9d;
+}
+.stage6-post-form input:focus-visible,
+.stage6-post-form textarea:focus-visible {
+  outline: 2px solid #8ba173;
+  outline-offset: 1px;
 }
 .stage6-form-footer {
   flex-wrap: wrap;
@@ -325,17 +404,6 @@
   border: 1px solid #edf0e8;
   border-radius: 9px;
   background: #fcfdfb;
-}
-/* Your own message sits on your side, the way every chat app does it. The
-   identity comes from sender_id, never from the display-name snapshot. */
-.stage6-message-own {
-  justify-self: end;
-  max-width: 84%;
-  border-color: #d7e4c4;
-  background: #eef4e6;
-}
-.stage6-message-own .stage6-message-meta {
-  justify-content: flex-end;
 }
 .stage6-message-meta {
   align-items: baseline;
@@ -557,10 +625,202 @@
     min-height: 42px;
   }
 }
-/* Keep the composer on screen. The list was a fixed-height window, which pushed
-   the form below the fold, so the room looked like it had no input at all. The
+
+/* Group chat mirrors the direct-message room: light canvas, bubbles, round send. */
+.stage6-chat-panel {
+  background: #ffffff;
+  border: 1px solid #eceee7;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.stage6-message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 14px;
+  background: #fafafa;
+  list-style: none;
+}
+
+.stage6-message {
+  align-self: flex-start;
+  width: fit-content;
+  /* Closer to a phone messenger: a bubble takes about half the column, so a
+     short line looks like a message instead of a band across the panel, and a
+     long paragraph wraps into a readable block rather than a wall of text. */
+  max-width: min(52%, 520px);
+  margin: 0;
+  padding: 6px 11px;
+  border: 1px solid #eceee7;
+  border-radius: 11px;
+  background: #ffffff;
+  box-shadow: 0 1px 1px rgba(24, 39, 20, 0.04);
+}
+
+.stage6-message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.stage6-message-meta strong {
+  font-size: 12px;
+  color: #3f5233;
+}
+
+.stage6-message-meta time {
+  font-size: 11px;
+  color: #9aa392;
+}
+
+.stage6-message p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.42;
+  color: #1f2a1a;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.stage6-chat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stage6-chat-form textarea {
+  border-radius: 22px;
+  padding: 12px 16px;
+  resize: none;
+}
+
+.stage6-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stage6-send {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.stage6-send:disabled {
+  background: #e8ece2;
+  color: #7b8a6f;
+}
+
+/* The whole member plate is the profile link; Message sits beside it. */
+.stage6-member-plate {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.stage6-member-plate:hover h2,
+.stage6-member-plate:focus-visible h2 {
+  text-decoration: underline;
+}
+
+.stage6-member-card {
+  align-items: center;
+  gap: 12px;
+}
+
+/* Own messages sit on the right, matching the direct-message room. */
+.stage6-message-mine {
+  align-self: flex-end;
+  background: #eef2ff;
+  border-color: #dfe4f7;
+}
+
+.stage6-create-post .stage6-post-form {
+  width: 100%;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.stage6-create-post-group {
+  margin: 0;
+  color: #516047;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* The conversation should read like a room, not a footnote. A one-message
+   thread used to collapse to the height of its own text. It is a fixed window
+   now, not a range: a messenger keeps the same conversation area whether there
+   is one message or fifty, and only the contents scroll. */
+.stage6-chat-panel .stage6-message-list {
+  height: clamp(520px, 76vh, 900px);
+}
+@media (max-width: 720px) {
+  .stage6-chat-panel .stage6-message-list {
+    height: clamp(420px, 68vh, 700px);
+    /* An older mobile rule caps every message list at 55vh. Without this the
+       cap wins on height, and the phone conversation stays short however tall
+       the height above asks for. */
+    max-height: none;
+  }
+  /* A phone is narrow already; half the width would break words apart. */
+  .stage6-chat-panel .stage6-message {
+    max-width: 84%;
+    padding: 5px 9px;
+    border-radius: 10px;
+  }
+  .stage6-chat-panel .stage6-message p {
+    font-size: 13px;
+    line-height: 1.38;
+  }
+  /* The same older rule stacks the sender above the time, which turns a
+     two-word message into a three-line card. A messenger keeps them on one
+     line and lets the bubble be short. */
+  .stage6-chat-panel .stage6-message-meta {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 1px;
+  }
+  .stage6-chat-panel .stage6-message-meta time {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+}
+/* Two actions share the header now, so they need a row of their own instead of
+   stacking on top of each other. */
+.stage6-chat-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Your own message sits on your side. The class is the sender-aware one; the
+   identity comes from sender_id, never from the display-name snapshot. */
+.stage6-message-own {
+  align-self: flex-end;
+  background: #eef2ff;
+  border-color: #dfe4f7;
+}
+/* Keep the composer on screen. The list used to be a fixed 76vh window, which
+   pushed the form below the fold, so the room looked like it had no input. The
    panel is a column bounded by the viewport now; the list takes what is left
-   and scrolls inside it, and the header and form keep their own height. */
+   and scrolls, the header and the form keep their own height. */
 .stage6-chat-panel {
   display: flex;
   flex-direction: column;
@@ -573,6 +833,7 @@
   flex: 0 0 auto;
 }
 .stage6-chat-panel .stage6-message-list {
+  height: auto;
   flex: 1 1 auto;
   min-height: 220px;
   max-height: none;

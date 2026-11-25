@@ -1,8 +1,4 @@
-import {
-  isValidElement,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import * as React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -58,9 +54,8 @@ vi.mock("@/lib/supabaseCourses", () => ({
 }));
 vi.mock("@/lib/supabaseGroups", () => ({
   createGroupAndInvite: mocks.createGroupAndInvite,
-  getGroupWorkflowErrorMessage: vi.fn(
-    (error: unknown) =>
-      String((error as { message?: string })?.message ?? "Workflow error")
+  getGroupWorkflowErrorMessage: vi.fn((error: unknown) =>
+    String((error as { message?: string })?.message ?? "Workflow error")
   ),
   listActiveGroupMembers: mocks.listMembers,
   listCourseGroupInviteCandidates: mocks.listCandidates,
@@ -88,6 +83,7 @@ vi.mock("./Stage6Layout", () => ({
 }));
 vi.mock("wouter", () => ({
   Link: ({ children }: { children?: ReactNode }) => children,
+  useLocation: () => ["", () => undefined],
 }));
 
 import CoursemateProfilePage, {
@@ -95,10 +91,7 @@ import CoursemateProfilePage, {
   portfolioInviteCapacityGuidance,
   portfolioInviteCapacityMessage,
 } from "./CoursemateProfilePage";
-import type {
-  GroupMembershipRow,
-  StudyGroupRow,
-} from "@/lib/supabaseGroups";
+import type { GroupMembershipRow, StudyGroupRow } from "@/lib/supabaseGroups";
 
 const group = (overrides: Partial<StudyGroupRow> = {}): StudyGroupRow => ({
   id: "group-1",
@@ -218,8 +211,7 @@ function mount(scenario: Scenario = {}) {
     const guidance = nodes
       .filter(
         node =>
-          node.type === "p" &&
-          (node.props as { role?: string }).role === "note"
+          node.type === "p" && (node.props as { role?: string }).role === "note"
       )
       .map(node => textOf((node.props as { children?: ReactNode }).children));
     const options = nodes
@@ -331,7 +323,9 @@ describe("portfolio invite wiring (isolated render mocks)", () => {
     expect(view.send.props.disabled).toBe(false);
     expect(view.statusHints).toEqual([]);
     view.send.props.onClick?.();
-    await vi.waitFor(() => expect(mocks.sendInvitation).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(mocks.sendInvitation).toHaveBeenCalledTimes(1)
+    );
     expect(mocks.sendInvitation).toHaveBeenCalledWith(
       "user-1",
       "group-1",
@@ -411,9 +405,7 @@ describe("portfolio invite wiring (isolated render mocks)", () => {
     const rosterEffect = () => view.effects()[2];
     mocks.listMembers.mockRejectedValueOnce(new Error("network down"));
     await rosterEffect()();
-    await vi.waitFor(() =>
-      expect(mocks.state[9]).toEqual({ "group-1": null })
-    );
+    await vi.waitFor(() => expect(mocks.state[9]).toEqual({ "group-1": null }));
     const failed = view.render();
     expect(failed.statusHints).toContain(
       "Group capacity could not be verified. Refresh the page before inviting."

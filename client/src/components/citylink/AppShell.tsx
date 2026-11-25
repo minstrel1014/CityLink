@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   BookOpen,
@@ -12,6 +12,8 @@ import { Link, useLocation } from "wouter";
 import { Brand } from "@/components/citylink/Shared";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { useInvitationBadge } from "@/lib/invitationBadge";
+import { useDirectMessageBadge } from "@/lib/directMessageBadge";
 import "./AppShell.css";
 
 const navigation = [
@@ -34,6 +36,20 @@ export default function AppShell({
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState("");
   const email = session.user?.email ?? "Signed-in account";
+  const badge = useInvitationBadge({
+    userId: session.status === "ready" ? (session.user?.id ?? null) : null,
+    authGeneration: session.authGeneration ?? 0,
+    refreshKey: location,
+  });
+  useEffect(() => {
+    if (location === "/invitations") badge.markSeen();
+  }, [badge.markSeen, location]);
+  const unreadMessages = useDirectMessageBadge({
+    userId: session.status === "ready" ? (session.user?.id ?? null) : null,
+    authGeneration: session.authGeneration ?? 0,
+    refreshKey: location,
+    suppressed: location.startsWith("/messages"),
+  });
 
   const isActive = (href: string) =>
     href === "/courses"
@@ -42,7 +58,7 @@ export default function AppShell({
         location.startsWith("/students/") ||
         location.startsWith("/my-courses/")
       : href === "/invitations"
-        ? location === href || location === "/my-groups"
+        ? location === href
         : href === "/messages"
           ? location === href || location === "/group-chat"
           : href === "/dashboard"
@@ -85,11 +101,24 @@ export default function AppShell({
               <Icon size={20} aria-hidden="true" />
               <span>{label}</span>
               {href === "/invitations" && (
-                /* Future notification-badge slot; keep empty until separately approved and implemented. */
                 <span
                   className="citylink-workspace-invitations-badge-slot"
                   aria-hidden="true"
-                />
+                >
+                  {badge.unseenCount > 0 && (
+                    <span className="citylink-workspace-invitations-dot" />
+                  )}
+                </span>
+              )}
+              {href === "/messages" && (
+                <span
+                  className="citylink-workspace-invitations-badge-slot"
+                  aria-hidden="true"
+                >
+                  {unreadMessages > 0 && (
+                    <span className="citylink-workspace-invitations-dot" />
+                  )}
+                </span>
               )}
             </Link>
           ))}
@@ -161,6 +190,12 @@ export default function AppShell({
           >
             <Icon size={19} aria-hidden="true" />
             <span>{label === "My profile" ? "Profile" : label}</span>
+            {href === "/invitations" && badge.unseenCount > 0 && (
+              <span className="citylink-workspace-invitations-dot" />
+            )}
+            {href === "/messages" && unreadMessages > 0 && (
+              <span className="citylink-workspace-invitations-dot" />
+            )}
           </Link>
         ))}
       </nav>

@@ -779,6 +779,53 @@ export async function getGroupChatAccess(userId: string, groupId: string) {
   );
 }
 
+export interface GroupChatHeading {
+  courseTitle: string;
+  groupName: string;
+  /** The course whose My group page owns this chat. */
+  courseId: string;
+}
+
+/**
+ * The course and group behind a chat, for the panel header.
+ *
+ * Decoration only. Access has already been decided by `get_group_chat_access`,
+ * and nothing here can widen it — the reads are the same table reads the My
+ * Group page makes. If either one fails, the caller keeps the generic heading
+ * and the chat itself is unaffected.
+ */
+export async function loadGroupChatHeading(
+  userId: string,
+  groupId: string
+): Promise<GroupChatHeading | null> {
+  try {
+    const client = await authenticatedClient(userId);
+    const group = await client
+      .from("study_groups")
+      .select("name, course_id")
+      .eq("id", groupId)
+      .maybeSingle();
+    if (group.error || !group.data) return null;
+    const groupName =
+      typeof group.data.name === "string" ? group.data.name.trim() : "";
+    const courseId =
+      typeof group.data.course_id === "string" ? group.data.course_id : "";
+    if (!groupName || !courseId) return null;
+    const course = await client
+      .from("courses")
+      .select("title")
+      .eq("id", courseId)
+      .maybeSingle();
+    const courseTitle =
+      !course.error && typeof course.data?.title === "string"
+        ? course.data.title.trim()
+        : "";
+    return { courseTitle, groupName, courseId };
+  } catch {
+    return null;
+  }
+}
+
 export async function listGroupChatMessages(
   userId: string,
   groupId: string,

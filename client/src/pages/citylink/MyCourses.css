@@ -348,7 +348,7 @@
 .authenticated-course-card-footer {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: auto;
@@ -364,16 +364,32 @@
   display: flex;
   align-items: center;
   gap: 9px;
+  /* Keep the actions on the right even when the semester label is absent. */
+  margin-left: auto;
 }
-.course-detail-link {
-  color: #61764e;
+/* My group and Find your groupmate are the same kind of action, so they share
+   one button style rather than one being a bare link. */
+.course-detail-link,
+.course-groups-link {
+  display: inline-flex;
+  min-height: 33px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px 11px;
+  border: 1px solid #e0e7d8;
+  border-radius: 7px;
+  background: #f7f9f4;
+  color: #60764e;
   font-size: 10px;
   font-weight: 650;
   white-space: nowrap;
 }
-.course-detail-link:hover {
-  color: #405536;
-  text-decoration: underline;
+.course-detail-link:hover,
+.course-groups-link:hover {
+  border-color: #a9b99a;
+  background: #f0f5e9;
+  color: #4f6440;
 }
 .course-enrolment-action {
   min-height: 33px;
@@ -399,25 +415,6 @@
 }
 .course-enrolment-action:not(:disabled):hover {
   border-color: #a9b99a;
-}
-.course-groups-link {
-  display: inline-flex;
-  min-height: 33px;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 7px 10px;
-  border: 1px solid #e0e7d8;
-  border-radius: 7px;
-  background: #f7f9f4;
-  color: #60764e;
-  font-size: 9px;
-  font-weight: 650;
-  white-space: nowrap;
-}
-.course-groups-link:hover {
-  border-color: #a9b99a;
-  background: #f0f5e9;
 }
 .authenticated-courses-state {
   width: min(570px, 100%);
@@ -517,5 +514,7 @@
   }
   .authenticated-course-card-actions {
     gap: 7px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }

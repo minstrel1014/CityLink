@@ -27,9 +27,11 @@ import {
   type CourseDirectorySnapshot,
 } from "@/lib/supabaseCourses";
 import {
+  cancelGroupInvitation,
   getGroupWorkflowErrorMessage,
   loadGroupWorkflowSnapshot,
   respondToGroupInvitation,
+  reviewGroupJoinRequest,
   type GroupInvitationRow,
   type GroupWorkflowSnapshot,
 } from "@/lib/supabaseGroups";
@@ -127,14 +129,6 @@ function WorkspaceError({
         Try again
       </button>
     </div>
-  );
-}
-
-function GroupWorkflowLink() {
-  return (
-    <Link href="/my-groups" className="secondary">
-      Manage group workflows <ArrowRight size={16} />
-    </Link>
   );
 }
 
@@ -299,8 +293,79 @@ function AuthenticatedInvitationsForUser({
       onFeedback: setFeedback,
     });
   }
+  function decline(invitation: GroupInvitationRow) {
+    if (!userId || busy.current || !isCurrent()) return;
+    if (invitation.status !== "pending" || invitation.recipient_id !== userId) {
+      return;
+    }
+    const release = invitationActionCoordinator.tryAcquire(
+      userId,
+      invitation.id
+    );
+    if (!release) return;
+    busy.current = true;
+    void (async () => {
+      try {
+        setFeedback(null);
+        try {
+          await respondToGroupInvitation(
+            userId,
+            invitation.id,
+            false,
+            isCurrent
+          );
+          if (isCurrent())
+            setFeedback({ tone: "success", message: "Invitation declined." });
+        } catch (declineError) {
+          if (isCurrent())
+            setFeedback({
+              tone: "error",
+              message: `${getGroupWorkflowErrorMessage(declineError)} The outcome may be unconfirmed; check the refreshed status before trying again.`,
+            });
+        }
+        await invitationActionCoordinator.refreshMountedViews(userId);
+      } finally {
+        busy.current = false;
+        release();
+      }
+    })();
+  }
 
   const retry = () => void reload().catch(showLoadError);
+  function cancel(invitation: GroupInvitationRow) {
+    if (!userId || busy.current || !isCurrent()) return;
+    if (invitation.status !== "pending" || invitation.sender_id !== userId) {
+      return;
+    }
+    // Same per-invitation lock as accept/decline: one action per invitation,
+    // and every mounted invitation view refreshes afterwards.
+    const release = invitationActionCoordinator.tryAcquire(
+      userId,
+      invitation.id
+    );
+    if (!release) return;
+    busy.current = true;
+    void (async () => {
+      try {
+        setFeedback(null);
+        try {
+          await cancelGroupInvitation(userId, invitation.id, isCurrent);
+          if (isCurrent())
+            setFeedback({ tone: "success", message: "Invitation cancelled." });
+        } catch (cancelError) {
+          if (isCurrent())
+            setFeedback({
+              tone: "error",
+              message: `${getGroupWorkflowErrorMessage(cancelError)} The outcome may be unconfirmed; check the refreshed status before trying again.`,
+            });
+        }
+        await invitationActionCoordinator.refreshMountedViews(userId);
+      } finally {
+        busy.current = false;
+        release();
+      }
+    })();
+  }
   const coursesById = useMemo(
     () =>
       new Map((data?.courses.courses ?? []).map(course => [course.id, course])),
@@ -324,9 +389,7 @@ function AuthenticatedInvitationsForUser({
         eyebrow="YOUR TEST-BACKED GROUP WORKFLOWS"
         title="Invitations"
         description="Review invitations and pending join requests, and accept invitations sent to your account."
-      >
-        <GroupWorkflowLink />
-      </PageHeading>
+      />
       <p className="group-workflows-intro" role="note">
         You can accept pending invitations sent to your account here. This view
         also shows your pending requests and requests for groups where you are
@@ -364,6 +427,7 @@ function AuthenticatedInvitationsForUser({
                       busyInvitationId={busyInvitationId}
                       isRefreshing={loading}
                       onAccept={accept}
+                      onDecline={decline}
                     />
                   );
                 })
@@ -404,6 +468,21 @@ function AuthenticatedInvitationsForUser({
                       <p className="authenticated-workspace-date">
                         {formatDate(invitation.created_at)}
                       </p>
+                      {invitation.status === "pending" &&
+                        invitation.sender_id === userId && (
+                          <div className="group-workflow-actions">
+                            <button
+                              type="button"
+                              className="text-button"
+                              disabled={busyInvitationId !== null}
+                              onClick={() => cancel(invitation)}
+                            >
+                              {busyInvitationId === invitation.id
+                                ? "Cancelling…"
+                                : "Cancel invitation"}
+                            </button>
+                          </div>
+                        )}
                     </article>
                   );
                 })
@@ -442,6 +521,14 @@ function AuthenticatedInvitationsForUser({
                       <p className="authenticated-workspace-date">
                         {formatDate(request.created_at)}
                       </p>
+                      {!isOwnRequest && group?.creator_id === data.userId && (
+                        <JoinRequestActions
+                          requestId={request.id}
+                          userId={data.userId}
+                          isCurrent={isCurrent}
+                          onReviewed={retry}
+                        />
+                      )}
                     </article>
                   );
                 })
@@ -456,6 +543,63 @@ function AuthenticatedInvitationsForUser({
         </div>
       )}
     </main>
+  );
+}
+
+function JoinRequestActions({
+  requestId,
+  userId,
+  isCurrent,
+  onReviewed,
+}: {
+  requestId: string;
+  userId: string;
+  isCurrent: () => boolean;
+  onReviewed: () => void;
+}) {
+  const [busy, setBusy] = useState<"approve" | "decline" | null>(null);
+  const [error, setError] = useState("");
+  async function review(approve: boolean) {
+    if (busy) return;
+    setBusy(approve ? "approve" : "decline");
+    setError("");
+    try {
+      await reviewGroupJoinRequest(userId, requestId, approve, isCurrent);
+      if (isCurrent()) onReviewed();
+    } catch (reviewError) {
+      if (isCurrent()) setError(getGroupWorkflowErrorMessage(reviewError));
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <>
+      <div className="group-workflow-actions">
+        <button
+          type="button"
+          className="primary"
+          aria-label="Approve this join request"
+          disabled={busy !== null}
+          onClick={() => void review(true)}
+        >
+          {busy === "approve" ? "Approving…" : "Approve"}
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          aria-label="Decline this join request"
+          disabled={busy !== null}
+          onClick={() => void review(false)}
+        >
+          {busy === "decline" ? "Declining…" : "Decline"}
+        </button>
+      </div>
+      {error && (
+        <p className="group-workflow-feedback error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -525,17 +669,20 @@ export function AuthenticatedMessages() {
               <div className="group-workflow-empty">
                 <strong>No active group chats yet.</strong> Active groups will
                 be listed here when you join one.
-                <div className="authenticated-workspace-empty-action">
-                  <GroupWorkflowLink />
-                </div>
               </div>
             )}
           </section>
-          <section className="group-workflow-panel authenticated-private-messages-soon">
+          <section className="group-workflow-panel">
             <h2>
-              <MessageCircle size={18} /> Private messages <span>SOON</span>
+              <MessageCircle size={18} /> Private messages
             </h2>
-            <p>Private messaging is not part of this release.</p>
+            <p>
+              Message a classmate from their name plate on the course People
+              page, or from their profile.
+            </p>
+            <Link href="/messages" className="group-workflow-link">
+              Open direct messages
+            </Link>
           </section>
         </div>
       )}

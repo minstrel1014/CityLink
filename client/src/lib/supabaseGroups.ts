@@ -850,6 +850,8 @@ async function callGroupRpc<T>(
   userId: string,
   name:
     | "create_group_and_invite"
+    | "create_group_alone"
+    | "leave_group"
     | "send_group_invitation"
     | "respond_to_group_invitation"
     | "cancel_group_invitation"
@@ -876,6 +878,38 @@ async function callGroupRpc<T>(
 export interface CreatedGroupAndInvitation {
   group_id: string;
   invitation_id: string;
+}
+
+/**
+ * Creates a group with the caller as its first active member and nobody to
+ * invite. The server names it "<display name>'s group" when the name is left
+ * blank, so the client only sends what the student actually typed.
+ */
+export async function createGroupAlone(
+  userId: string,
+  courseId: string,
+  name: string,
+  maxMembers: number,
+  shouldDispatch?: () => boolean
+): Promise<string> {
+  validateGroupMaxMembers(maxMembers);
+  const trimmed = name.trim();
+  const groupId = await callGroupRpc<string>(
+    userId,
+    "create_group_alone",
+    {
+      p_course_id: courseId,
+      p_name: trimmed.length ? trimmed : null,
+      p_max_members: maxMembers,
+    },
+    shouldDispatch
+  );
+  if (!groupId) {
+    throw new Error(
+      "CityLink did not return the new group ID. Refresh before trying again."
+    );
+  }
+  return groupId;
 }
 
 export async function createGroupAndInvite(
@@ -919,6 +953,24 @@ function validateGroupMaxMembers(maxMembers: number): void {
   if (!Number.isInteger(maxMembers) || maxMembers < 2 || maxMembers > 19) {
     throw new Error("Group maximum must be a whole number between 2 and 19.");
   }
+}
+
+/**
+ * Ends the caller's own active membership. The server keeps the authority:
+ * leader succession and, when the last member leaves, the group becoming
+ * abandoned are handled by the membership-end triggers, not by the client.
+ */
+export async function leaveGroup(
+  userId: string,
+  groupId: string,
+  shouldDispatch?: () => boolean
+): Promise<string> {
+  return callGroupRpc<string>(
+    userId,
+    "leave_group",
+    { p_group_id: groupId },
+    shouldDispatch
+  );
 }
 
 export async function setGroupMaxMembers(

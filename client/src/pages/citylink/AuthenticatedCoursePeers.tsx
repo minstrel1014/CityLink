@@ -58,6 +58,7 @@ import {
   PeopleGroupCapacity,
 } from "./PeopleCapacity";
 import { getGroupCapacityState } from "./groupCapacity";
+import { MessageButton } from "./MessageButton";
 import "./CourseDetail.css";
 
 type DetailData = {
@@ -759,7 +760,10 @@ function CoursePeersView({
     );
     return (
       <article className="classmate-card" key={peer.profile_id}>
-        <div className="classmate-person">
+        <Link
+          className="classmate-person classmate-person-link"
+          href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`}
+        >
           <span className="avatar sage" aria-label={peer.display_name}>
             {initials(peer.display_name)}
           </span>
@@ -772,14 +776,8 @@ function CoursePeersView({
             {!embedded && (
               <small>{peer.student_id || "Student ID not provided"}</small>
             )}
-            <Link
-              className="classmate-portfolio-link"
-              href={`/my-courses/${encodeURIComponent(courseId)}/people/${encodeURIComponent(peer.profile_id)}`}
-            >
-              View portfolio
-            </Link>
           </div>
-        </div>
+        </Link>
         <div className="classmate-detail">
           {summary ? (
             <span className="status full">
@@ -825,7 +823,7 @@ function CoursePeersView({
                 You are in this group already
               </button>
             ) : relationship === "requested" ? (
-              <Link href="/my-groups" className="invite-status compact">
+              <Link href="/invitations" className="invite-status compact">
                 Requested
               </Link>
             ) : summary.group_id === myCourseGroup?.id ? (
@@ -845,11 +843,11 @@ function CoursePeersView({
               </Link>
             )
           ) : invitationState === "sent" ? (
-            <Link href="/my-groups" className="invite-status compact">
+            <Link href="/invitations" className="invite-status compact">
               Invitation sent
             </Link>
           ) : invitationState === "received" ? (
-            <Link href="/my-groups" className="invite-status compact">
+            <Link href="/invitations" className="invite-status compact">
               Invitation received
             </Link>
           ) : invitationState === "connected" ? (
@@ -972,6 +970,7 @@ function CoursePeersView({
               Invite
             </button>
           )}
+          <MessageButton otherProfileId={peer.profile_id} />
         </div>
       </article>
     );

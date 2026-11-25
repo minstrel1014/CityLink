@@ -11,6 +11,7 @@ export function ReceivedInvitationCard({
   busyInvitationId,
   isRefreshing,
   onAccept,
+  onDecline,
 }: {
   invitation: GroupInvitationRow;
   groupName?: string;
@@ -20,6 +21,7 @@ export function ReceivedInvitationCard({
   busyInvitationId: string | null;
   isRefreshing: boolean;
   onAccept: (invitation: GroupInvitationRow) => void;
+  onDecline?: (invitation: GroupInvitationRow) => void;
 }) {
   const displayGroupName = groupName || "Study group invitation";
   return (
@@ -48,6 +50,18 @@ export function ReceivedInvitationCard({
           >
             {busyInvitationId === invitation.id ? "Accepting…" : "Accept"}
           </button>
+          {onDecline && (
+            <button
+              type="button"
+              className="secondary"
+              aria-label={`Decline invitation to ${displayGroupName} from ${invitation.sender_name_snapshot}`}
+              aria-busy={busyInvitationId === invitation.id}
+              disabled={busyInvitationId !== null || isRefreshing}
+              onClick={() => onDecline(invitation)}
+            >
+              {busyInvitationId === invitation.id ? "Working…" : "Decline"}
+            </button>
+          )}
         </div>
       )}
     </article>

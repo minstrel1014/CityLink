@@ -23,7 +23,6 @@ const mocks = vi.hoisted(() => ({
   edit: vi.fn(),
   stageError: vi.fn(),
   loadOwn: vi.fn(),
-  loadCourseEligibility: vi.fn(),
   listGroups: vi.fn(),
   listPosts: vi.fn(),
   session: { status: "ready", user: { id: "user-1" } } as {
@@ -71,7 +70,10 @@ vi.mock("@/lib/supabaseGroups", () => ({
   requestToJoinGroup: mocks.request,
 }));
 vi.mock("@/lib/supabaseCourses", () => ({
-  hasCurrentTermCourseEnrollment: mocks.loadCourseEligibility,
+  loadCourseDirectory: vi.fn(async () => ({
+    courses: [],
+    enrolledCourseIds: [],
+  })),
 }));
 vi.mock("@/lib/supabaseStage6", () => ({
   closeGroupRecruitmentPost: vi.fn(),
@@ -184,7 +186,7 @@ function mount(options: MountOptions = {}) {
       postsCursor: options.postsHasMore
         ? { createdAt: "2026-11-17T09:00:00.000Z", id: "post-1" }
         : null,
-      eligibility: { status: "complete", verified: true, groups: [ownGroup] },
+      ownGroups: { status: "ready", groups: [ownGroup] },
       token: {
         userId: "user-1",
         courseId: "course-1",
@@ -202,11 +204,12 @@ function mount(options: MountOptions = {}) {
     false, // postsRefreshBusy
     options.locallyPending ?? [], // locallyPendingPostIds
     0, // peopleRefreshToken
-    null, // creatingGroupId
     null, // editingPostId
     "Unsaved body", // draft
     "Unsaved subject", // postSubject
     false, // refreshQueued
+    "", // courseLabel
+    "", // groupSearch
   ];
   mocks.setters = mocks.state.map((_, index) =>
     vi.fn(value => {
@@ -237,7 +240,7 @@ function mount(options: MountOptions = {}) {
     render,
     scope,
     feedback: () => mocks.state[4] as string,
-    queued: () => mocks.state[15] as boolean,
+    queued: () => mocks.state[14] as boolean,
     refreshBusy: () => mocks.state[8] as boolean,
     pendingIds: () => mocks.state[9] as string[],
   };

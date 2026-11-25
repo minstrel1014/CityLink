@@ -18,11 +18,13 @@ import {
 import {
   cancelGroupInvitation,
   getGroupWorkflowErrorMessage,
+  leaveGroup,
   listActiveGroupMembers,
   loadGroupWorkflowSnapshot,
   loadOwnCourseProfile,
   removeGroupMember,
   renameStudyGroup,
+  reviewGroupJoinRequest,
   setGroupMaxMembers,
   type GroupMembershipRow,
   type GroupWorkflowSnapshot,
@@ -41,6 +43,7 @@ import {
 } from "@/components/citylink/Shared";
 import { GroupCapacitySettings } from "./GroupCapacitySettings";
 import { GroupMemberRemoval } from "./GroupMemberRemoval";
+import { RecruitmentPostComposer } from "./RecruitmentPostComposer";
 import {
   canManageGroupCapacity,
   canRemoveGroupMember,
@@ -162,6 +165,9 @@ export default function AuthenticatedMyGroup({
   const [groupName, setGroupName] = useState("");
   const [groupMaximum, setGroupMaximum] = useState("");
   const [busyAction, setBusyAction] = useState("");
+  // Leaving is one-way for this membership, so it takes a second explicit
+  // click instead of firing from a single button.
+  const [leaveConfirm, setLeaveConfirm] = useState(false);
   const requestGeneration = useRef(0);
   const actionGeneration = useRef(0);
   const actionBusy = useRef(false);
@@ -339,6 +345,17 @@ export default function AuthenticatedMyGroup({
     );
   }
 
+  async function reviewRequest(requestId: string, approve: boolean) {
+    if (!userId) return;
+    await runAction(
+      `${approve ? "approve" : "reject"}-${requestId}`,
+      guard => reviewGroupJoinRequest(userId, requestId, approve, guard),
+      approve
+        ? "The join request was approved and the student joined the group."
+        : "The join request was declined."
+    );
+  }
+
   async function saveGroupMaximum() {
     if (
       !userId ||
@@ -406,6 +423,28 @@ export default function AuthenticatedMyGroup({
     );
   }
 
+  async function quitGroup() {
+    if (
+      !userId ||
+      !data?.group ||
+      data.userId !== userId ||
+      data.course.id !== courseId ||
+      actionBusy.current
+    )
+      return;
+    const group = data.group;
+    await runAction(
+      "leave",
+      async guard => {
+        const result: unknown = await leaveGroup(userId, group.id, guard);
+        if (result !== "left")
+          throw new Error("Leaving the group was not confirmed.");
+      },
+      "You left the group."
+    );
+    setLeaveConfirm(false);
+  }
+
   if (session.status === "loading") {
     return (
       <AccessScreen
@@ -452,6 +491,17 @@ export default function AuthenticatedMyGroup({
   const mayManageCapacity = ownData?.group
     ? canManageGroupCapacity(ownData.group, members, userId)
     : false;
+  const mayReviewJoinRequests =
+    Boolean(ownData?.group) && ownData?.group?.creator_id === userId;
+  const pendingJoinRequests = mayReviewJoinRequests
+    ? (ownData?.workflow?.joinRequests ?? []).filter(
+        request =>
+          request.course_id === courseId &&
+          request.group_id === ownData?.group?.id &&
+          request.status === "pending" &&
+          request.requester_id !== userId
+      )
+    : [];
   const leaderName =
     ownData?.group?.creator_id === userId
       ? (ownData.profile?.display_name ?? "You")
@@ -517,6 +567,63 @@ export default function AuthenticatedMyGroup({
       </GroupCard>
     ) : null;
 
+  const joinRequestCard =
+    ownData && ownData.enrolled && mayReviewJoinRequests ? (
+      <GroupCard
+        eyebrow="REQUESTS"
+        title="Join requests"
+        count={pendingJoinRequests.length}
+        description="Only the current group leader can review requests. Approving adds the student to this group; the server rechecks eligibility."
+        className="my-group-invitations-card"
+      >
+        {pendingJoinRequests.length > 0 ? (
+          <div className="group-invitation-history">
+            {pendingJoinRequests.map(request => (
+              <article className="group-invitation-row" key={request.id}>
+                <div>
+                  <strong>{request.requester_name_snapshot}</strong>
+                  <span>
+                    {ownData.group?.name || "Study group"} ·{" "}
+                    {new Date(request.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <span className="group-workflow-status pending">Pending</span>
+                <div className="group-workflow-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    aria-label={`Approve the join request from ${request.requester_name_snapshot}`}
+                    disabled={busyAction !== ""}
+                    onClick={() => void reviewRequest(request.id, true)}
+                  >
+                    {busyAction === `approve-${request.id}`
+                      ? "Approving…"
+                      : "Approve"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    aria-label={`Decline the join request from ${request.requester_name_snapshot}`}
+                    disabled={busyAction !== ""}
+                    onClick={() => void reviewRequest(request.id, false)}
+                  >
+                    {busyAction === `reject-${request.id}`
+                      ? "Declining…"
+                      : "Decline"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="group-workflow-empty">
+            <strong>No pending join requests.</strong> Requests for this group
+            will appear here.
+          </div>
+        )}
+      </GroupCard>
+    ) : null;
+
   const classmateListCard =
     ownData && ownData.enrolled ? (
       <GroupCard
@@ -549,9 +656,6 @@ export default function AuthenticatedMyGroup({
     <div className="authenticated-courses-page course-detail-page my-group-page">
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
-        <Link href="/my-courses" className="back-link">
-          View My Courses
-        </Link>
         {loading && (
           <div className="course-directory-state" role="status">
             <span className="spinner" /> Loading your group and invitation
@@ -746,7 +850,72 @@ export default function AuthenticatedMyGroup({
                   )}
                 </GroupCard>
 
+                <GroupCard
+                  eyebrow="RECRUITMENT"
+                  title="Create a recruitment post"
+                  description="Only the current group leader can publish. The server checks eligibility again when the post is submitted."
+                  className="my-group-recruitment-card"
+                >
+                  <RecruitmentPostComposer
+                    userId={userId}
+                    groupId={ownData.group.id}
+                    groupName={ownData.group.name}
+                    courseCode={ownData.course.code}
+                    memberCount={groupSize}
+                    maxMembers={ownData.group.max_members ?? null}
+                    canCreate={ownData.group.creator_id === userId}
+                    onPosted={() => setRetryToken(value => value + 1)}
+                  />
+                </GroupCard>
+
+                <GroupCard
+                  eyebrow="MEMBERSHIP"
+                  title="Leave this group"
+                  description="Leaving ends your membership for this course and term. If you are the last member, the group becomes abandoned and its open invitations are expired."
+                  className="my-group-leave-card"
+                >
+                  {leaveConfirm ? (
+                    <div className="my-group-leave-confirm">
+                      <p>
+                        Leave <strong>{ownData.group.name}</strong>? To come
+                        back you would need a new invitation, or you would have
+                        to create a new group.
+                      </p>
+                      <div className="my-group-leave-actions">
+                        <button
+                          className="primary"
+                          type="button"
+                          disabled={busyAction !== ""}
+                          onClick={() => void quitGroup()}
+                        >
+                          {busyAction === "leave"
+                            ? "Leaving…"
+                            : "Yes, leave group"}
+                        </button>
+                        <button
+                          className="secondary"
+                          type="button"
+                          disabled={busyAction !== ""}
+                          onClick={() => setLeaveConfirm(false)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="secondary my-group-leave-button"
+                      type="button"
+                      disabled={busyAction !== ""}
+                      onClick={() => setLeaveConfirm(true)}
+                    >
+                      Quit group
+                    </button>
+                  )}
+                </GroupCard>
+
                 {invitationHistoryCard}
+                {joinRequestCard}
                 {classmateListCard}
               </div>
             ) : (
@@ -772,6 +941,7 @@ export default function AuthenticatedMyGroup({
                   </div>
                 </section>
                 {invitationHistoryCard}
+                {joinRequestCard}
               </div>
             )}
           </>

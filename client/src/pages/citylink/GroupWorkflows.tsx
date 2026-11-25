@@ -39,6 +39,13 @@ import {
 } from "./groupCapacity";
 import "./GroupWorkflows.css";
 
+/**
+ * No longer routed (2026-11-23): /my-groups redirects to /dashboard and the
+ * recruitment-post composer moved to each course's My group page. The file is
+ * kept only because OptionAUiContract.test.ts reads its source, and because
+ * AuthenticatedWorkspacePages / GroupChatPicker reuse GroupWorkflows.css.
+ */
+
 type Feedback = { tone: "success" | "error"; message: string };
 
 type WorkflowData = {
@@ -399,7 +406,6 @@ export default function GroupWorkflows() {
   const incomingInvitations = ownData?.groups.incomingInvitations ?? [];
   const outgoingInvitations = ownData?.groups.outgoingInvitations ?? [];
   const joinRequests = ownData?.groups.joinRequests ?? [];
-
   async function runAction(
     key: string,
     action: (isCurrent: () => boolean) => Promise<unknown>,

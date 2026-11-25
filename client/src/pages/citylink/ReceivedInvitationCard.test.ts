@@ -72,16 +72,54 @@ describe("received invitation card", () => {
         isValidElement<{ className?: string }>(child) &&
         child.props.className === "group-workflow-actions"
     );
-    if (
-      !isValidElement<{
-        children: React.ReactElement<{ onClick: () => void }>;
-      }>(actions)
-    ) {
+    if (!isValidElement<{ children: React.ReactNode }>(actions)) {
       throw new Error("Accept action was not rendered");
     }
-    actions.props.children.props.onClick();
+    const acceptButton = Children.toArray(actions.props.children).find(
+      child =>
+        isValidElement<{ "aria-label"?: string }>(child) &&
+        (child.props["aria-label"] ?? "").startsWith("Accept invitation")
+    );
+    if (!isValidElement<{ onClick: () => void }>(acceptButton)) {
+      throw new Error("Accept action was not rendered");
+    }
+    acceptButton.props.onClick();
     expect(onAccept).toHaveBeenCalledOnce();
     expect(onAccept).toHaveBeenCalledWith(invitation);
+  });
+
+  it("offers a Decline action that passes the same invitation", () => {
+    const onDecline = vi.fn();
+    const card = ReceivedInvitationCard({
+      invitation,
+      groupName: "Study Team",
+      courseCode: "CS101",
+      formattedDate: "1 Jan 2026",
+      userId: "user-1",
+      busyInvitationId: null,
+      isRefreshing: false,
+      onAccept: vi.fn(),
+      onDecline,
+    });
+    const actions = Children.toArray(card.props.children).find(
+      child =>
+        isValidElement<{ className?: string }>(child) &&
+        child.props.className === "group-workflow-actions"
+    );
+    if (!isValidElement<{ children: React.ReactNode }>(actions)) {
+      throw new Error("Decline action was not rendered");
+    }
+    const declineButton = Children.toArray(actions.props.children).find(
+      child =>
+        isValidElement<{ "aria-label"?: string }>(child) &&
+        (child.props["aria-label"] ?? "").startsWith("Decline invitation")
+    );
+    if (!isValidElement<{ onClick: () => void }>(declineButton)) {
+      throw new Error("Decline action was not rendered");
+    }
+    declineButton.props.onClick();
+    expect(onDecline).toHaveBeenCalledOnce();
+    expect(onDecline).toHaveBeenCalledWith(invitation);
   });
 
   it("hides Accept for terminal records, another recipient, or no ready user", () => {
