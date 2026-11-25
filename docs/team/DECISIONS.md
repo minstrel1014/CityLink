@@ -2068,3 +2068,50 @@ above. Both files carried their own `begin;` … `commit;`; neither returned an 
 
 Scope: nothing else was written. No PR state change, no merge, no deployment, no publication and no
 signed-in QA.
+
+## 2026-11-25 — AUTHORIZATION (QA): single-account and multi-account QA of the AI-chat pair
+
+Adam authorised at 09:24 Asia/Taipei, in the same message that approved the PR #67 retitle.
+
+**Target.** CityLink Launch `pijslbchvstkoweslymr` only. Not `wkzclgmhrtecnpexfesr`, which stays frozen.
+
+**Subject.** The eight functions applied at 01:16 UTC — `accept_ai_disclosure`,
+`begin_group_ai_request`, `claim_group_ai_request`, `clear_group_ai_context`, `finish_group_ai_request`,
+`get_group_ai_request_status`, `list_group_chat_messages_ai`, `private.list_group_chat_messages_page` —
+plus the unique index `group_chat_messages_ai_request` and the tables `group_ai_context` /
+`group_ai_requests`.
+
+**Single-account QA.** One authenticated student exercising the client-facing path in the intended order:
+the disclosure gate before first use, the idempotency key on `begin_group_ai_request`, the status poll, the
+context clear, and the read path through `list_group_chat_messages_ai`.
+
+**Multi-account QA.** Two or more authenticated students in the same group, exercising what differs by role
+and membership state: active member, non-member coursemate, former member. The point is to see the
+authority boundaries the grant matrix implies, not just that the calls return rows.
+
+**Accounts.** The disposable Launch QA accounts already issued (`citylink.qa*.20261123@example.com`,
+`citylink.seed.*.20261123@example.com`). They are QA identities, not real users, and nothing they create is
+product data.
+
+**Explicitly not authorised by this entry.** Concurrency or race testing beyond ordinary sequential
+multi-account use — that needs its own decision; any schema or grant change; any write outside the QA
+accounts' own rows; PR state change; merge; deployment; publication; GitHub visibility.
+
+**Reporting.** Raw outputs and observed states, distinguishing what was executed from what was inferred. A
+finding that would need code or SQL comes back as a finding, not as a fix.
+
+## 2026-11-25 — The `20261124082200` ledger row has no migration file: recorded, not backfilled
+
+Adam authorised resolving this at 09:24. Investigation first: the text of that migration is not
+recoverable. The ledger row stores `statements = null`, and neither the repository nor the shared project
+files contain that SQL under the version or under `group_file_read_functions`.
+
+What the database does hold is the _result_, readable back with `pg_get_functiondef`. A file reconstructed
+from that result never ran, would be treated by any migration tool as pending work, and could re-apply
+definitions nobody reviewed in that form. Writing it would turn a bookkeeping gap into an unreviewed
+schema change.
+
+**Decision.** Documented permanent exception. The ledger row stays, the directory stays without a file, and
+this entry is the record that the gap is known and why. If a reviewed backfill is ever wanted, it must be
+generated from `pg_get_functiondef` at a named head, reviewed as new SQL, and labelled a reconstruction —
+never presented as the bytes that ran.
