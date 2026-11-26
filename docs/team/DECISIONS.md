@@ -2967,3 +2967,19 @@ time. A successful file-reading answer should show `files_used=1`, a non-zero `f
 **What this is not.** No auth user was created or modified; the roster reuses accounts that already existed. No policy, grant, function or table was touched. No group chat message, file or AI request was written — the groups are empty rooms with a roster and a post. The rows satisfy the existing checks (`max_members` 2–19, `status` in forming/active, name trimmed and ≤50, post body ≤2000, `closed_at` null while open).
 
 **Read back after the write:** 1 course, 9 enrolments, 3 groups, 9 active memberships, 3 open posts; member counts 4 / 3 / 2 against maximums 5 / 4 / 4.
+
+## 2026-11-26 11:44 — Starter messages in the three IS2023 groups, and DATA201 renamed to CB4303
+
+**Authorised by Adam in two messages:** "please add a few natural starter chat messages for each of the three groups to make the demo feel more active", and "change the name of introduction to data analytic to strategic management CB4303 / CB4303 IS the course code".
+
+**Messages written** (`group_chat_messages`, all `author_kind = 'member'`, sender ids the real group members, back-dated over 24–26 November so the room reads as a conversation rather than a bulk import):
+
+- `Monday Builders` — 6 messages, Amelia Chen, Marcus Lee, Priya Nair and Adam, about the café ordering app: the 12:00–13:30 rush, the menu sketch, one order per table, the API split, what Monday's demo covers.
+- `FinTech Track` — 6 messages, Sofia Rossi, Hana Kim, Owen Brady, about the budgeting app: the notebook it replaces, "one number" as the main screen, a monthly summary as a card rather than a dashboard, offline entry, Friday check-in.
+- `Prototype Lab` — 5 messages, Tom Whitfield and Daniel Osei, about parcel tracking: the courier's real status list, matching their values instead of translating, camera scanning, and the three ways Daniel intends to break it.
+
+Content is plausible for each brief and contains no claim about real people beyond the group's own project. No AI rows were written: `author_kind = 'ai'` requires a `CityLink AI` snapshot and would misrepresent a generated answer as a model response to a request that never happened.
+
+**Course renamed.** `DATA201 / Introduction to Data Analytics` is now `CB4303 / Strategic Management` — same row `f49e3fd7-9597-471e-9e0e-002ed45f337b`, so its 14 enrolments, 3 groups and 1 recruitment post followed the rename untouched. `CB4303` did not previously exist, so the `(code, semester)` unique constraint was satisfied rather than bypassed. The department still reads `Data Science`; Adam did not ask for it to change and it was left alone.
+
+**Read back:** 6 / 6 / 5 messages in the three groups, first 2026-11-24, last 2026-11-26; `CB4303` returns 14 enrolments, 3 groups, 1 post.
