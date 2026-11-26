@@ -113,6 +113,8 @@ do $shape$
 declare
   v_missing text;
 begin
+  -- NF-8: render catalog text in a fixed zone so the ceiling pin is session-independent.
+  perform set_config('TimeZone','UTC',true);
   select string_agg(c.conname, ', ')
     into v_missing
   from (values ('signup_email_allowlist_email_normalised'),
@@ -126,7 +128,7 @@ begin
       and pc.convalidated
       -- NF-1: the ceiling constraint must actually carry the approved date.
       and (c.conname <> 'signup_email_allowlist_expiry_ceiling'
-           or pg_get_constraintdef(pc.oid) like '%2026-12-25%')
+           or pg_get_constraintdef(pc.oid) like '%2026-12-25 15:59:59+00%')
   );
 
   if v_missing is not null then
