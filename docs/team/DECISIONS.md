@@ -2953,3 +2953,17 @@ contacted by any call in this window.
 at version 10, the claim now carries `objectKey`, so the executor has something to read for the first
 time. A successful file-reading answer should show `files_used=1`, a non-zero `file_chars`, and no
 「（部分選取檔案沒有可讀文字）」. Until this window, that notice was correct behaviour, not a defect.
+## 2026-11-26 11:26 — Adam authorised one seeded course on Launch, and it exists
+
+**Authorisation.** Adam, 2026-11-26 11:22: "make a course called mobile app for business code is IS2023 give you some course me and groups and recruitment posts". This is a Main write, so it is recorded here as the rule requires: the scope is exactly one course, its enrolments, groups and recruitment posts, created once, with no schema change, no deletion and no new auth users.
+
+**Created, all in one transaction on `pijslbchvstkoweslymr`:**
+
+- Course `a155bf4c-4090-491c-a795-5aabdf0719e4` — `IS2023`, "Mobile App for Business", Information Systems, 3 credits, `2026-Fall`, term `45390d8c-6625-498a-a505-6bf61493934e`.
+- Nine enrolments: Adam (`7c319ab0…`, `tzeholi3-c@my.cityu.edu.hk`) and eight existing seed students — Amelia Chen, Marcus Lee, Priya Nair, Daniel Osei, Sofia Rossi, Hana Kim, Tom Whitfield, Owen Brady.
+- Three active groups, each with a creator membership and its roster: `Monday Builders` (`ce9549c7…`, Amelia, max 5, 4 members including Adam), `FinTech Track` (`f0c48d62…`, Sofia, max 4, 3 members), `Prototype Lab` (`80e435f1…`, Tom, max 4, 2 members).
+- Three open recruitment posts, one per group, authored by each group's creator: a café ordering app looking for an Android builder, a budgeting app looking for a designer, a parcel-tracking prototype looking for a tester.
+
+**What this is not.** No auth user was created or modified; the roster reuses accounts that already existed. No policy, grant, function or table was touched. No group chat message, file or AI request was written — the groups are empty rooms with a roster and a post. The rows satisfy the existing checks (`max_members` 2–19, `status` in forming/active, name trimmed and ≤50, post body ≤2000, `closed_at` null while open).
+
+**Read back after the write:** 1 course, 9 enrolments, 3 groups, 9 active memberships, 3 open posts; member counts 4 / 3 / 2 against maximums 5 / 4 / 4.
