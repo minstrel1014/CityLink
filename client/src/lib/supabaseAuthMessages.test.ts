@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CITYU_SIGNUP_REJECTION_MESSAGE,
   cleanSupabaseRecoveryCallbackUrl,
   getAuthEmailRedirectTo,
   getRegistrationPendingMessage,
@@ -91,5 +92,40 @@ describe("Supabase Auth form helpers", () => {
     const message = getRegistrationPendingMessage();
     expect(message).toMatch(/may send a verification email/i);
     expect(message).not.toMatch(/email has been sent/i);
+  });
+
+  it("relays the CityU signup hook rejection instead of a generic failure", () => {
+    expect(
+      getSupabaseAuthErrorMessage(
+        {
+          code: "hook_rejected",
+          message:
+            "Registration requires a CityU email address ending in @my.cityu.edu.hk.",
+        },
+        "sign-up"
+      )
+    ).toBe(CITYU_SIGNUP_REJECTION_MESSAGE);
+  });
+
+  it("uses the approved CityU wording when only the error code is known", () => {
+    expect(
+      getSupabaseAuthErrorMessage({ code: "hook_rejected" }, "sign-up")
+    ).toBe(
+      "Registration requires a CityU email address ending in @my.cityu.edu.hk."
+    );
+  });
+
+  it("still hides unrelated signup failures behind the generic message", () => {
+    expect(
+      getSupabaseAuthErrorMessage(
+        {
+          code: "unexpected_failure",
+          message: "Database error saving new user",
+        },
+        "sign-up"
+      )
+    ).toBe(
+      "Unable to create the account. Please try again or check the Supabase Auth settings."
+    );
   });
 });
