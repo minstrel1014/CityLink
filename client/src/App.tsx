@@ -13,7 +13,6 @@ import {
 import Welcome from "@/pages/citylink/Welcome";
 import Dashboard, { Courses } from "@/pages/citylink/Dashboard";
 import MyCourses from "@/pages/citylink/MyCourses";
-import GroupWorkflows from "@/pages/citylink/GroupWorkflows";
 import { Classmates, StudentProfile } from "@/pages/citylink/Classmates";
 import AuthenticatedCourseDetail from "@/pages/citylink/AuthenticatedCourseDetail";
 import AuthenticatedMyGroup from "@/pages/citylink/AuthenticatedMyGroup";
@@ -30,8 +29,11 @@ import AuthenticatedProfile from "@/pages/citylink/AuthenticatedProfile";
 import {
   AuthenticatedAbout,
   AuthenticatedInvitations,
-  AuthenticatedMessages,
 } from "@/pages/citylink/AuthenticatedWorkspacePages";
+import {
+  DirectThreadRoom,
+  MessagesHub,
+} from "@/pages/citylink/DirectMessagesPage";
 import {
   Invitations,
   MyProfile,
@@ -270,13 +272,7 @@ export default function App() {
                   <Redirect to="/dashboard" replace />
                 </Route>
                 <Route path="/my-groups">
-                  {() => (
-                    <WorkspacePage
-                      title="My groups"
-                      renderAuthenticated={() => <GroupWorkflows />}
-                      signedOut={<GroupWorkflows />}
-                    />
-                  )}
+                  <Redirect to="/dashboard" replace />
                 </Route>
                 <Route path="/group-chat">
                   {() => (
@@ -291,7 +287,16 @@ export default function App() {
                   {() => (
                     <WorkspacePage
                       title="Messages"
-                      renderAuthenticated={() => <AuthenticatedMessages />}
+                      renderAuthenticated={() => <MessagesHub />}
+                      signedOut={<Messages />}
+                    />
+                  )}
+                </Route>
+                <Route path="/messages/:threadId">
+                  {() => (
+                    <WorkspacePage
+                      title="Messages"
+                      renderAuthenticated={() => <DirectThreadRoom />}
                       signedOut={<Messages />}
                     />
                   )}

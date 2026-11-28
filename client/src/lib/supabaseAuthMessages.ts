@@ -9,6 +9,11 @@ type AuthErrorLike = {
   message?: unknown;
 };
 
+// Mirrors the message returned by public.hook_cityu_signup (Before User Created).
+// Only used when Supabase rejects the signup without relaying its own text.
+export const CITYU_SIGNUP_REJECTION_MESSAGE =
+  "Registration requires a CityU email address ending in @my.cityu.edu.hk.";
+
 export function getAuthEmailRedirectTo(origin: string) {
   return new URL("/", origin).toString();
 }
@@ -142,6 +147,19 @@ export function getSupabaseAuthErrorMessage(
     message.includes("too many requests")
   ) {
     return "There have been too many attempts. Wait a few minutes and try again.";
+  }
+
+  if (
+    operation === "sign-up" &&
+    (code === "hook_rejected" ||
+      message.includes("@my.cityu.edu.hk") ||
+      message.includes("cityu"))
+  ) {
+    const rawMessage =
+      typeof details.message === "string" ? details.message.trim() : "";
+    return rawMessage && /@my\.cityu\.edu\.hk/i.test(rawMessage)
+      ? rawMessage
+      : CITYU_SIGNUP_REJECTION_MESSAGE;
   }
 
   if (operation === "sign-up") {

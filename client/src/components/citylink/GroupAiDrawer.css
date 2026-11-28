@@ -1,0 +1,265 @@
+.citylink-ai-drawer {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 55;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(680px, 100vw);
+  max-height: min(82vh, 760px);
+  padding: 20px;
+  overflow-y: auto;
+  background: #ffffff;
+  border-radius: 0 0 16px 16px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.18);
+  transform: translateX(-50%);
+  animation: citylink-ai-drawer-slide-down 180ms ease-out;
+}
+
+@keyframes citylink-ai-drawer-slide-down {
+  from {
+    transform: translate(-50%, -100%);
+    opacity: 0.6;
+  }
+
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citylink-ai-drawer {
+    animation: none;
+  }
+}
+
+.citylink-ai-drawer__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.citylink-ai-drawer__header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+
+.citylink-ai-drawer__header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.citylink-ai-drawer__header button {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.citylink-ai-drawer__label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.citylink-ai-drawer textarea {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+.citylink-ai-drawer__files,
+.citylink-ai-drawer__consent {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+/* The seven statements are reference text, not the main event: keep them
+   small and scrollable so the question box stays on screen. */
+.citylink-ai-drawer__consent {
+  gap: 6px;
+  padding: 8px 10px;
+  max-height: min(38vh, 280px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.citylink-ai-drawer__consent-list {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.citylink-ai-drawer__consent-list li {
+  margin: 0;
+}
+
+.citylink-ai-drawer__consent .citylink-ai-drawer__agree {
+  gap: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+@media (max-width: 640px) {
+  .citylink-ai-drawer__consent {
+    max-height: 34vh;
+  }
+
+  .citylink-ai-drawer__consent-list {
+    font-size: 0.68rem;
+  }
+}
+
+.citylink-ai-drawer__files legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0 4px;
+}
+
+.citylink-ai-drawer__files label,
+.citylink-ai-drawer__consent label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.citylink-ai-drawer__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.citylink-ai-drawer__feedback {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #b45309;
+}
+
+.citylink-ai-drawer__actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.citylink-ai-drawer__answer {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+.citylink-ai-drawer__answer h3 {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+
+.citylink-ai-drawer__answer p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.stage6-message-ai {
+  border-left: 3px solid #6366f1;
+  padding-left: 10px;
+}
+
+.citylink-ai-drawer__status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: #4338ca;
+}
+
+.citylink-ai-drawer__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #c7d2fe;
+  border-top-color: #4338ca;
+  border-radius: 50%;
+  animation: citylink-ai-spin 700ms linear infinite;
+}
+
+@keyframes citylink-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .citylink-ai-drawer__spinner {
+    animation-duration: 2.4s;
+  }
+}
+
+/* What this question carries and what is left today: small, always visible,
+   never louder than the question box itself. */
+.citylink-ai-drawer__meta {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.citylink-ai-drawer__meta div {
+  display: flex;
+  gap: 8px;
+}
+
+.citylink-ai-drawer__meta dt {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: #334155;
+}
+
+.citylink-ai-drawer__meta dd {
+  margin: 0;
+}
+
+.citylink-ai-drawer__meta-detail {
+  margin-left: 6px;
+  color: #94a3b8;
+}
+
+/* The live numbers own their line. Appending them to the limit sentence with a
+   `・` made one line carry three facts and wrap mid-clause ("・此群組 4／20 次"
+   landing on its own line), which is what made the block hard to scan. */
+.citylink-ai-drawer__usage {
+  display: block;
+  font-weight: 600;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.citylink-ai-drawer__usage + .citylink-ai-drawer__meta-detail {
+  display: block;
+  margin-left: 0;
+}
+
+.citylink-ai-drawer__meta-warn {
+  margin-left: 6px;
+  color: #b45309;
+}

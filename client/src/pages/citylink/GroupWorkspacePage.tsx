@@ -5,12 +5,12 @@ import React, {
   useState,
   type FormEvent,
 } from "react";
-import { ArrowRight, Users } from "lucide-react";
+import { ArrowRight, Search, Users } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
 import AuthenticatedCoursePeers from "@/pages/citylink/AuthenticatedCoursePeers";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
-import { hasCurrentTermCourseEnrollment } from "@/lib/supabaseCourses";
+import { loadCourseDirectory } from "@/lib/supabaseCourses";
 import {
   closeGroupRecruitmentPost,
   createGroupRecruitmentPost,
@@ -25,6 +25,7 @@ import {
   type RecruitmentPostCursor,
 } from "@/lib/supabaseStage6";
 import {
+  createGroupAlone,
   getGroupWorkflowErrorMessage,
   loadOwnCourseGroupSnapshot,
   requestToJoinGroup,
@@ -40,7 +41,6 @@ import {
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 import {
   GroupWorkspaceScope,
-  recruitmentEligibility,
   runScoped,
   runScopedAction,
   type WorkspaceToken,
@@ -72,9 +72,10 @@ type Snapshot = {
   postsError: string;
   postsHasMore: boolean;
   postsCursor: RecruitmentPostCursor | null;
-  eligibility: {
-    status: "checking" | "complete";
-    verified: boolean;
+  // Adam's option B: the People page only reports which group the student is
+  // already in. A failed read is a distinct error state, never an empty result.
+  ownGroups: {
+    status: "loading" | "ready" | "error";
     groups: StudyGroupRow[];
   };
   token: WorkspaceToken;
@@ -146,16 +147,31 @@ export function GroupWorkspaceContent({
     []
   );
   const [peopleRefreshToken, setPeopleRefreshToken] = useState(0);
-  const [creatingGroupId, setCreatingGroupId] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [postSubject, setPostSubject] = useState("");
   // Appended last so the existing capacity-test state slots keep their meaning.
   // True only while a coalesced Refresh intent is waiting for a Load more.
   const [refreshQueued, setRefreshQueued] = useState(false);
+  // Appended after the refresh queue so existing test state slots keep meaning.
+  const [courseLabel, setCourseLabel] = useState("");
+  // Appended after the course label so existing test state slots keep meaning.
+  const [groupSearch, setGroupSearch] = useState("");
+  // Appended after the group search so every existing positional test slot
+  // keeps its meaning. Post creation lives at the foot of the posts section.
+  const [createPostOpen, setCreatePostOpen] = useState(false);
+  const [createSubject, setCreateSubject] = useState("");
+  const [createBody, setCreateBody] = useState("");
+  const [createGroupId, setCreateGroupId] = useState("");
+  // Appended after the composer state so every existing positional test slot
+  // keeps its meaning. Adam's 2026-11-24 change: a student can create a group
+  // alone, named after themselves by default.
+  const [newGroupOpen, setNewGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupMax, setNewGroupMax] = useState(6);
   const groupsAttempt = useRef(0);
   const postsAttempt = useRef(0);
-  const eligibilityAttempt = useRef(0);
+  const ownGroupsAttempt = useRef(0);
   const groupsOperation = useRef(false);
   const postsOperation = useRef(false);
   const latestSnapshot = useRef<Snapshot | null>(null);
@@ -271,53 +287,53 @@ export function GroupWorkspaceContent({
     );
   }
 
-  function loadEligibility(token: WorkspaceToken) {
+  /**
+   * Loads the groups the student is already an active member of in this
+   * course. Posting moved to each course's My group page, so this page no
+   * longer checks posting eligibility; the write RPCs keep their own server
+   * authority.
+   */
+  function loadOwnGroups(token: WorkspaceToken) {
     if (!scope.isCurrent(token)) return;
-    const attempt = ++eligibilityAttempt.current;
-    const isLatest = () => eligibilityAttempt.current === attempt;
+    const attempt = ++ownGroupsAttempt.current;
+    const isLatest = () => ownGroupsAttempt.current === attempt;
     updateSnapshot(token, isLatest, previous => ({
       ...previous,
-      eligibility: { status: "checking", verified: false, groups: [] },
+      ownGroups: { status: "loading", groups: [] },
     }));
     void runScoped(
       scope,
       token,
-      () => {
-        // Start both reads independently, and fail immediately on a rejection
-        // or false course evidence even if the other read never settles.
-        const ownGroups = Promise.resolve().then(() =>
-          loadOwnCourseGroupSnapshot(token.userId, token.courseId)
-        );
-        const course = Promise.resolve()
-          .then(() =>
-            hasCurrentTermCourseEnrollment(token.userId, token.courseId)
-          )
-          .then(eligible => {
-            if (eligible !== true)
-              throw new Error("Course eligibility not confirmed");
-            return eligible;
-          });
-        return Promise.all([ownGroups, course]);
-      },
+      () => loadOwnCourseGroupSnapshot(token.userId, token.courseId),
       {
-        success: ([ownGroups, currentCourseEligible]) =>
+        success: ownGroups => {
+          const activeGroupIds = new Set(
+            ownGroups.memberships
+              .filter(
+                membership =>
+                  membership.profile_id === token.userId &&
+                  membership.course_id === token.courseId &&
+                  membership.membership_status === "active"
+              )
+              .map(membership => membership.group_id)
+          );
           updateSnapshot(token, isLatest, previous => ({
             ...previous,
-            eligibility: {
-              status: "complete",
-              ...recruitmentEligibility(
-                token.userId,
-                token.courseId,
-                currentCourseEligible,
-                ownGroups.groups,
-                ownGroups.memberships
+            ownGroups: {
+              status: "ready",
+              groups: ownGroups.groups.filter(
+                group =>
+                  group.course_id === token.courseId &&
+                  group.status === "active" &&
+                  activeGroupIds.has(group.id)
               ),
             },
-          })),
+          }));
+        },
         error: () =>
           updateSnapshot(token, isLatest, previous => ({
             ...previous,
-            eligibility: { status: "complete", verified: false, groups: [] },
+            ownGroups: { status: "error", groups: [] },
           })),
       }
     );
@@ -341,7 +357,6 @@ export function GroupWorkspaceContent({
     setPostsRefreshBusy(false);
     clearCapacityQueue();
     setLocallyPendingPostIds([]);
-    setCreatingGroupId(null);
     setEditingPostId(null);
     setDraft("");
     setPostSubject("");
@@ -365,13 +380,13 @@ export function GroupWorkspaceContent({
         postsError: "",
         postsHasMore: false,
         postsCursor: null,
-        eligibility: { status: "checking", verified: false, groups: [] },
+        ownGroups: { status: "loading", groups: [] },
         token,
       });
       setState("ready");
       loadGroups(token);
       loadPosts(token);
-      loadEligibility(token);
+      loadOwnGroups(token);
     }
     return () => {
       // A queued intent belongs to the workspace generation that created it,
@@ -382,6 +397,28 @@ export function GroupWorkspaceContent({
     };
   }, [courseId, reloadToken, sessionGeneration, sessionStatus, userId, scope]);
 
+  // Course code and title for the People page heading. Loaded after the main
+  // workspace effect so the existing effect order stays stable for tests.
+  useEffect(() => {
+    if (!userId) {
+      setCourseLabel("");
+      return;
+    }
+    let active = true;
+    loadCourseDirectory(userId)
+      .then(directory => {
+        if (!active) return;
+        const course = directory.courses.find(item => item.id === courseId);
+        setCourseLabel(course ? `${course.code} · ${course.title}` : "");
+      })
+      .catch(() => {
+        if (active) setCourseLabel("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [courseId, sessionGeneration, userId]);
+
   const ownSnapshot =
     sessionStatus === "ready" &&
     snapshot &&
@@ -390,6 +427,14 @@ export function GroupWorkspaceContent({
     scope.isCurrent(snapshot.token)
       ? snapshot
       : null;
+  // Client-side filter over the groups already loaded for this course. The
+  // server stays the authority for which groups are browseable.
+  const groupQuery = groupSearch.trim().toLocaleLowerCase();
+  const visibleGroups = (ownSnapshot?.groups ?? []).filter(
+    group =>
+      !groupQuery ||
+      (group.groupName || "").toLocaleLowerCase().includes(groupQuery)
+  );
   const renderToken = scope.matchesContext({
     status: sessionStatus,
     userId,
@@ -703,54 +748,6 @@ export function GroupWorkspaceContent({
     );
   }
 
-  async function createPost(
-    event: FormEvent<HTMLFormElement>,
-    group: StudyGroupRow
-  ) {
-    event.preventDefault();
-    const token = ownSnapshot?.token;
-    if (
-      !token ||
-      !ownSnapshot.eligibility.verified ||
-      !ownSnapshot.eligibility.groups.some(item => item.id === group.id) ||
-      creatingGroupId !== group.id ||
-      busyAction ||
-      !draft.trim() ||
-      !postSubject.trim()
-    )
-      return;
-    // Recheck synchronously after the last render/state checks and immediately
-    // before claiming the write, so a course/account change cannot dispatch.
-    if (!scope.isCurrent(token)) return;
-    await runScopedAction(
-      scope,
-      token,
-      () =>
-        createGroupRecruitmentPost(
-          token.userId,
-          group.id,
-          postSubject,
-          draft,
-          () => scope.isCurrent(token)
-        ),
-      {
-        start: () => {
-          setBusyAction(`create:${group.id}`);
-          setFeedback("");
-        },
-        success: () => {
-          setDraft("");
-          setPostSubject("");
-          setCreatingGroupId(null);
-          setFeedback("Recruitment post created.");
-          reload(token);
-        },
-        error: createError => setFeedback(getStage6ErrorMessage(createError)),
-        finally: () => setBusyAction(null),
-      }
-    );
-  }
-
   async function savePost(
     event: FormEvent<HTMLFormElement>,
     post: GroupRecruitmentPost
@@ -814,10 +811,95 @@ export function GroupWorkspaceContent({
     );
   }
 
+  /**
+   * Creates a group with the student as its first active member and nobody to
+   * invite. A blank name becomes "<display name>'s group" on the server.
+   */
+  async function createGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = ownSnapshot?.token;
+    if (!token || busyAction) return;
+    await runScopedAction(
+      scope,
+      token,
+      () =>
+        createGroupAlone(
+          token.userId,
+          token.courseId,
+          newGroupName,
+          newGroupMax,
+          () => scope.isCurrent(token)
+        ),
+      {
+        start: () => {
+          setBusyAction("create-group");
+          setFeedback("");
+        },
+        success: () => {
+          setNewGroupOpen(false);
+          setNewGroupName("");
+          setFeedback("Group created.");
+          reload(token);
+        },
+        error: createError =>
+          setFeedback(getGroupWorkflowErrorMessage(createError)),
+        finally: () => setBusyAction(null),
+      }
+    );
+  }
+
+  /**
+   * Publishes a recruitment post for one of the student's own groups. The
+   * server keeps the authority: this form only offers the action, and the
+   * create RPC rechecks membership, capacity and the posting allowlist.
+   */
+  async function submitPost(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = ownSnapshot?.token;
+    const groups = ownSnapshot?.ownGroups.groups ?? [];
+    const groupId = createGroupId || groups[0]?.id;
+    if (
+      !token ||
+      !groupId ||
+      busyAction ||
+      !createSubject.trim() ||
+      !createBody.trim()
+    )
+      return;
+    await runScopedAction(
+      scope,
+      token,
+      () =>
+        createGroupRecruitmentPost(
+          token.userId,
+          groupId,
+          createSubject,
+          createBody,
+          () => scope.isCurrent(token)
+        ),
+      {
+        start: () => {
+          setBusyAction("create");
+          setFeedback("");
+        },
+        success: () => {
+          setCreatePostOpen(false);
+          setCreateSubject("");
+          setCreateBody("");
+          setCreateGroupId("");
+          setFeedback("Recruitment post published.");
+          reload(token);
+        },
+        error: createError => setFeedback(getStage6ErrorMessage(createError)),
+        finally: () => setBusyAction(null),
+      }
+    );
+  }
+
   return (
     <Stage6Layout title="Study groups and recruitment">
       <PageHeading
-        eyebrow="CURRENT-TERM COURSEMATES"
+        eyebrow={courseLabel || "CURRENT-TERM COURSEMATES"}
         title="Find your groupmate"
         description="See who is already in a group, who is looking for one, and browse recruitment posts below. The server rechecks your eligibility for every action."
       />
@@ -861,132 +943,6 @@ export function GroupWorkspaceContent({
         <>
           <section
             className="stage6-section"
-            aria-labelledby="stage6-your-group-heading"
-          >
-            <div className="stage6-section-heading">
-              <div>
-                <p className="eyebrow">YOUR GROUP</p>
-                <h2 id="stage6-your-group-heading">
-                  Create a recruitment post
-                </h2>
-              </div>
-            </div>
-            {ownSnapshot?.eligibility.status === "checking" ? (
-              <Stage6Status
-                kind="loading"
-                title="Checking posting eligibility…"
-                message="Your group membership and current-term course enrolment are being checked. You can keep browsing or retry the check."
-                retry={() => loadEligibility(ownSnapshot.token)}
-              />
-            ) : !ownSnapshot?.eligibility.verified ? (
-              <Stage6Status
-                title="Posting eligibility could not be verified"
-                message="Your group membership, current-term course, or enrolment could not be confirmed. Check your connection and enrolment, then retry."
-                retry={() => ownSnapshot && loadEligibility(ownSnapshot.token)}
-              />
-            ) : !ownSnapshot.eligibility.groups.length ? (
-              <Stage6Status
-                kind="empty"
-                title="No eligible group found in this view"
-                message="An active member of an active group can create a recruitment post. If your group is missing, check your course enrolment and retry."
-                retry={() => loadEligibility(ownSnapshot.token)}
-              />
-            ) : (
-              <div className="stage6-group-grid">
-                {ownSnapshot.eligibility.groups.map(group => (
-                  <article className="stage6-group-card" key={group.id}>
-                    <span className="stage6-group-status active">Active</span>
-                    <h3>{group.name || "Study group"}</h3>
-                    <p className="stage6-group-caption">
-                      You are an active member of this group. The server checks
-                      your eligibility when you publish.
-                    </p>
-                    {creatingGroupId === group.id ? (
-                      <form
-                        className="stage6-post-form"
-                        onSubmit={event => void createPost(event, group)}
-                      >
-                        <label htmlFor={`new-post-subject-${group.id}`}>
-                          Subject
-                        </label>
-                        <input
-                          id={`new-post-subject-${group.id}`}
-                          value={postSubject}
-                          maxLength={120}
-                          onChange={event => setPostSubject(event.target.value)}
-                          placeholder="e.g. Looking for a frontend teammate"
-                          required
-                          disabled={busyAction !== null}
-                        />
-                        <label htmlFor={`new-post-${group.id}`}>
-                          Recruitment post
-                        </label>
-                        <textarea
-                          id={`new-post-${group.id}`}
-                          rows={4}
-                          maxLength={MAX_RECRUITMENT_POST_LENGTH}
-                          value={draft}
-                          onChange={event => setDraft(event.target.value)}
-                          placeholder="Describe the project and the type of teammate you are looking for."
-                          disabled={busyAction !== null}
-                        />
-                        <div className="stage6-form-footer">
-                          <span>
-                            {draft.trim().length}/{MAX_RECRUITMENT_POST_LENGTH}{" "}
-                            characters
-                          </span>
-                          <button
-                            className="primary"
-                            type="submit"
-                            disabled={
-                              !draft.trim() ||
-                              !postSubject.trim() ||
-                              busyAction !== null
-                            }
-                          >
-                            {busyAction === `create:${group.id}`
-                              ? "Publishing…"
-                              : "Publish post"}
-                          </button>
-                        </div>
-                        <button
-                          className="text-button"
-                          type="button"
-                          disabled={busyAction !== null}
-                          onClick={() => {
-                            setCreatingGroupId(null);
-                            setDraft("");
-                            setPostSubject("");
-                          }}
-                        >
-                          Cancel
-                        </button>
-                      </form>
-                    ) : (
-                      <button
-                        type="button"
-                        className="stage6-create-post"
-                        disabled={busyAction !== null}
-                        onClick={() => {
-                          if (busyAction !== null || scope.hasPendingAction())
-                            return;
-                          setCreatingGroupId(group.id);
-                          setEditingPostId(null);
-                          setDraft("");
-                          setPostSubject("");
-                        }}
-                      >
-                        Create recruitment post
-                      </button>
-                    )}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section
-            className="stage6-section"
             aria-labelledby="stage6-groups-heading"
           >
             <div className="stage6-section-heading">
@@ -995,9 +951,31 @@ export function GroupWorkspaceContent({
                 <h2 id="stage6-groups-heading">Browseable study groups</h2>
               </div>
               <span className="stage6-count">
-                {ownSnapshot?.groups.length ?? 0}
+                {groupQuery
+                  ? visibleGroups.length
+                  : (ownSnapshot?.groups.length ?? 0)}
               </span>
             </div>
+            <label className="directory-search stage6-groups-search">
+              <Search size={17} />
+              <span className="sr-only">Search groups</span>
+              <input
+                type="search"
+                aria-label="Search browseable groups by name"
+                placeholder="Search groups by name…"
+                value={groupSearch}
+                onChange={event => setGroupSearch(event.target.value)}
+              />
+              {groupSearch && (
+                <button
+                  type="button"
+                  aria-label="Clear group search"
+                  onClick={() => setGroupSearch("")}
+                >
+                  ×
+                </button>
+              )}
+            </label>
             {ownSnapshot?.groupsState === "loading" ? (
               <Stage6Status
                 kind="loading"
@@ -1012,29 +990,19 @@ export function GroupWorkspaceContent({
               />
             ) : !ownSnapshot?.groups.length ? (
               <Stage6Status
-                kind={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "loading"
-                    : "empty"
-                }
-                title={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "Checking browseable group availability…"
-                    : ownSnapshot?.eligibility.verified
-                      ? "No browseable groups yet"
-                      : "Browseable groups could not be confirmed"
-                }
-                message={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "The group list is empty; course and group information is still being checked."
-                    : ownSnapshot?.eligibility.verified
-                      ? "There are no forming or active groups with at least two active members available in this course’s current term. Pending invitations do not count as members."
-                      : "Course or group information could not be confirmed, so group availability may be incomplete. Check your connection and enrolment, then retry."
-                }
+                kind="empty"
+                title="No browseable groups yet"
+                message="There are no forming or active groups with at least two active members available in this course’s current term. Pending invitations do not count as members."
+              />
+            ) : !visibleGroups.length ? (
+              <Stage6Status
+                kind="empty"
+                title="No groups match this search"
+                message={`No browseable group in this course matches “${groupSearch.trim()}”. Clear the search to see every group.`}
               />
             ) : (
               <div className="stage6-group-grid">
-                {ownSnapshot.groups.map(group => (
+                {visibleGroups.map(group => (
                   <article className="stage6-group-card" key={group.groupId}>
                     <div className="stage6-card-topline">
                       <span className={`stage6-group-status ${group.status}`}>
@@ -1106,25 +1074,9 @@ export function GroupWorkspaceContent({
               />
             ) : !ownSnapshot?.posts.length ? (
               <Stage6Status
-                kind={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "loading"
-                    : "empty"
-                }
-                title={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "Checking recruitment post availability…"
-                    : ownSnapshot?.eligibility.verified
-                      ? "No recruitment posts yet"
-                      : "Recruitment posts could not be confirmed"
-                }
-                message={
-                  ownSnapshot?.eligibility.status === "checking"
-                    ? "The recruitment post list is empty; course and group information is still being checked."
-                    : ownSnapshot?.eligibility.verified
-                      ? "When an eligible active group member publishes a post, it will appear here."
-                      : "Course or group information could not be confirmed, so post availability may be incomplete. Check your connection and enrolment, then retry."
-                }
+                kind="empty"
+                title="No recruitment posts yet"
+                message="When an eligible active group member publishes a post, it will appear here."
               />
             ) : (
               <div className="stage6-post-list">
@@ -1256,7 +1208,6 @@ export function GroupWorkspaceContent({
                                   )
                                     return;
                                   setEditingPostId(post.id);
-                                  setCreatingGroupId(null);
                                   setDraft(post.body);
                                   setPostSubject(post.subject);
                                 }}
@@ -1315,6 +1266,156 @@ export function GroupWorkspaceContent({
                   {postsPageBusy ? "Loading more posts…" : "Load more posts"}
                 </button>
               )}
+            <div className="stage6-create-post">
+              {ownSnapshot?.ownGroups.status === "loading" ? null : ownSnapshot
+                  ?.ownGroups.status === "error" ? (
+                <p className="stage6-readonly-note" role="status">
+                  Your group could not be loaded.
+                </p>
+              ) : !ownSnapshot?.ownGroups.groups.length ? (
+                <div className="stage6-create-post-note">
+                  <p>
+                    You need a group in this course before you can publish a
+                    recruitment post.
+                  </p>
+                  {newGroupOpen ? (
+                    <form
+                      className="stage6-create-group-form"
+                      onSubmit={event => void createGroup(event)}
+                    >
+                      <label htmlFor="new-group-name">Group name</label>
+                      <input
+                        id="new-group-name"
+                        value={newGroupName}
+                        maxLength={50}
+                        placeholder="Leave blank to use your name"
+                        onChange={event => setNewGroupName(event.target.value)}
+                        disabled={busyAction !== null}
+                      />
+                      <label htmlFor="new-group-max">Maximum members</label>
+                      <input
+                        id="new-group-max"
+                        type="number"
+                        min={2}
+                        max={19}
+                        value={newGroupMax}
+                        onChange={event =>
+                          setNewGroupMax(Number(event.target.value))
+                        }
+                        disabled={busyAction !== null}
+                      />
+                      <div className="stage6-form-footer">
+                        <span>Between 2 and 19 people, you included.</span>
+                        <button
+                          className="primary"
+                          type="submit"
+                          disabled={busyAction !== null}
+                        >
+                          {busyAction === "create-group"
+                            ? "Creating…"
+                            : "Create group"}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      className="secondary"
+                      type="button"
+                      disabled={busyAction !== null}
+                      onClick={() => setNewGroupOpen(true)}
+                    >
+                      Create a group
+                    </button>
+                  )}
+                </div>
+              ) : createPostOpen ? (
+                <form
+                  className="stage6-post-form"
+                  onSubmit={event => void submitPost(event)}
+                >
+                  {ownSnapshot.ownGroups.groups.length > 1 ? (
+                    <>
+                      <label htmlFor="create-post-group">Group</label>
+                      <select
+                        id="create-post-group"
+                        value={createGroupId}
+                        onChange={event => setCreateGroupId(event.target.value)}
+                        disabled={busyAction !== null}
+                      >
+                        {ownSnapshot.ownGroups.groups.map(group => (
+                          <option key={group.id} value={group.id}>
+                            {group.name || "Study group"}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <p className="stage6-create-post-group">
+                      Posting for{" "}
+                      {ownSnapshot.ownGroups.groups[0].name || "your group"}
+                    </p>
+                  )}
+                  <label htmlFor="create-post-subject">Subject</label>
+                  <input
+                    id="create-post-subject"
+                    value={createSubject}
+                    maxLength={120}
+                    onChange={event => setCreateSubject(event.target.value)}
+                    required
+                    disabled={busyAction !== null}
+                  />
+                  <label htmlFor="create-post-body">Recruitment post</label>
+                  <textarea
+                    id="create-post-body"
+                    rows={4}
+                    maxLength={MAX_RECRUITMENT_POST_LENGTH}
+                    value={createBody}
+                    onChange={event => setCreateBody(event.target.value)}
+                    disabled={busyAction !== null}
+                  />
+                  <div className="stage6-form-footer">
+                    <span>
+                      {createBody.trim().length}/{MAX_RECRUITMENT_POST_LENGTH}{" "}
+                      characters
+                    </span>
+                    <button
+                      className="primary"
+                      type="submit"
+                      disabled={
+                        !createBody.trim() ||
+                        !createSubject.trim() ||
+                        busyAction !== null
+                      }
+                    >
+                      {busyAction === "create" ? "Publishing…" : "Publish post"}
+                    </button>
+                  </div>
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => {
+                      setCreatePostOpen(false);
+                      setCreateSubject("");
+                      setCreateBody("");
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <button
+                  className="primary"
+                  type="button"
+                  disabled={busyAction !== null}
+                  onClick={() => {
+                    setCreatePostOpen(true);
+                    setCreateGroupId(ownSnapshot.ownGroups.groups[0]?.id ?? "");
+                  }}
+                >
+                  Create recruitment post
+                </button>
+              )}
+            </div>
           </section>
         </>
       )}

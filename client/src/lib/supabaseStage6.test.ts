@@ -30,6 +30,8 @@ import {
   listCourseUngroupedClassmates,
   listCurrentTermGroupMembers,
   listGroupChatMessages,
+  listGroupChatMessagesWithSender,
+  mapGroupChatMessagesWithSender,
   listGroupRecruitmentPosts,
   mapCourseGroupSummaries,
   mapGroupRecruitmentPosts,
@@ -548,6 +550,8 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
         senderName: "A Student",
         body: "Hello",
         createdAt: "2026-11-17T10:00:00.000Z",
+        authorKind: "member",
+        senderId: null,
       },
     ]);
     expect(supabaseMocks.rpc).toHaveBeenCalledWith("list_group_chat_messages", {
@@ -556,6 +560,47 @@ describe("Stage 6 RPC service (isolated mocks; no database connection)", () => {
       p_before_id: "message-2",
       p_limit: 50,
     });
+  });
+
+  it("maps the sender id so the room can tell which message is yours", async () => {
+    supabaseMocks.response.mockResolvedValueOnce({
+      data: [
+        {
+          message_id: "message-1",
+          sender_name: "A Student",
+          body: "Hello",
+          created_at: "2026-11-17T10:00:00.000Z",
+          sender_id: "11111111-1111-1111-1111-111111111111",
+        },
+        {
+          message_id: "message-2",
+          sender_name: "CityLink AI",
+          body: "An answer",
+          created_at: "2026-11-17T10:01:00.000Z",
+          sender_id: null,
+        },
+      ],
+      error: null,
+    });
+    const page = await listGroupChatMessagesWithSender(userId, groupId);
+    expect(page[0].senderId).toBe("11111111-1111-1111-1111-111111111111");
+    // The AI row has no profile; null is a value, not a missing field.
+    expect(page[1].senderId).toBeNull();
+  });
+
+  it("refuses a chat row with an unexpected column rather than guessing", () => {
+    expect(() =>
+      mapGroupChatMessagesWithSender([
+        {
+          message_id: "message-1",
+          sender_name: "A Student",
+          body: "Hello",
+          created_at: "2026-11-17T10:00:00.000Z",
+          sender_id: null,
+          author_kind: "ai",
+        },
+      ])
+    ).toThrow();
   });
 
   it("trims plain text before sending through the RPC and rejects empty text locally", async () => {

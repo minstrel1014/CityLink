@@ -63,9 +63,6 @@ export default function GroupChatPicker() {
     <div className="authenticated-courses-page course-detail-page">
       <AccountHeader email={session.user?.email} />
       <main className="authenticated-courses-main">
-        <Link href="/my-courses" className="back-link">
-          View My Courses
-        </Link>
         {state === "loading" && (
           <p className="authenticated-courses-state">
             Loading your group chats…
@@ -102,8 +99,8 @@ export default function GroupChatPicker() {
             description="Chats appear here once you are an active member of a study group. Join or create a group first."
           >
             <div className="authenticated-courses-state-actions">
-              <Link href="/my-groups" className="primary">
-                <MessageCircle size={16} /> My Groups
+              <Link href="/courses" className="primary">
+                <MessageCircle size={16} /> Browse courses
               </Link>
             </div>
           </EmptyState>

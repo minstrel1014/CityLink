@@ -1,17 +1,24 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowDown, Send } from "lucide-react";
+import { ArrowDown, Paperclip, Send, Sparkles, Users } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeading } from "@/components/citylink/Shared";
+import GroupAiDrawer from "@/components/citylink/GroupAiDrawer";
 import { useSupabaseSession } from "@/contexts/SupabaseSessionContext";
+import type { ChatTurn } from "@shared/aiChatContext";
+import GroupFilesDrawer from "./GroupFilesDrawer";
 import {
   CHAT_PAGE_SIZE,
   getGroupChatAccess,
   getStage6ErrorMessage,
-  listGroupChatMessages,
+  listGroupChatMessagesWithSender,
+  listGroupFiles,
+  loadGroupChatHeading,
   MAX_CHAT_MESSAGE_LENGTH,
   sendGroupChatMessage,
   type GroupChatAccess,
+  type GroupChatHeading,
   type GroupChatMessage,
+  type GroupFileSummary,
 } from "@/lib/supabaseStage6";
 import { Stage6Layout, Stage6Status } from "./Stage6Layout";
 
@@ -37,6 +44,11 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
   const [error, setError] = useState("");
   const [reloadToken, setReloadToken] = useState(0);
   const [olderBusy, setOlderBusy] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [heading, setHeading] = useState<GroupChatHeading | null>(null);
+  const [files, setFiles] = useState<GroupFileSummary[]>([]);
+  const [filesUnavailable, setFilesUnavailable] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const generation = useRef(0);
 
   useEffect(() => {
@@ -62,6 +74,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     if (!userId) {
       setState("unauthorized");
       setAccess(null);
+      setHeading(null);
       setMessages([]);
       setError("Sign in with a Supabase account before opening group chat.");
       return () => {
@@ -71,7 +84,10 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
 
     setState("loading");
     setAccess(null);
+    setHeading(null);
     setMessages([]);
+    setFiles([]);
+    setFilesUnavailable(false);
     setError("");
     setFeedback("");
     void (async () => {
@@ -79,10 +95,23 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
         const permitted = await getGroupChatAccess(userId, groupId);
         if (!isCurrent()) return;
         setAccess(permitted);
-        const page = await listGroupChatMessages(userId, groupId);
+        // Decoration, so it must not delay the conversation: the messages are
+        // requested at the same time and the header fills in when it arrives.
+        void loadGroupChatHeading(userId, groupId).then(label => {
+          if (isCurrent() && label) setHeading(label);
+        });
+        const page = await listGroupChatMessagesWithSender(userId, groupId);
+        if (!isCurrent()) return;
+        // The file list is live (P1 is applied), but it must not decide whether
+        // chat opens: a failure here leaves the drawer without files and says so.
+        const groupFiles = await listGroupFiles(userId, groupId).catch(
+          () => null
+        );
         if (!isCurrent()) return;
         const ordered = [...page].reverse();
         setMessages(ordered);
+        setFiles(groupFiles ?? []);
+        setFilesUnavailable(groupFiles === null);
         setHasOlder(page.length === CHAT_PAGE_SIZE);
         setState("ready");
       } catch (loadError) {
@@ -110,7 +139,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     setOlderBusy(true);
     setFeedback("");
     try {
-      const page = await listGroupChatMessages(userId, groupId, {
+      const page = await listGroupChatMessagesWithSender(userId, groupId, {
         createdAt: cursorMessage.createdAt,
         id: cursorMessage.id,
       });
@@ -170,7 +199,7 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
       )
         return;
       setDraft("");
-      const latest = await listGroupChatMessages(userId, groupId);
+      const latest = await listGroupChatMessagesWithSender(userId, groupId);
       if (
         generation.current !== expectedGeneration ||
         userIdRef.current !== userId ||
@@ -200,6 +229,13 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
     }
   }
 
+  // "QA Capacity Course: QA-P1-20261124-1519" — the two things a student with
+  // more than one chat open needs in order to know which one this is. Falls
+  // back to the generic label while the lookup is in flight or unavailable.
+  const headingLabel = heading
+    ? [heading.courseTitle, heading.groupName].filter(Boolean).join(": ")
+    : "";
+
   return (
     <Stage6Layout title="Group chat">
       <PageHeading
@@ -208,11 +244,11 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
         description="Plain-text messages are saved by the approved group-chat API. No fictional messages are shown."
       />
       <div className="stage6-notice" role="note">
-        Chat access is checked by the server for this group on every request.
-        Active members can read and send, including in archived groups. Former
-        members can read history but cannot send; abandoned groups are
-        read-only. Pending invitations and join requests do not grant chat
-        access.
+        Only members of this group can open this chat, and the server checks
+        that on every request — a pending invitation or join request does not
+        grant access. Active members can read and send, including in archived
+        groups. Former members can read history but cannot send, and an
+        abandoned group is read-only.
       </div>
 
       {session.status === "loading" || state === "loading" ? (
@@ -245,14 +281,38 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
         <section className="stage6-chat-panel" aria-label="Group conversation">
           <header className="stage6-chat-header">
             <div>
-              <h2>Conversation</h2>
+              <h2>{headingLabel || "Conversation"}</h2>
               <p>
                 Messages are plain text and cannot be edited in this version.
               </p>
             </div>
-            <Link className="secondary" href="/my-courses">
-              View My Courses
-            </Link>
+            <div className="stage6-chat-header-actions">
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => setAiOpen(true)}
+                aria-expanded={aiOpen}
+              >
+                <Sparkles size={15} /> Ask CityLink AI
+              </button>
+              {heading?.courseId ? (
+                <Link
+                  className="secondary"
+                  href={`/courses/${heading.courseId}`}
+                >
+                  <Users size={15} />
+                  View group
+                </Link>
+              ) : null}
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => setFilesOpen(true)}
+              >
+                <Paperclip size={15} />
+                Files
+              </button>
+            </div>
           </header>
 
           {hasOlder && (
@@ -282,9 +342,27 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
           ) : (
             <ol className="stage6-message-list" aria-live="polite">
               {messages.map(message => (
-                <li className="stage6-message" key={message.id}>
+                <li
+                  className={[
+                    "stage6-message",
+                    message.authorKind === "ai" ? "stage6-message-ai" : "",
+                    // Own messages sit on the reader's side. The identity comes
+                    // from sender_id; the display name is a snapshot and cannot
+                    // decide this.
+                    message.senderId && message.senderId === userId
+                      ? "stage6-message-own"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  key={message.id}
+                >
                   <div className="stage6-message-meta">
-                    <strong>{message.senderName}</strong>
+                    <strong>
+                      {message.senderId && message.senderId === userId
+                        ? "You"
+                        : message.senderName}
+                    </strong>
                     <time dateTime={message.createdAt}>
                       {new Date(message.createdAt).toLocaleString()}
                     </time>
@@ -294,6 +372,34 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
               ))}
             </ol>
           )}
+
+          <GroupAiDrawer
+            groupId={groupId}
+            userId={userId}
+            open={aiOpen}
+            history={messages.map<ChatTurn>(message => ({
+              id: message.id,
+              authorKind: message.authorKind,
+              authorName: message.senderName,
+              body: message.body,
+              createdAt: message.createdAt,
+            }))}
+            filesUnavailable={filesUnavailable}
+            files={files.map(file => ({
+              id: file.id,
+              groupId,
+              name: file.name,
+              status: "current" as const,
+              retentionExpiresAt: file.retentionExpiresAt,
+            }))}
+            onQuestionPosted={() => setReloadToken(value => value + 1)}
+            onClose={() => {
+              setAiOpen(false);
+              // The answer is a server row written by the executor, so closing
+              // re-reads the thread instead of appending a second local copy.
+              setReloadToken(value => value + 1);
+            }}
+          />
 
           {access?.canSend ? (
             <form className="stage6-chat-form" onSubmit={submitMessage}>
@@ -313,11 +419,17 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
                   plain text only
                 </span>
                 <button
-                  className="primary"
+                  className="primary stage6-send"
                   type="submit"
+                  aria-label="Send message"
+                  title="Send message"
                   disabled={busy || !draft.trim()}
                 >
-                  <Send size={16} /> {busy ? "Sending…" : "Send message"}
+                  {busy ? (
+                    "Sending…"
+                  ) : (
+                    <Send size={22} strokeWidth={2.2} aria-hidden="true" />
+                  )}
                 </button>
               </div>
             </form>
@@ -330,6 +442,11 @@ export default function GroupChatPage({ groupId }: { groupId: string }) {
           )}
         </section>
       )}
+      <GroupFilesDrawer
+        groupId={groupId}
+        open={filesOpen}
+        onClose={() => setFilesOpen(false)}
+      />
     </Stage6Layout>
   );
 }

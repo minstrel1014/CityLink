@@ -59,7 +59,6 @@ export function AccountHeader({ email }: { email?: string }) {
       <nav aria-label="Account navigation">
         <Link href="/me">My profile</Link>
         <Link href="/my-courses">My Courses</Link>
-        <Link href="/my-groups">My groups</Link>
         <Link href="/demo">Fictional demo</Link>
       </nav>
     </header>
@@ -386,13 +385,7 @@ export default function MyCourses({
               ? "See the courses connected to your account and find classmates looking for a group."
               : "Browse all current-term courses and manage your own enrolments."
           }
-        >
-          {view === "dashboard" && (
-            <Link className="secondary dashboard-groups-link" href="/my-groups">
-              My groups <ArrowRight size={16} />
-            </Link>
-          )}
-        </PageHeading>
+        ></PageHeading>
 
         <div className="course-privacy-notice" role="note">
           <ShieldCheck size={19} />

@@ -74,7 +74,7 @@
     },
     {
       "path": "/my-groups",
-      "title": "Authenticated group workflows"
+      "title": "Retired: redirects to /dashboard (recruitment posting moved to each course's My group page)"
     },
     {
       "path": "/my-courses/:courseId/groups",

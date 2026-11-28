@@ -215,6 +215,14 @@
   font-size: 10px;
 }
 
+.my-group-card .group-invitation-row > .group-workflow-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .my-group-card .group-invitation-row .text-button {
   color: #7d6b4a;
   font-size: 10px;
@@ -378,4 +386,27 @@
   .my-group-empty-state .authenticated-courses-state-actions .secondary {
     width: 100%;
   }
+}
+
+/* Leaving a group: a two-step confirm, because the membership ends for good. */
+.my-group-leave-confirm {
+  display: grid;
+  gap: 12px;
+}
+
+.my-group-leave-confirm p {
+  margin: 0;
+  color: #5b6553;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.my-group-leave-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.my-group-leave-button {
+  justify-self: start;
 }

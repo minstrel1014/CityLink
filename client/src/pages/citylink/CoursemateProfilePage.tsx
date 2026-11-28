@@ -40,6 +40,7 @@ import {
 } from "@/lib/supabaseStage6";
 import { getProfileInitials } from "@/lib/supabaseProfile";
 import { CreatePeopleGroupInviteDialog } from "./PeopleCapacity";
+import { MessageButton } from "./MessageButton";
 import { getGroupCapacityState, validateGroupMaximum } from "./groupCapacity";
 import { Stage6Status } from "./Stage6Layout";
 import "./Stage6.css";
@@ -342,32 +343,32 @@ export default function CoursemateProfilePage({
     !snapshot || !userId
       ? []
       : snapshot.inviteGroups.map(group => {
-      // The workflow snapshot contains only the viewer's own membership rows;
-      // use the separately loaded full roster. Pending and failed reads both
-      // block the local action; the server remains authoritative only after
-      // the client has a usable roster.
-      const rosterEntry = inviteRosters[group.id];
-      const rosterLoaded = Object.prototype.hasOwnProperty.call(
-        inviteRosters,
-        group.id
-      );
-      const capacity = getPortfolioInviteCapacity(
-        group,
-        rosterEntry ?? null,
-        userId
-      );
-      const visibleCount = capacity.count;
-      const maximum = capacity.maximum;
-      const capacityState =
-        visibleCount === null
-          ? maximum === null
-            ? "maximum_not_set"
-            : rosterLoaded
-              ? "unknown"
-              : "checking"
-          : getGroupCapacityState(visibleCount, maximum);
-      return { group, visibleCount, maximum, capacityState };
-    });
+          // The workflow snapshot contains only the viewer's own membership rows;
+          // use the separately loaded full roster. Pending and failed reads both
+          // block the local action; the server remains authoritative only after
+          // the client has a usable roster.
+          const rosterEntry = inviteRosters[group.id];
+          const rosterLoaded = Object.prototype.hasOwnProperty.call(
+            inviteRosters,
+            group.id
+          );
+          const capacity = getPortfolioInviteCapacity(
+            group,
+            rosterEntry ?? null,
+            userId
+          );
+          const visibleCount = capacity.count;
+          const maximum = capacity.maximum;
+          const capacityState =
+            visibleCount === null
+              ? maximum === null
+                ? "maximum_not_set"
+                : rosterLoaded
+                  ? "unknown"
+                  : "checking"
+              : getGroupCapacityState(visibleCount, maximum);
+          return { group, visibleCount, maximum, capacityState };
+        });
   const selectedInviteOption = inviteGroupOptions.find(
     option => option.group.id === chosenGroupId
   );
@@ -718,13 +719,17 @@ export default function CoursemateProfilePage({
             </p>
           )}
 
+          <div className="profile-message-row">
+            <MessageButton otherProfileId={profile.profileId} />
+          </div>
+
           {invitationState === "sent" ? (
-            <Link href="/my-groups" className="invite-status">
+            <Link href="/invitations" className="invite-status">
               <Clock3 size={16} />
               <span>Invitation sent</span>
             </Link>
           ) : invitationState === "received" ? (
-            <Link href="/my-groups" className="invite-status">
+            <Link href="/invitations" className="invite-status">
               <Clock3 size={16} />
               <span>Invitation received</span>
             </Link>
@@ -778,7 +783,9 @@ export default function CoursemateProfilePage({
                   type="button"
                   className="primary"
                   disabled={
-                    !chosenGroupId || busy || Boolean(activeInviteBlockedMessage)
+                    !chosenGroupId ||
+                    busy ||
+                    Boolean(activeInviteBlockedMessage)
                   }
                   onClick={() => void invite(profile)}
                 >

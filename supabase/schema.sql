@@ -1,5 +1,12 @@
 -- CityLink Supabase baseline schema
 --
+-- NOT A LIVE SNAPSHOT. `supabase/migrations/` is authoritative for the applied
+-- schema; this file is a skeleton for a fresh project. A rebuild from this file
+-- alone cannot reproduce Launch: four applied migrations currently live on
+-- draft branches rather than main. "Function not found" after such a rebuild is
+-- not evidence of a regression. See docs/team/DECISIONS.md, 2026-11-25,
+-- "`supabase/migrations/` is authoritative".
+--
 -- Apply this file in the Supabase SQL Editor as the project owner, or place an
 -- unchanged copy in a timestamped Supabase migration before `supabase db push`.
 -- It is a fresh-project baseline. Review normal migration practices before

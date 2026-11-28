@@ -156,3 +156,19 @@
     font-size: 18px;
   }
 }
+
+/* The whole name plate opens the classmate profile; the explicit link was removed. */
+.classmate-person-link {
+  text-decoration: none;
+  color: inherit;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.classmate-person-link:hover {
+  background: #f8fafc;
+}
+
+.classmate-person-link h3 {
+  text-decoration: none;
+}
