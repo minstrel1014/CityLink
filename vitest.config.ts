@@ -18,6 +18,9 @@ export default defineConfig({
       "server/**/*.test.ts",
       "server/**/*.spec.ts",
       "client/src/**/*.test.ts",
+      // Edge Functions are Deno, but their request logic is runtime-neutral and
+      // is tested here. Deno-only entry points (index.ts) are never imported.
+      "supabase/functions/**/*.test.ts",
     ],
   },
 });
